@@ -21,6 +21,15 @@ Two ideas shaped the design:
 
 Plan on the smartest thing you can afford. Cut the plan into task specs that each fit one context window. Execute each spec on the cheapest model that passes your benchmarks, in a fresh context, with the Mythos-core system prompt. Verify with tooling, never with trust. Review with a fresh-context critic. Two failures anywhere = escalate a tier, never retry a third time. That's the whole system; everything else in this repo is plumbing for it.
 
+## Get the repo
+
+Source lives at [github.com/carefreeinv/anchor](https://github.com/carefreeinv/anchor):
+
+```bash
+git clone https://github.com/carefreeinv/anchor.git
+cd anchor
+```
+
 ## Quick start
 
 1. Read [the doctrine](doctrine) — everything else implements it.

@@ -18,7 +18,7 @@ pricing — and routing everything else to models that are already good enough,
 whether that's a cheaper API tier, a Mac Mini on your desk, or an H100 node you
 own.
 
-The repo ships the whole loop, not just the doctrine: per-platform instruction
+The [repo](https://github.com/carefreeinv/anchor) ships the whole loop, not just the doctrine: per-platform instruction
 files (Claude Code, Grok Build, NVIDIA NIM/Nemotron, local models, plain chat
 UIs), a scaffolder (`anchor <project-dir>`) that drops the right doctrine into any
 project, fleet scripts for routing/orchestration/benchmarking, and MCP servers so

@@ -22,11 +22,13 @@ const config = {
         docs: {
           routeBasePath: '/',
           sidebarPath: './sidebars.js',
+          editUrl: 'https://github.com/carefreeinv/anchor/edit/main/docs/',
         },
         blog: {
           showReadingTime: true,
           blogSidebarTitle: 'Posts',
           onUntruncatedBlogPosts: 'warn',
+          editUrl: 'https://github.com/carefreeinv/anchor/edit/main/docs/',
         },
         theme: { customCss: './src/css/custom.css' },
       }),
@@ -41,6 +43,11 @@ const config = {
           { type: 'docSidebar', sidebarId: 'docs', position: 'left', label: 'Docs' },
           { to: 'blog', label: 'Blog', position: 'left' },
           {
+            href: 'https://github.com/carefreeinv/anchor',
+            label: 'GitHub',
+            position: 'right',
+          },
+          {
             href: 'https://donate.stripe.com/28E6oHeq8fxQ5p7fmBdjO01',
             label: 'Donate',
             position: 'right',
@@ -54,6 +61,10 @@ const config = {
           {
             title: 'Anchor',
             items: [
+              {
+                label: 'GitHub',
+                href: 'https://github.com/carefreeinv/anchor',
+              },
               {
                 label: 'Donate',
                 href: 'https://donate.stripe.com/28E6oHeq8fxQ5p7fmBdjO01',
@@ -71,7 +82,7 @@ const config = {
           },
         ],
         copyright:
-          'Anchor — orchestrate cheap models with expensive judgment.<br />An open-source project by <a href="https://carefreeinv.com">Carefree Investments LLC</a>.',
+          'Anchor — orchestrate cheap models with expensive judgment.<br />An open-source project by <a href="https://carefreeinv.com">Carefree Investments LLC</a>. Source on <a href="https://github.com/carefreeinv/anchor">GitHub</a>.',
       },
       colorMode: { defaultMode: 'dark' },
     }),
