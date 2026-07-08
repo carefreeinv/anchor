@@ -7,6 +7,7 @@ Per-model adaptations of `anchor/system-prompts/mythos-core.md` for the models t
 3. **External verification always.** The smaller the model, the more confident its fabrications. Tests/lint/build are the truth.
 4. **Right-size the role.** Small models are fine executors and surprisingly good critics (checklist-driven review); they are poor planners. Plan on the biggest thing you have; execute locally.
 5. **Quantization: prefer more parameters at Q4 over fewer at Q8** for reasoning-flavored work; use the model's official chat template (a wrong template silently costs more quality than quantization).
+6. **Tracked plans:** if the harness has shell, use the same **`/work`** contract as Claude/Grok (bugs before features; never execute drafts/completed; honor **Preferred models**). Only relocate under `.plans/` is ready → `completed/` when done; do not promote drafts. Keep the command body short for small context windows; prefer loading one plan file and one step.
 
 | Model | File | Role fit |
 |---|---|---|

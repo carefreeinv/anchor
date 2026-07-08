@@ -50,6 +50,16 @@ This gives you the orchestrator pattern on a single deployed model: expensive de
 - Nemotron Nano works as an executor on task specs; keep specs self-contained.
 - Behind NIM everything is OpenAI-compatible, so `scripts/orchestrate.py` and `mcp/model-fleet` work unchanged.
 
+## Tracked plans (`./.plans`)
+
+As **planner**, write self-contained plans (template: `anchor/templates/plan.md`)
+into **`.plans/drafts/<slug>.md`**, including **Preferred models** for the executor
+tier. Do **not** promote out of `drafts/` — **promotion is human-only** (`git mv`
+into `.plans/bugs/` or `.plans/features/`, `Status: ready`). Agents may only move
+a plan file when archiving: ready lane → `.plans/completed/` after true completion.
+Executors start via **`/work`** on Claude/Grok (or `orchestrate.py --plan-file`);
+do not leave plans only in chat.
+
 ## Cautions
 
 - Don't leave `detailed thinking on` for bulk execution — it multiplies latency and tokens for no quality gain on mechanical tasks (same lesson as the Fable credit playbook, locally).

@@ -78,10 +78,30 @@ Every tier defaults to these regardless of task size — they're cheap to apply 
 
 ## Templates
 
-- `templates/plan.md` — planner output format
+- `templates/plan.md` — planner output format (header: Lane / Value / Status / Preferred models when using `./.plans`)
 - `templates/task-spec.md` — the unit of work handed to an executor
 - `templates/review.md` — critic pass format
 - `templates/verification.md` — machine-checkable done-ness checklist
+
+## Tracked plans (`./.plans`)
+
+Committed work plans live under **`.plans/`** (dotdir — git-tracked; do not
+gitignore the whole tree). Optional **local-only** plans use the
+`<slug>.local.md` suffix and are ignored via `.plans/.gitignore`. Lanes: `bugs/`
+and `features/` are executable; `drafts/` is not; finished plans `git mv` to
+`completed/`. **Agent move rule:** the only relocate agents may perform under
+`.plans/` is ready-lane → `completed/` when Done when holds; **promotion**
+(`drafts/` → `bugs|features`) is **human-only**. Priority: all bugs before
+features, then features by `Value: high|medium|low`. Plan headers include
+**Preferred models** so executors skip work better left to cheaper or stronger
+tiers.
+
+**Start execution with `/work`** (Claude: `.claude/commands/work.md`; Grok:
+`.grok/skills/work/SKILL.md`; Chat: follow the `/work` section in `CHAT.md`).
+Optional: `/work --list`, `/work <slug>`, `/work --no-fit-check`. Headless:
+`scripts/orchestrate.py --plan-file .plans/features/<slug>.md` (refuses
+`drafts/` and `completed/`). Process contract: `.plans/README.md` in repos that
+use the tree.
 
 ## System prompts
 

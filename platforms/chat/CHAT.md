@@ -31,6 +31,34 @@ finished.
    `## Deferred` instead of acting on them.
 8. End every substantive response with `## Result`, `## How to verify`, `## Deferred / concerns`.
 
+## /work — execute a tracked plan from `./.plans`
+
+No shell here, so you cannot list files or `git mv` yourself. When the user types
+`/work` (optional: `--list`, `--no-fit-check`, a slug, or a path):
+
+1. Ask them to run and paste output:
+   ```bash
+   ls -la .plans
+   ls .plans/bugs .plans/features .plans/drafts .plans/completed 2>/dev/null
+   ```
+2. **Ready lanes only:** `bugs/` then `features/` (by `Value:` high→medium→low).
+   Never execute `drafts/` or `completed/`. If they name a draft, offer edit-only;
+   do **not** dictate a promote move — **promotion is human-only**. The only
+   plan relocate agents may dictate is ready-lane → `completed/` when Done when
+   holds.
+3. **`--list`:** from their paste, table path / Value / Preferred models / fit for
+   the model they are chatting with — do not implement.
+4. **Bare `/work`:** pick highest-priority **model-fit** plan (or all priority order
+   if they said `--no-fit-check`). Restate Goal + Preferred models + Done when.
+   Dictated work is one step at a time with verify commands for the human to run.
+5. **Finish:** when Done when holds, dictate exact commands:
+   ```bash
+   # set Status: done in the plan header, then:
+   git mv .plans/features/<slug>.md .plans/completed/
+   ```
+6. Mid-session stop: leave the plan in its ready lane with `Status: in_progress`
+   and a short Progress note — do not move to completed.
+
 ## /config — setting your Anchor defaults
 
 There's no shell here, so `/config` can't run `./config.sh` directly. When a user

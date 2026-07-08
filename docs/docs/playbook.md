@@ -10,7 +10,7 @@ The operator playbook for a credit-metered frontier model, generalized beyond an
 
 **1. Reserve the frontier model for long-horizon work only.** Its edge is autonomy over hours, not intelligence per prompt. One-session, one-file tasks never touch it.
 
-**2. Run the orchestrator pattern.** The frontier model reads the codebase, writes the plan, decomposes it into task specs. Cheaper models execute each spec. The frontier model reviews the merged result. It touches the project exactly twice — you pay credit prices for judgment, not keystrokes.
+**2. Run the orchestrator pattern.** The frontier model reads the codebase, writes the plan, decomposes it into task specs. Cheaper models execute each spec. The frontier model reviews the merged result. It touches the project exactly twice — you pay credit prices for judgment, not keystrokes. Commit ready plans under **`.plans/`** and start executors with [**`/work`**](skills/work) (or `orchestrate.py --plan-file`) so handoff is file-based, not chat archaeology.
 
 **3. Tune prompts on a cheap model first.** A sloppy prompt costs the same as a great one. Have a cheap model rewrite every task into a spec with acceptance criteria, files in scope, and a definition of done. Three attempts at a task is the silent budget killer; one tuned attempt is the fix. (`scripts/prompt_tuner.py`)
 

@@ -4,10 +4,12 @@ verify (tooling, not trust) → critic review. Frontier judgment twice, cheap to
 
 Usage:
   python orchestrate.py --goal "Add CSV export to the report page" --verify "pytest -q"
-  python orchestrate.py --plan-file plan.md --hold-on-fail          # detached/Space-1 mode
+  python orchestrate.py --plan-file .plans/features/foo.md --hold-on-fail  # detached/Space-1
+  python orchestrate.py --plan-file .plans/bugs/fix-login.md --verify "pytest -q"
 
 The plan is produced by the 'planner' role (point it at a frontier model, Nemotron
-thinking-on, or paste a human-written plan via --plan-file).
+thinking-on, or a committed ready plan via --plan-file under .plans/bugs|features).
+Paths under .plans/drafts/ or .plans/completed/ are rejected.
 """
 from __future__ import annotations
 
@@ -22,6 +24,24 @@ from pathlib import Path
 from anchor_client import Fleet, has_required_footer, load_prompt
 
 MAX_ATTEMPTS = 2  # Anchor stop condition: two failures → escalate/hold, never a third.
+
+# Ready lanes only for tracked plans; drafts/completed must not be executed headlessly.
+_BLOCKED_PLAN_LANES = frozenset({"drafts", "completed"})
+
+
+def assert_plan_file_allowed(path: Path) -> None:
+    """Refuse --plan-file paths under .plans/drafts/ or .plans/completed/."""
+    parts = path.resolve().parts
+    if ".plans" not in parts:
+        return
+    i = parts.index(".plans")
+    if i + 1 < len(parts) and parts[i + 1] in _BLOCKED_PLAN_LANES:
+        lane = parts[i + 1]
+        raise SystemExit(
+            f"--plan-file refuses .plans/{lane}/ (not an executable lane). "
+            f"Pick a ready plan under bugs/ or features/ "
+            f"(promotion from drafts/ is human-only). Got: {path}"
+        )
 
 
 def run_cmd(cmd: str) -> tuple[bool, str]:
@@ -123,7 +143,10 @@ def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--goal", help="what to accomplish")
     ap.add_argument("--context", default="", help="file with codebase/context notes")
-    ap.add_argument("--plan-file", help="skip planning; use this plan (human/frontier written)")
+    ap.add_argument(
+        "--plan-file",
+        help="skip planning; use this plan (ready path under .plans/bugs|features preferred)",
+    )
     ap.add_argument("--verify", help="shell command that must pass after each task")
     ap.add_argument("--hold-on-fail", action="store_true",
                     help="detached mode: hold failed tasks for later instead of escalating")
@@ -137,8 +160,12 @@ def main() -> None:
 
     fleet = Fleet(args.registry) if args.registry else Fleet()
     context = Path(args.context).read_text(encoding="utf-8") if args.context else ""
-    plan = (Path(args.plan_file).read_text(encoding="utf-8") if args.plan_file
-            else make_plan(args.goal, context, fleet))
+    if args.plan_file:
+        plan_path = Path(args.plan_file)
+        assert_plan_file_allowed(plan_path)
+        plan = plan_path.read_text(encoding="utf-8")
+    else:
+        plan = make_plan(args.goal, context, fleet)
 
     try:
         tasks = split_tasks(plan)

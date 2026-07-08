@@ -90,3 +90,32 @@ def test_execute_task_insist_overrides_fit_check():
     assert result["status"] == "ok"
     assert result["attempts"] == 2
     assert fleet.ep.calls == 2
+
+
+def test_assert_plan_file_allows_features_and_bugs(tmp_path):
+    from orchestrate import assert_plan_file_allowed
+
+    for lane in ("features", "bugs"):
+        p = tmp_path / ".plans" / lane / "foo.md"
+        p.parent.mkdir(parents=True)
+        p.write_text("# plan")
+        assert_plan_file_allowed(p)  # no raise
+
+
+def test_assert_plan_file_rejects_drafts_and_completed(tmp_path):
+    from orchestrate import assert_plan_file_allowed
+
+    for lane in ("drafts", "completed"):
+        p = tmp_path / ".plans" / lane / "foo.md"
+        p.parent.mkdir(parents=True)
+        p.write_text("# plan")
+        with pytest.raises(SystemExit, match=lane):
+            assert_plan_file_allowed(p)
+
+
+def test_assert_plan_file_allows_paths_outside_plans(tmp_path):
+    from orchestrate import assert_plan_file_allowed
+
+    p = tmp_path / "adhoc-plan.md"
+    p.write_text("# plan")
+    assert_plan_file_allowed(p)

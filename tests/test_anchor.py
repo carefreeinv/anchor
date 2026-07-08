@@ -39,6 +39,19 @@ def test_plan_copy_dedupes_same_destination(tmp_path):
     assert len(dests) == len(set(dests))
 
 
+def test_plan_copy_includes_plans_tree_and_work_commands(tmp_path):
+    plan = anchor.plan_copy(tmp_path, ["claude", "grok"], want_fleet=False)
+    dests = {str(dest.relative_to(tmp_path)) for _, dest in plan}
+    assert ".plans/README.md" in dests
+    assert ".plans/.gitignore" in dests
+    assert ".plans/bugs/.gitkeep" in dests
+    assert ".plans/features/.gitkeep" in dests
+    assert ".plans/drafts/.gitkeep" in dests
+    assert ".plans/completed/.gitkeep" in dests
+    assert ".claude/commands/work.md" in dests
+    assert ".grok/skills/work/SKILL.md" in dests
+
+
 def test_check_conflicts_flags_existing_destination(tmp_path):
     plan = anchor.plan_copy(tmp_path, ["chat"], want_fleet=False)
     existing_dest = plan[0][1]

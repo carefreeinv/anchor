@@ -3,7 +3,7 @@ sidebar_position: 3
 sidebar_label: Doctrine
 ---
 
-<!-- synced-from: anchor/ANCHOR.md @ d31c2b2c78c7edf2dd070ef8a17e453bcca692b3 -->
+<!-- synced-from: anchor/ANCHOR.md @ a15aa2b681f768c95edc213ea8d9bf1bcfc1ad79 -->
 
 # The Doctrine
 
@@ -30,7 +30,11 @@ Small models drift, conflate planning with doing, declare unearned success, and 
 
 ## The templates
 
-Four files in `anchor/templates/` are the doctrine's working surface: `plan.md` (planner output), `task-spec.md` (the unit of dispatched work), `review.md` (critic pass), `verification.md` (tooling-filled done-ness table). The `mythos-core.md` system prompt binds any model to the six behaviors and the required output footer.
+Four files in `anchor/templates/` are the doctrine's working surface: `plan.md` (planner output; lifecycle headers when using `./.plans`), `task-spec.md` (the unit of dispatched work), `review.md` (critic pass), `verification.md` (tooling-filled done-ness table). The `mythos-core.md` system prompt binds any model to the six behaviors and the required output footer.
+
+## Tracked plans (`./.plans`)
+
+Git-tracked plans live under **`.plans/`** (dotdir; do not ignore the whole tree). Optional private plans: `<slug>.local.md` (gitignored via `.plans/.gitignore`). Executable lanes: `bugs/` then `features/` (by Value). Never execute `drafts/` or `completed/`. Agents may only `git mv` a plan when archiving completed work (ready lane → `completed/`); **promotion is human-only**. Prefer [**`/work`**](skills/work) to pick and run the next ready plan (honors **Preferred models** / fit; `--no-fit-check` overrides). See `.plans/README.md` and `orchestrate.py --plan-file` for headless runs.
 
 ## Right-size before you start
 

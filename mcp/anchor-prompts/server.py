@@ -88,7 +88,14 @@ def plan_task(goal: str) -> str:
     """Prompt scaffold: produce an Anchor plan for a goal."""
     return (f"{_read('anchor/system-prompts/mythos-core.md')}\n\n"
             f"Your ONLY output is a plan following this template — do not implement.\n\n"
-            f"{_read('anchor/templates/plan.md')}\n\nGOAL: {goal}")
+            f"{_read('anchor/templates/plan.md')}\n\n"
+            f"If the project uses tracked plans under ./.plans, emit the full plan file "
+            f"content ready to save under .plans/drafts/<slug>.md (agents must not "
+            f"promote to bugs/ or features/ — promotion is human-only), fill "
+            f"Preferred models from complexity, and note that executors start via /work "
+            f"(not by re-deriving the plan from chat). The only agent move of a plan "
+            f"file is ready-lane → completed/ when Done when holds.\n\n"
+            f"GOAL: {goal}")
 
 
 @mcp.prompt()

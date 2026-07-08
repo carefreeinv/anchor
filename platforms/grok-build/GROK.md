@@ -51,6 +51,18 @@ You are one worker in a verified pipeline, not the whole pipeline. Speed is wort
 - Task specs come from `anchor/templates/task-spec.md`; demand one if handed a vague task.
 - If MCP is supported in your Grok Build environment, connect `mcp/anchor-prompts` and call `tune_prompt` on any vague task before starting.
 
+## /work
+
+Execute the next (or named) ready plan from **`.plans/`** (dotdir). Contract:
+bugs before features; honor each plan’s **Preferred models** (skip work cheaper
+or stronger models should do unless the user names the plan or passes
+`--no-fit-check`); never execute `drafts/` or `completed/`; on finish `git mv`
+to `.plans/completed/` (the **only** agent move under `.plans/`; promotion is
+human-only). In a Grok project, install as `.grok/skills/work/SKILL.md` (see
+Anchor’s copy) or use `commands/work.md` in this folder. Args: bare `/work`,
+`/work --list`, `/work --no-fit-check`, `/work <slug>`, or a path under
+`.plans/bugs|features`.
+
 ## /config
 
 `commands/config.md` in this folder documents a `/config` command: it asks which

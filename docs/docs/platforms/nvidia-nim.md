@@ -3,7 +3,7 @@ sidebar_position: 3
 sidebar_label: NVIDIA NIM / Nemotron
 ---
 
-<!-- synced-from: platforms/nvidia-nim/NEMOTRON.md @ cf2b5d2d9a5efa82973d97c95780dea2073aa592 -->
+<!-- synced-from: platforms/nvidia-nim/NEMOTRON.md @ 15caaded053dcde81ce7e0ec7dcbf50fcacca9fc -->
 
 # NVIDIA NIM / Nemotron
 

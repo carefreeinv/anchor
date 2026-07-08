@@ -43,6 +43,7 @@ cd anchor
 
 1. [The Doctrine](doctrine) — the behavioral contract everything implements
 2. [The Playbook](playbook) — the economics that motivate it
-3. [Platforms](platforms/claude-code) — install instructions per agent/model
-4. [Hardware](hardware/h100) — serve the fleet
-5. [Tooling](tooling/scripts) — scripts, MCP servers, and the [`anchor` CLI](tooling/cli) that run the loop
+3. [Skills](skills/work) — platform-agnostic entrypoints (`/work` and friends)
+4. [Platforms](platforms/claude-code) — install instructions per agent/model
+5. [Hardware](hardware/h100) — serve the fleet
+6. [Tooling](tooling/scripts) — scripts, MCP servers, and the [`anchor` CLI](tooling/cli) that run the loop

@@ -45,6 +45,17 @@ Before dispatching any frontier-model run, rewrite the task on a cheap model int
 
 Connect `mcp/anchor-prompts` (templates + tune/critique tools) and `mcp/model-fleet` (delegate steps to local/NIM endpoints) from this repo. Prefer delegating mechanical steps to the local fleet before spending plan-limit tokens.
 
+## /work
+
+Execute the next (or named) ready plan from **`.plans/`** (dotdir). Contract:
+bugs before features; honor each plan’s **Preferred models** (skip work cheaper
+or stronger models should do unless the user names the plan or passes
+`--no-fit-check`); never execute `drafts/` or `completed/`; on finish `git mv`
+to `.plans/completed/` (the **only** agent move under `.plans/`; promotion is
+human-only). Command file: `.claude/commands/work.md` (scaffolded with this
+platform). Args: bare `/work`, `/work --list`, `/work --no-fit-check`,
+`/work <slug>`, or a path under `.plans/bugs|features`.
+
 ## /config
 
 `.claude/commands/config.md` (scaffolded alongside this file) wires up a `/config`

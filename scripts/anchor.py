@@ -91,17 +91,35 @@ LOCAL_MODEL_FILES: dict[str, str] = {
 # platform key -> (label, [(src rel path, dest rel path), ...])
 # Single-file platform instructions are dropped at the project root, matching the
 # "place at repo root" convention documented in each platforms/*/*.md file.
+# Always scaffolded into consumer projects as a *git-tracked* `.plans/` tree.
+# Sources live under anchor/scaffold/plans/ (this Anchor repo gitignores its own
+# working `.plans/` entirely — local backlog for developing Anchor). Consumer
+# projects must NOT gitignore the whole tree; only `*.local.md` plans are
+# ignored (via the scaffolded `.plans/.gitignore`).
+PLANS_TREE_FILES: list[tuple[str, str]] = [
+    ("anchor/scaffold/plans/README.md", ".plans/README.md"),
+    ("anchor/scaffold/plans/.gitignore", ".plans/.gitignore"),
+    ("anchor/scaffold/plans/bugs/.gitkeep", ".plans/bugs/.gitkeep"),
+    ("anchor/scaffold/plans/features/.gitkeep", ".plans/features/.gitkeep"),
+    ("anchor/scaffold/plans/drafts/.gitkeep", ".plans/drafts/.gitkeep"),
+    ("anchor/scaffold/plans/completed/.gitkeep", ".plans/completed/.gitkeep"),
+]
+
 PLATFORMS: dict[str, dict] = {
     "claude": {
         "label": "Claude Code",
         "files": [
             ("platforms/claude-code/CLAUDE.md", "CLAUDE.md"),
             (".claude/commands/config.md", ".claude/commands/config.md"),
+            (".claude/commands/work.md", ".claude/commands/work.md"),
         ],
     },
     "grok": {
         "label": "Grok Build",
-        "files": [("platforms/grok-build/GROK.md", "GROK.md")],
+        "files": [
+            ("platforms/grok-build/GROK.md", "GROK.md"),
+            (".grok/skills/work/SKILL.md", ".grok/skills/work/SKILL.md"),
+        ],
     },
     "nemotron": {
         "label": "NVIDIA NIM / Nemotron",
@@ -352,8 +370,9 @@ def survey() -> tuple[list[str], bool]:
 
 
 def plan_copy(project_dir: Path, platform_keys: list[str], want_fleet: bool) -> list[tuple[Path, Path]]:
-    """Build the full (src, dest) copy plan: core doctrine + chosen platforms + optional fleet."""
+    """Build the full (src, dest) copy plan: core doctrine + .plans tree + platforms + fleet."""
     rel_pairs: list[tuple[str, str]] = [(f, f) for f in CORE_FILES]
+    rel_pairs.extend(PLANS_TREE_FILES)
     rel_pairs.extend(resolve_selection(platform_keys))
     if want_fleet:
         rel_pairs.extend((f, f) for f in FLEET_FILES)

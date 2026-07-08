@@ -3,7 +3,7 @@ sidebar_position: 4
 sidebar_label: Local Models
 ---
 
-<!-- synced-from: platforms/local-models/README.md @ 4d1e62dc6e3cb8ef5a2a11637ebd662b91ed7703 -->
+<!-- synced-from: platforms/local-models/README.md @ d27166c10e57709522ecc2c5f3c96cf44a08777e -->
 
 # Local Models
 
