@@ -1,0 +1,6 @@
+[project]
+name = "anchor-prompts-mcp"
+version = "0.1.0"
+description = "MCP server exposing Anchor doctrine, templates, and prompt-tuning tools"
+requires-python = ">=3.10"
+dependencies = ["mcp[cli]>=1.2.0", "requests>=2.31", "PyYAML>=6.0"]

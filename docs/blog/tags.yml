@@ -1,0 +1,15 @@
+announcement:
+  label: Announcement
+  description: Project news and releases
+feature:
+  label: Feature
+  description: New user-facing capability
+fix:
+  label: Fix
+  description: Significant fixes worth an operator's attention
+tooling:
+  label: Tooling
+  description: Fleet scripts, MCP servers, and the anchor CLI
+docs:
+  label: Docs
+  description: Documentation and doctrine changes

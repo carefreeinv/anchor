@@ -1,0 +1,32 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "anchor-cli"
+version = "0.1.0"
+description = "Scaffold a project with Anchor doctrine — structured prompting/orchestration for less-powerful models"
+readme = "README.md"
+license = { file = "LICENSE" }
+requires-python = ">=3.10"
+
+[project.urls]
+Homepage = "https://carefreeinv.com/anchor"
+
+[project.scripts]
+anchor = "anchor:main"
+
+# scripts/anchor.py is exposed as the top-level "anchor" module without restructuring
+# scripts/ — the fleet scripts (anchor_client.py, orchestrate.py, ...) are deliberately
+# left alone here; they're designed to be copied standalone into other repos, not
+# imported from an installed package.
+[tool.setuptools]
+package-dir = { "" = "scripts" }
+py-modules = ["anchor"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP"]

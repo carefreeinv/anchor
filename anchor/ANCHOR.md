@@ -1,0 +1,88 @@
+# The Anchor Doctrine
+
+How to make a lesser model approach problems the way a Mythos-class model does. Every platform file and script in this repo is an implementation of this document.
+
+## What actually separates Mythos-class behavior
+
+Not smarter tokens — better *process*. Six behaviors:
+
+1. **Clarify before acting.** State the goal, constraints, and acceptance criteria in its own words. If ambiguous, ask one precise question rather than guessing.
+2. **Plan before executing.** Produce an explicit plan with ordered steps, files/resources in scope, and risks. Never interleave planning and doing.
+3. **Decompose ruthlessly.** Break work into tasks that each fit in one short context window and touch one concern. A task that can't be verified independently is decomposed wrong.
+4. **Execute one step, then verify.** After each step: does it compile/run/pass? Does it match the spec? Only then proceed.
+5. **Self-review as a separate pass.** Re-read the whole result *as a critic*, against the original acceptance criteria, before declaring done.
+6. **Know when to stop.** Report blockers honestly instead of hallucinating around them. Two failed attempts at the same fix = stop and escalate.
+
+## Why lesser models fail at this by default
+
+Small models drift: they forget constraints mid-task, conflate planning with doing, declare success without checking, and fill knowledge gaps with plausible fabrication. The fix is never "ask it to think harder." The fix is **externalizing the discipline**:
+
+- **Forced structure** — require fixed output formats (the templates in `templates/`). A model that must fill in an `## Acceptance criteria` section cannot skip thinking about acceptance criteria.
+- **One task per context** — never give a small model the whole project. Give it one task spec with exactly the context it needs. Fresh context per task; context rot is real and hits small models hardest.
+- **External verification** — tooling (not the model) runs tests, linters, and diffs. The model's claim of success is an input to verification, never a substitute.
+- **Role separation** — the same small model performs better as three sequential roles (planner → executor → critic) than as one conversational blob, because each role gets a clean context and a narrow job.
+- **Escalation paths** — define upfront what gets escalated to a bigger model: ambiguous requirements, architectural decisions, twice-failed tasks, final review.
+
+## The orchestrator pattern
+
+From the Fable 5 playbook — pay frontier prices for judgment, not keystrokes:
+
+```
+BIG model (or human):   read codebase → write plan → decompose into task specs
+SMALL models:           execute each task spec independently, fresh context each
+TOOLING:                verify each task (tests, lint, build) before accepting
+BIG model (or human):   review the merged result against the plan
+```
+
+The expensive model touches the project twice. Everything between runs on cheap/local models. `scripts/orchestrate.py` implements this loop; the `model-fleet` MCP server exposes it to any MCP-capable agent.
+
+## Prompt tuning (always, before expensive or weak runs)
+
+A sloppy prompt costs a frontier model money and costs a small model *correctness*. Before dispatch, rewrite every task with `scripts/prompt_tuner.py` (or the `tune_prompt` MCP tool) into the task-spec template: goal, files in scope, constraints, acceptance criteria, definition of done. Small models are prompt-fragile; this one step buys more quality than any sampling parameter.
+
+## Routing rules of thumb
+
+| Task | Route to |
+|---|---|
+| Multi-hour autonomous build, large migration | Frontier (Fable-class) — or orchestrated fleet if unavailable |
+| Deep single-problem reasoning, architecture | Best available reasoner (Opus-class, Nemotron reasoning-on, R1 distill) |
+| Standard features, UI, refactors, reviews | Mid/local (Sonnet-class, Qwen3 32B/30B-A3B) |
+| Boilerplate, renames, formatting, summaries | Smallest thing that works (Qwen3 4–8B, Gemma 3 12B) |
+
+80% of a typical build never needed the frontier model. The skill is knowing which 20% does.
+
+### Right-size before you start
+
+The escalation path above (stop after two failures, hand up a tier) has an inverse that's just as important and easier to forget: before spending an expensive tier's tokens, ask whether the task actually needs them. If it looks like boilerplate, formatting, a rename, or a single well-specified function, the model should say so and ask whether to proceed at the current tier or hand off to a smaller model or a model already registered in `scripts/endpoints.yaml` — rather than silently burning frontier capacity on work a cheap/local model would do just as correctly. `scripts/router.py` implements this lookup; a model without fleet access should still flag the mismatch in words.
+
+## Code quality defaults
+
+Every tier defaults to these regardless of task size — they're cheap to apply and expensive to skip:
+
+- **SOLID principles** by default: single responsibility, small interfaces, depend on abstractions over concretions.
+- **Use the language's own composition idiom** instead of deep inheritance or copy-pasted variants:
+
+  | Language/framework | Prefer |
+  |---|---|
+  | Rust | traits |
+  | Python | Protocols (PEP 544) / narrow ABCs |
+  | TypeScript, Go, Java, C# | interfaces |
+  | Ruby | modules (mixins) |
+  | PHP | interfaces/traits |
+  | anything else | that language's standard composition mechanism — never a deep inheritance tree |
+
+- **No spaghetti, no dead code.** Unreachable branches, commented-out blocks, and unused abstractions don't get left "just in case" — delete them or don't add them.
+- **Technical debt is tracked, not silent.** A shortcut taken under time pressure gets named in the task's `## Deferred / concerns`, not buried.
+
+`scripts/anchor.py` detects a scaffolded project's language/framework from marker files (`package.json`, `Cargo.toml`, `go.mod`, etc.) and writes the resolved choice — plus its idiom — to `ANCHOR-CONVENTIONS.md` in the project root. When detection fails (blank or ambiguous project), it asks, proposing the user's saved `config.sh` language default (if any) as the suggested answer.
+
+## Templates
+
+- `templates/plan.md` — planner output format
+- `templates/task-spec.md` — the unit of work handed to an executor
+- `templates/review.md` — critic pass format
+- `templates/verification.md` — machine-checkable done-ness checklist
+
+## System prompts
+
+`system-prompts/mythos-core.md` is the model-agnostic behavioral prompt. Per-model adaptations (chat-template quirks, thinking toggles, context budgets) live alongside it and in `platforms/`.

@@ -1,0 +1,22 @@
+# docker compose for NIM on H100 — Nemotron reasoner slot
+# NGC_API_KEY must be set in the environment.
+services:
+  nemotron-super:
+    image: nvcr.io/nim/nvidia/llama-3.3-nemotron-super-49b-v1:latest
+    runtime: nvidia
+    environment:
+      - NGC_API_KEY=${NGC_API_KEY}
+    ports:
+      - "8000:8000"
+    volumes:
+      - nim-cache:/opt/nim/.cache
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    shm_size: 16gb
+volumes:
+  nim-cache:

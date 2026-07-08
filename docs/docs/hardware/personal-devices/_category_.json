@@ -1,0 +1,10 @@
+{
+  "label": "Personal devices",
+  "position": 1,
+  "link": {
+    "type": "generated-index",
+    "slug": "/hardware/personal-devices",
+    "title": "Personal devices",
+    "description": "The on-ramp tier: a single machine you already own or can buy off the shelf — no rack, no cluster. Pick the option that matches your hardware. Run scripts/fit_device.py to size a model to any of them."
+  }
+}

@@ -1,0 +1,14 @@
+__pycache__/
+*.pyc
+*.egg-info/
+build/
+dist/
+.venv/
+node_modules/
+docs/build/
+docs/.docusaurus/
+orchestration_run.json
+benchmark_results.csv
+*:Zone.Identifier
+var/
+
