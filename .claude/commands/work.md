@@ -74,10 +74,11 @@ agent's `in-progress/` plan. **Promotion from drafts is human-only.**
 6. Skip `drafts/`, `completed/`, `ambiguous/`, `blocked/`, foreign `in-progress/`,
    and `README.md`.
 
-If multiple plans share the top priority and the user did not say "just pick",
-print a short menu (path + first heading + Preferred models) and ask which to
-run. If they said "just pick" / "go" / equivalent, take the first in sorted
-order without asking again.
+If multiple plans share the top priority, **just pick the first in sorted order**
+(Priority → Value → oldest → filename) and start — this is the default; do **not**
+print a menu or ask which to run. Name the other tied plans in one line so the
+user can redirect if they want a different one. Only pause to ask when the user
+**explicitly** asks to choose (e.g. "let me pick", "which should I run?").
 
 ## Model fit (required)
 
