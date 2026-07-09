@@ -48,6 +48,7 @@ Newest first.
 
 ### Fixed
 
+- Docs social cards for non-home routes: `trailingSlash: true` so GitHub Pages serves `/blog/`, `/doctrine/`, etc. (not 404); stronger global OG/Twitter image tags and blog description
 - Mermaid diagrams render on the docs site (theme + `markdown.mermaid: true`)
 - `orchestrate.py --plan-file` rejects non-executable lanes (`drafts/`, `completed/`, parked)
 - README note for editable installs on old distro pip/setuptools (PEP 660)

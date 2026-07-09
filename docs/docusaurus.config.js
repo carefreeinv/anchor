@@ -8,7 +8,10 @@ const config = {
   baseUrl: '/anchor/',
   organizationName: 'carefreeinv',
   projectName: 'anchor',
-  trailingSlash: false,
+  // true → blog/index.html etc. so GitHub Pages serves /anchor/blog/ (with
+  // trailing slash). false made /anchor/blog/ a 404 while only /anchor/ worked
+  // as a directory URL — social scrapers often normalize with a trailing slash.
+  trailingSlash: true,
   onBrokenLinks: 'warn',
   markdown: {
     mermaid: true,
@@ -16,6 +19,52 @@ const config = {
   },
   themes: ['@docusaurus/theme-mermaid'],
   i18n: { defaultLocale: 'en', locales: ['en'] },
+  headTags: [
+    // Explicit absolute card tags (in addition to themeConfig.image) so every
+    // route ships a complete Twitter/OG set even if a plugin omits defaults.
+    {
+      tagName: 'meta',
+      attributes: {
+        property: 'og:image',
+        content: 'https://carefreeinv.com/anchor/img/og-card.png',
+      },
+    },
+    {
+      tagName: 'meta',
+      attributes: {
+        property: 'og:image:width',
+        content: '1200',
+      },
+    },
+    {
+      tagName: 'meta',
+      attributes: {
+        property: 'og:image:height',
+        content: '630',
+      },
+    },
+    {
+      tagName: 'meta',
+      attributes: {
+        property: 'og:image:type',
+        content: 'image/png',
+      },
+    },
+    {
+      tagName: 'meta',
+      attributes: {
+        name: 'twitter:card',
+        content: 'summary_large_image',
+      },
+    },
+    {
+      tagName: 'meta',
+      attributes: {
+        name: 'twitter:image',
+        content: 'https://carefreeinv.com/anchor/img/og-card.png',
+      },
+    },
+  ],
   presets: [
     [
       'classic',
@@ -29,6 +78,9 @@ const config = {
         blog: {
           showReadingTime: true,
           blogSidebarTitle: 'Posts',
+          blogTitle: 'Anchor blog',
+          blogDescription:
+            'Orchestrate cheap models with expensive judgment — product notes from Anchor.',
           onUntruncatedBlogPosts: 'warn',
           editUrl: 'https://github.com/carefreeinv/anchor/edit/main/docs/',
         },
