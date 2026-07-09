@@ -58,6 +58,15 @@ python fleet_watch.py --project /path/to/app --emit systemd \
   --worker tier=mid,agent=mid-1,interval=5m
 ```
 
+## pending_merges.py
+
+Advises which finished work is committed but **not yet merged** into integration. For each local branch it counts commits the merge target doesn't have — `feature/*` → `dev`/`develop` (else `main`/`master`), and `dev`/`develop` → mainline — and flags any `feature/<slug>` that matches a plan under `.plans/completed/` as **completed work awaiting merge**. Advisory by default; pass `--exit-code` to return `1` when anything is pending (for a coordinator, monitor, or CI to surface), `--json` for machines.
+
+```bash
+python pending_merges.py                 # human table
+python pending_merges.py --json --exit-code
+```
+
 ## orchestrate.py
 
 The whole loop: plan (planner role or `--plan-file`) → split into tasks → execute each in a fresh context → verify with your `--verify` command → two-strike escalate or `--hold-on-fail` (detached mode) → fresh-context critic review → JSON run report. Format-gates every executor output (missing footer = failed attempt). Often invoked by `work_once.py --run` after a claim.

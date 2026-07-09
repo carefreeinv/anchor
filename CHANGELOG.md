@@ -8,6 +8,7 @@ Newest first.
 
 ### Added
 
+- **`scripts/pending_merges.py`** — surfaces finished work committed but **not yet merged** into integration: counts each local branch's commits ahead of its merge target (`feature/*` → `dev`/`develop` → mainline) and flags `feature/<slug>` branches matching a plan under `.plans/completed/` as *completed work awaiting merge*. Advisory table by default; `--json`, `--exit-code` (exit `1` when pending) for coordinators/monitors/CI
 - **`scripts/worktree_for_agent.py`** — per-`agent-id` git worktrees under `var/worktrees/` (ensure/list/path/remove; auto-create `dev` from main/master); `work_once.py --ensure-worktree` after claim
 - **Scaffold / project config ensures `var/`** — creates `var/` + `var/worktrees/`, appends `var/` to root `.gitignore` (scaffold + `--set-orchestrator`)
 - **`mcp/project-orchestrator/`** — per-project limited orchestrator MCP (L0+L1): `plans_list` / `plans_claim` / `plans_complete` (move-only), heuristic `plans_suggest_dependencies` (propose-only), `plans_stale_report` (tier-gap / age warnings); reuses `plan_select` + `plan_lease`; config `.anchor/mcp.yaml`
