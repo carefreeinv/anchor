@@ -38,7 +38,7 @@ The "which tier deserves this task" rule as code: regex heuristics first (free),
 
 ## work_once.py
 
-Headless puller for multi-tier fleets: same priority + Preferred-models fit + **Depends on** checks as interactive `/work`, one claim per invocation (optional `--max-plans N`). Each worker passes `--tier` or `--endpoint` and a unique `--agent-id`; claims **move** plans to `.plans/in-progress/` and write leases under `.plans/.leases/`. Other agents ignore foreign in-progress work. Unmet dependencies are skipped (`--no-dep-check` to override). Park half-baked/stuck work: `--park ambiguous|blocked`. Return to ready: `--return-ready`. Exit `1` means idle backlog (normal for cron). Full setup: [Fleet workers](fleet-workers).
+Headless puller for multi-tier fleets: same priority + Preferred-models fit + **Depends on** checks as interactive `/work`, one claim per invocation (optional `--max-plans N`). Each worker passes `--tier` or `--endpoint` and a unique `--agent-id`; claims **move** plans to `.plans/in-progress/` and write leases under `.plans/.leases/`. Other agents ignore foreign in-progress work. Unmet dependencies are skipped (`--no-dep-check` to override). Park half-baked/stuck work: `--park ambiguous|blocked`. Return to ready: `--return-ready`. Parallel code edits: **`worktree_for_agent.py`** or `work_once.py --ensure-worktree` (one worktree per agent-id under `var/worktrees/`). Exit `1` means idle backlog (normal for cron). Full setup: [Fleet workers](fleet-workers).
 
 ```bash
 python work_once.py --list --tier mid --agent-id mid-1

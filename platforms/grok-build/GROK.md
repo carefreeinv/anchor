@@ -21,6 +21,7 @@ You are one worker in a verified pipeline, not the whole pipeline. Speed is wort
 8. End every response with `## Result`, `## How to verify`, `## Deferred / concerns`.
 9. SOLID by default; use the project's idiomatic composition mechanism (check `ANCHOR-CONVENTIONS.md`) over deep inheritance; no dead code, no spaghetti control flow.
 10. **Docs describe current state, not plans.** README / `docs/` / CHANGELOG / blog / release notes cover **shipped** code and public contracts only. Never document the **contents** of `.plans/` as product docs or roadmap. When plan work ships, document the code — not the plan file. Documenting the `.plans/` **workflow** itself is fine when that is a shipped feature.
+11. **Before any `git commit`:** run **`/commit-prep`** (prep only: tests, CHANGELOG, blog-if-warranted). Do not skip for “small” changes. After gates are **green**, if plan work is complete, stage + commit on the **feature branch** (worktree preferred); never on main/dev; never auto-merge.
 
 ## Grok-specific tuning
 
@@ -70,13 +71,24 @@ and **Depends on** (skip unmet deps); never execute `drafts/` / `completed/` /
 `in-progress/` → `completed/`. Do not promote drafts from `/work` (use
 `/draft --promote`). If Preferred orchestrator is unset, frontier/near-frontier
 (including Grok 4.5 as session lead) may act as temporary coordinator
-(`TEMPORARY-COORDINATOR:`). Skill: `.grok/skills/work/SKILL.md`.
+(`TEMPORARY-COORDINATOR:`). On Git projects: **worktree per agent**
+(`scripts/worktree_for_agent.py ensure --agent-id … --slug …`); feature-branch
+from **`dev`**/`develop` (**create `dev` from main/master if missing**);
+**`/commit-prep` before commit**; never auto-merge. Skill:
+`.grok/skills/work/SKILL.md`.
 
 ## /fleet-watch
 
 Configure durable plan pollers: `/fleet-watch` (this project) or
 `/fleet-watch other-app`. Watchers run a work-style claim/execute loop in the
 background. Skill: `.grok/skills/fleet-watch/SKILL.md`. Prefer the skill over raw CLI.
+
+## /commit-prep
+
+**Required before any `git commit`.** Run `/commit-prep`: tests → CHANGELOG →
+blog-if-warranted. **Prep only** — does not commit. After a green prep, follow
+**`/work`** / hard rules for feature-branch commit (worktree preferred; never
+merge to `dev`/`main`). Command: `platforms/grok-build/commands/commit-prep.md`.
 
 ## /config
 

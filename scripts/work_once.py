@@ -45,6 +45,7 @@ from plan_select import (
     inventory,
     inventory_in_progress,
     normalize_fit_tier,
+    plan_slug,
     plans_root_for,
     select_one,
 )
@@ -359,6 +360,14 @@ def main(argv: list[str] | None = None) -> int:
         help="with --return-ready, destination ready lane (default: origin or features)",
     )
     ap.add_argument(
+        "--ensure-worktree",
+        action="store_true",
+        help=(
+            "after claim, ensure a per-agent git worktree (var/worktrees/<agent-id>/) "
+            "and print WORKTREE=… lines; uses worktree_for_agent.py"
+        ),
+    )
+    ap.add_argument(
         "orchestrate_args",
         nargs="*",
         help="extra args after -- forwarded to orchestrate when using --run",
@@ -498,6 +507,25 @@ def main(argv: list[str] | None = None) -> int:
 
         picked += 1
         print(plan_path)
+        if args.ensure_worktree:
+            try:
+                from worktree_for_agent import WorktreeError, ensure_worktree
+
+                slug = plan_slug(plan_path)
+                rec = ensure_worktree(root, args.agent_id, slug=slug)
+                print(f"WORKTREE={rec.path}")
+                print(f"BRANCH={rec.branch}")
+                print(f"INTEGRATION={rec.integration}")
+                print(
+                    f"[work_once] worktree ready — run code edits in {rec.path}",
+                    file=sys.stderr,
+                )
+            except WorktreeError as exc:
+                print(f"[work_once] worktree ensure failed: {exc}", file=sys.stderr)
+                return 2
+            except Exception as exc:  # noqa: BLE001 — surface unexpected git issues
+                print(f"[work_once] worktree ensure failed: {exc}", file=sys.stderr)
+                return 2
         if args.run:
             code = run_orchestrate(plan_path, args.orchestrate_args)
             if code != 0:

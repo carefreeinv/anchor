@@ -54,6 +54,30 @@ def test_plan_copy_includes_plans_tree_and_work_commands(tmp_path):
     assert ".grok/skills/draft/SKILL.md" in dests
 
 
+def test_ensure_project_var_creates_dir_and_gitignore(tmp_path):
+    info = anchor.ensure_project_var(tmp_path)
+    assert (tmp_path / "var").is_dir()
+    assert (tmp_path / "var" / "worktrees").is_dir()
+    assert (tmp_path / "var" / ".gitkeep").is_file()
+    gi = (tmp_path / ".gitignore").read_text(encoding="utf-8")
+    assert "var/" in gi
+    assert info["gitignore"] == "created"
+    # idempotent
+    info2 = anchor.ensure_project_var(tmp_path)
+    assert info2["gitignore"] == "unchanged"
+
+
+def test_ensure_project_var_appends_existing_gitignore(tmp_path):
+    (tmp_path / ".gitignore").write_text("node_modules/\n", encoding="utf-8")
+    info = anchor.ensure_project_var(tmp_path)
+    assert info["gitignore"] == "updated"
+    text = (tmp_path / ".gitignore").read_text(encoding="utf-8")
+    assert "node_modules/" in text
+    assert "var/" in text
+    # does not duplicate
+    assert text.count("var/") == 1
+
+
 def test_check_conflicts_flags_existing_destination(tmp_path):
     plan = anchor.plan_copy(tmp_path, ["chat"], want_fleet=False)
     existing_dest = plan[0][1]

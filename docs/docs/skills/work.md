@@ -130,6 +130,24 @@ python scripts/work_once.py --once --endpoint h100-executor --run
 
 Shared rules with `/work`: resume own in-progress, bugs before features, Value order, Preferred models fit, refuse `drafts/`/`completed/`, never promote, **ignore foreign in-progress**. Selection logic: `scripts/plan_select.py` + `plan_lease.py`.
 
+### Git branches + commits + worktrees
+
+When the project uses Git and work needs a branch:
+
+1. **Parallel agents:** do **not** share one checkout. Prefer a **worktree per agent**:
+   ```bash
+   python scripts/worktree_for_agent.py ensure --project . --agent-id <id> --slug <plan-slug>
+   # or: work_once.py … --ensure-worktree
+   ```
+   Edit only under the printed `WORKTREE=` path.
+2. Integration branch: **`dev`**, else **`develop`**. **If neither exists, create `dev` from `main` (else `master`)** (the ensure helper does this).
+3. Feature branch `feature/<slug>` inside that worktree; never auto-merge to dev/main.
+4. When plan work is complete: run **`/commit-prep`** (prep only). If gates are
+   **green**, stage + commit on the feature branch; optional push of that branch
+   only — never auto-merge to dev/main.
+
+See [Fleet workers — isolation](../tooling/fleet-workers#4-isolation-git-multi-writer).
+
 ## Related
 
 - [Multi-agent fleet workers](../tooling/fleet-workers) — architecture for multi-tier pull

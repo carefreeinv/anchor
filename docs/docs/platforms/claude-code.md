@@ -3,7 +3,7 @@ sidebar_position: 1
 sidebar_label: Claude Code
 ---
 
-<!-- synced-from: platforms/claude-code/CLAUDE.md @ acd45dfdf34cd50fbf30ddacdbf90347201e9b95 -->
+<!-- synced-from: platforms/claude-code/CLAUDE.md @ a2b8a0bf34f7366a463592523432af33ec52126d -->
 
 # Claude Code
 
@@ -40,11 +40,15 @@ flowchart TB
 
 **Fleet offload.** With `model-fleet` connected, mechanical steps go to your own hardware (`delegate` tool) before spending plan-limit tokens. The frontier agent stays the judge, your fleet becomes the hands.
 
-**Standing rules** apply to every tier: fit-check-first (a task in the current model's weak column per [model fitness](../model-fitness) opens with `SUGGEST-ESCALATE:` and stops unless the user insists), restate-first, one step at a time, verify-don't-claim, two-failures-then-escalate, scope is sacred, required output footer, **docs describe current state not plans** (never document `.plans/` contents as product docs; document shipped code only).
+**Standing rules** apply to every tier: fit-check-first (a task in the current model's weak column per [model fitness](../model-fitness) opens with `SUGGEST-ESCALATE:` and stops unless the user insists), restate-first, one step at a time, verify-don't-claim, two-failures-then-escalate, scope is sacred, required output footer, **docs describe current state not plans** (never document `.plans/` contents as product docs; document shipped code only), and **`/commit-prep` before any `git commit`**.
 
 ## Tracked plans
 
-Scaffold installs [**`/draft`**](../skills/draft), [**`/work`**](../skills/work), and [**`/fleet-watch`**](../skills/fleet-watch). Draft: create/list/load/`--promote <slug>` (infer bugs vs features); optional `--local`. `/work`: Preferred models, Depends on, claim → `in-progress/`, finish → `completed/`. Set Preferred orchestrator via `anchor --set-orchestrator`. See source `platforms/claude-code/CLAUDE.md`.
+Scaffold installs [**`/draft`**](../skills/draft), [**`/work`**](../skills/work), and [**`/fleet-watch`**](../skills/fleet-watch). Draft: create/list/load/`--promote <slug>` (infer bugs vs features); optional `--local`. `/work`: Preferred models, Depends on, claim → `in-progress/`, finish → `completed/`; Git: **worktree per agent** (`worktree_for_agent.py`), feature branches from `dev`/`develop` (**create `dev` from main/master if missing**). Set Preferred orchestrator via `anchor --set-orchestrator`. See source `platforms/claude-code/CLAUDE.md`.
+
+## /commit-prep
+
+**Required before any `git commit`.** Agents run `/commit-prep` (discover this project’s tests/CI; CHANGELOG; blog-if-warranted — no Docusaurus required). **Prep only** — does not commit. After a green prep, [**`/work`**](../skills/work) / standing rules cover feature-branch commit (worktree preferred; never merge to dev/main).
 
 ## Suggested automation
 

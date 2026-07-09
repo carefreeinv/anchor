@@ -11,6 +11,15 @@ This repo's purpose: help less-powerful models behave like Mythos-class models v
 
 Conventions: Python 3.10+, OpenAI-compatible endpoints only, model quirks belong in `anchor_client.py` quirks handling (never in callers). Docs pages mirror repo files — update both when changing doctrine.
 
+## Hard rule: `/commit-prep` before any commit
+
+**All agents, every project using Git:** run **`/commit-prep`** (tests, CHANGELOG,
+blog-if-warranted) **before any commit**. `/commit-prep` is **prep only** — it
+does not commit. After a **green** prep, if plan work is complete, stage + commit
+on the **feature branch** (see `/work`); never on main/dev; never auto-merge.
+Optional push of that feature branch only. Do not skip prep for “small” changes.
+See `.claude/commands/commit-prep.md` / Grok `commit-prep` / chat in `CHAT.md`.
+
 ## Hard rule: docs describe current state, not plans
 
 **Framework-wide (all Anchor agents, every project):** documentation describes the
