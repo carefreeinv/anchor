@@ -30,6 +30,29 @@ finished.
 7. Only touch what's in scope for the current task; log other findings under
    `## Deferred` instead of acting on them.
 8. End every substantive response with `## Result`, `## How to verify`, `## Deferred / concerns`.
+9. **Docs describe current state, not plans.** README / `docs/` / CHANGELOG / blog /
+   release notes cover **shipped** code and public contracts only. Never document
+   the **contents** of `.plans/` as product docs or roadmap. When plan work ships,
+   document the code — not the plan file. Documenting the `.plans/` **workflow**
+   itself is fine when that is a shipped feature.
+
+## /draft — planning mode → `./.plans/drafts`
+
+No shell here, so the human runs file commands. When the user types `/draft`:
+
+1. **`--list`:** ask them to paste `ls -la .plans/drafts`; table paths + Goal
+   lines from any pasted contents; do not implement.
+2. **`--load <slug>`** or existing slug: ask them to paste the draft file; restate
+   Goal / Preferred models / Depends on / Steps / Done when; discuss; dictate
+   edits only when they ask.
+3. **`--promote <slug>`** (or `promote <slug>`): read the pasted draft (or ask
+   for it); **infer** bug vs feature from Goal/Value/wording; dictate
+   `git mv .plans/drafts/<file> .plans/bugs|features/<file>` and state why that
+   lane. Confirm target free first (`ls` that lane).
+4. **Create/refine:** dictate full plan markdown for `.plans/drafts/<slug>.md`
+   (or `.local.md` with `--local`). Template: `anchor/templates/plan.md`.
+5. **Planning only** — no product implementation. Execution is `/work` after the
+   plan is in a ready lane.
 
 ## /work — execute a tracked plan from `./.plans`
 
@@ -39,25 +62,32 @@ No shell here, so you cannot list files or `git mv` yourself. When the user type
 1. Ask them to run and paste output:
    ```bash
    ls -la .plans
-   ls .plans/bugs .plans/features .plans/drafts .plans/completed 2>/dev/null
+   ls .plans/bugs .plans/features .plans/in-progress \
+      .plans/ambiguous .plans/blocked .plans/drafts .plans/completed 2>/dev/null
    ```
-2. **Ready lanes only:** `bugs/` then `features/` (by `Value:` high→medium→low).
-   Never execute `drafts/` or `completed/`. If they name a draft, offer edit-only;
-   do **not** dictate a promote move — **promotion is human-only**. The only
-   plan relocate agents may dictate is ready-lane → `completed/` when Done when
-   holds.
+2. **Lanes:** resume their `in-progress/` first; else `bugs/` then `features/`
+   (by `Value:` high→medium→low). Honor **Preferred models** and **Depends on**
+   (skip unmet deps). Never execute `drafts/` / `completed/` / `ambiguous/` /
+   `blocked/`. **Ignore** foreign `in-progress/`. If they name a draft, offer
+   edit-only — use `/draft --promote` to promote, not `/work`. Relocates: ready → `in-progress/`
+   when starting; park half-baked → `ambiguous/` or stuck → `blocked/`; finish
+   `in-progress/` → `completed/`.
 3. **`--list`:** from their paste, table path / Value / Preferred models / fit for
-   the model they are chatting with — do not implement.
+   the model they are chatting with — do not implement. **Path is authoritative**
+   (ignore any in-file `Lane:` / `Status:`; do not dictate writing those fields).
 4. **Bare `/work`:** pick highest-priority **model-fit** plan (or all priority order
    if they said `--no-fit-check`). Restate Goal + Preferred models + Done when.
    Dictated work is one step at a time with verify commands for the human to run.
-5. **Finish:** when Done when holds, dictate exact commands:
+5. **Start work:** dictate move into in-progress if still under bugs/features:
    ```bash
-   # set Status: done in the plan header, then:
-   git mv .plans/features/<slug>.md .plans/completed/
+   git mv .plans/features/<slug>.md .plans/in-progress/
    ```
-6. Mid-session stop: leave the plan in its ready lane with `Status: in_progress`
-   and a short Progress note — do not move to completed.
+   **Finish:** when Done when holds, archive from in-progress:
+   ```bash
+   git mv .plans/in-progress/<slug>.md .plans/completed/
+   ```
+6. Mid-session stop: leave the plan in **`in-progress/`** with a short `## Progress`
+   note — other agents ignore it; do not set `Status:`.
 
 ## /config — setting your Anchor defaults
 
@@ -67,15 +97,16 @@ types `/config`:
 1. Ask which platform(s) they want as their Anchor default — `claude`, `grok`,
    `nemotron`, `local:<model>` (qwen3, gemma3, mistral-small, deepseek-r1-distill,
    llama33), and/or `chat` — and whether to include fleet/orchestration tooling.
-   Also ask their model priority: the order they reach for / escalate between
-   models, highest priority first (providers `claude`, `openai`/ChatGPT, `gemini`,
-   `grok`, `nim`, `local`, `chat`, optionally with `:<model>` — e.g.
-   `nim,grok,openai:gpt-5,claude:sonnet,claude:opus,claude:fable`).
+   Also ask their model priority (highest first) and **preferred orchestrator**
+   (who plans multi-step work; lesser models should recommend this instead of
+   orchestrating). Tokens like `nim,grok,claude:sonnet,claude:opus` and
+   orchestrator `claude:opus`.
 2. Give them the exact command to run themselves, in their own terminal, from the
    Anchor repo root:
    ```
-   ./config.sh --platform <keys> [--fleet] [--model-priority <ordered,list>]
+   ./config.sh --platform <keys> [--fleet] [--model-priority <ordered,list>] [--orchestrator <token>]
    ```
+   Per-project later: `anchor <project-dir> --set-orchestrator <token>`.
 3. Tell them what it will do: save those defaults (default location
    `~/.config/anchor/defaults`) and print the `anchor <project-dir>` command to
    scaffold a project with them.
@@ -97,14 +128,15 @@ judgment. Work the three gates in order; don't move on while an earlier gate is 
 2. **Release notes.** Ask for `git status` + `git diff` output (or a summary of the
    pending change). Dictate the exact lines to add under `## [Unreleased]` in
    `CHANGELOG.md` (`### Added` / `### Changed` / `### Fixed`) — user-visible
-   changes only.
+   **shipped** changes only. Never restate `.plans/` contents as release notes
+   (docs describe current state, not plans).
 3. **Blog post — only when warranted.** If the change introduces or significantly
    updates/fixes a user-facing capability, draft the full contents of
    `docs/blog/YYYY-MM-DD-<slug>.md` (front matter: `title`, `authors: [carefree]`,
    `tags` from `docs/blog/tags.yml`; lead paragraph, then `<!-- truncate -->`) for
-   the human to save. Ground every claim in the diff they showed you; mark anything
-   you couldn't verify `(unverified)`. Otherwise say in one line why no post is
-   needed.
+   the human to save. Ground every claim in the **shipped** diff they showed you —
+   not plan backlog; mark anything you couldn't verify `(unverified)`. Otherwise
+   say in one line why no post is needed.
 
 End with the standard footer, listing exactly which files the human should have
 changed. Do not tell them to commit — they decide when.

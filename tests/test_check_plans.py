@@ -3,10 +3,10 @@ from pathlib import Path
 import check_plans
 
 
-def _write_ready(path: Path, status: str = "ready") -> None:
+def _write_ready(path: Path, extra_header: str = "") -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(
-        f"# Plan: t\n\n- **Status:** {status}\n\n"
+        f"# Plan: t\n\n{extra_header}"
         "## Goal\ng\n\n## Steps\n| 1 | x |\n\n## Done when\n- [ ] ok\n"
     )
 
@@ -19,10 +19,22 @@ def test_check_plans_ok_for_valid_tree(tmp_path):
     assert check_plans.check_plans(root) == []
 
 
-def test_check_plans_flags_draft_status_outside_drafts(tmp_path):
-    _write_ready(tmp_path / ".plans" / "features" / "bad.md", status="draft")
+def test_check_plans_flags_obsolete_status_header(tmp_path):
+    _write_ready(
+        tmp_path / ".plans" / "features" / "bad.md",
+        extra_header="- **Status:** ready\n\n",
+    )
     problems = check_plans.check_plans(tmp_path)
-    assert any("Status draft" in p for p in problems)
+    assert any("obsolete Status" in p for p in problems)
+
+
+def test_check_plans_flags_obsolete_lane_header(tmp_path):
+    _write_ready(
+        tmp_path / ".plans" / "features" / "bad.md",
+        extra_header="- **Lane:** features\n\n",
+    )
+    problems = check_plans.check_plans(tmp_path)
+    assert any("obsolete Lane" in p for p in problems)
 
 
 def test_check_plans_flags_missing_sections(tmp_path):
@@ -38,3 +50,10 @@ def test_check_plans_flags_todo_lane(tmp_path):
     (tmp_path / ".plans" / "todo").mkdir(parents=True)
     problems = check_plans.check_plans(tmp_path)
     assert any("todo" in p for p in problems)
+
+
+def test_check_plans_drafts_need_no_sections(tmp_path):
+    p = tmp_path / ".plans" / "drafts" / "sketch.md"
+    p.parent.mkdir(parents=True)
+    p.write_text("# Plan: sketch\n\nrough notes only\n")
+    assert check_plans.check_plans(tmp_path) == []

@@ -2,6 +2,8 @@
 
 **Qwen/Llama backbones distilled from R1: 7B/8B/14B/32B/70B.** Local reasoning specialists — the fleet's "hard problem" and critic tier.
 
+**Official quick start:** [DeepSeek-R1 collection (HF)](https://huggingface.co/collections/deepseek-ai/deepseek-r1) · example card: [Distill-Qwen-32B](https://huggingface.co/deepseek-ai/DeepSeek-R1-Distill-Qwen-32B)
+
 ## Critical quirks
 
 - **Avoid a system prompt entirely** — official guidance: put ALL instructions in the user message (mythos-core text goes at the top of the user turn).
@@ -26,6 +28,7 @@ quirks:
 - **Critic:** the best local reviewer per GB. Give it the diff + spec + `templates/review.md`; its long deliberation catches what executors miss.
 - **Hard single problems:** race conditions, off-by-one hunts, algorithm choice — the "Opus role" of a local fleet.
 - **Executor:** NO. Slow, token-hungry, prone to over-refactoring simple tasks. Never waste it on boilerplate (same economics as the Fable playbook: deliberation is expensive; spend it on judgment).
+- **Fleet orchestrator:** NO. Multi-step project coordination belongs to the Preferred orchestrator when set, else a frontier temporary coordinator—not this distill.
 
 ## Budget guardrail
 

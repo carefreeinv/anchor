@@ -8,83 +8,133 @@ the whole `.plans/` tree. Exception: `*.local.md` plans are ignored via
 `.plans/.gitignore` (private/dev work you don't want committed). Many UIs hide
 dotfolders — always use the explicit path `.plans/`.
 
-## Lanes
+## Path is authoritative
 
-| Path | Execute? | Complete (`git mv` → `completed/`)? |
-|------|----------|-------------------------------------|
-| `bugs/` | **yes** (highest priority) | **yes** |
-| `features/` | **yes** (after all bugs) | **yes** |
-| `drafts/` | **no** (edit only) | **no** |
-| `completed/` | **no** (archive) | n/a |
+**Lane and lifecycle status live only in the filesystem path.** Humans move
+files freely; do **not** put `Lane:` or `Status:` inside plan markdown.
+
+| Path | Meaning | Who may execute? |
+|------|---------|------------------|
+| `bugs/` | ready bug work (highest priority) | any fit agent (then move → `in-progress/`) |
+| `features/` | ready feature work | any fit agent (then move → `in-progress/`) |
+| `in-progress/` | claimed / being worked | **only the agent that moved it there** |
+| `ambiguous/` | half-baked / needs clarification | **no** (parked; not auto-picked) |
+| `blocked/` | cannot proceed with current means | **no** (parked; not auto-picked) |
+| `drafts/` | not ready (edit / design) | no one (edit only) |
+| `completed/` | finished archive | no one |
 
 ## Agent move rule (hard)
 
-The **only** allowed agent move of a plan file inside `.plans/` is:
+Agents may relocate plan files **only** as follows:
 
 ```text
-.plans/bugs/<slug>.md   ──git mv──►  .plans/completed/   (when Done when holds)
-.plans/features/<slug>.md ──git mv──►  .plans/completed/   (when Done when holds)
+bugs|features/<slug>.md     ──mv──►  in-progress/     (starting work + lease)
+in-progress/<slug>.md       ──mv──►  completed/       (Done when holds)
+bugs|features|in-progress/  ──mv──►  ambiguous/       (half-baked / underspecified)
+bugs|features|in-progress/  ──mv──►  blocked/         (cannot fix now)
+in-progress/<slug>.md       ──mv──►  bugs|features/   (release claim for others)
+ambiguous|blocked/<slug>.md ──mv──►  bugs|features/   (return when unblocked/clarified)
 ```
+
+Also record ownership under `.plans/.leases/` (agent id + expiry) while in
+`in-progress/`. Headless: `work_once.py` claim/park/return helpers.
 
 Agents must **never**:
 
-- Promote: `drafts/` → `bugs/` or `features/`
-- Demote: ready lane → `drafts/`
-- Move between `bugs/` and `features/`
+- Promote: `drafts/` → `bugs/` or `features/` (**promotion is human-only**)
+- Move ready/in-progress → `drafts/`
+- Swap `bugs/` ↔ `features/` except via explicit return targeting a lane
 - Move anything out of `completed/`
-
-**Promotion is human-only.** Humans run `git mv` from `drafts/` into `bugs/` or
-`features/` and set `Status: ready`. Agents may write or edit under `drafts/`,
-and may set `Status:` / `## Progress` in place, but must not relocate the file
-except into `completed/` after true completion.
+- **Touch another agent’s `in-progress/` plan** (ignore it)
 
 If a draft is named for execution: refuse; offer edit-only; tell the human to
-promote when ready. Agents never run the promote `git mv`.
+move it into `bugs/` or `features/` when ready.
 
 ## How to start
 
-1. `/work` — next ready plan by priority + **model fit** (`Preferred models`)
-2. `/work --list` — inventory only (shows Preferred models + fit)
+1. `/work` — resume **your** `in-progress/` work if any, else next ready plan by
+   priority + **model fit**
+2. `/work --list` — inventory ready plans (+ your in-progress); **ignore others’**
 3. `/work <slug>` or `/work .plans/features/foo.md` — named plan
 4. `/work --no-fit-check` — same priority pick, ignore model-fit filter (still
    **one** plan, not the whole backlog)
 
-Headless/fleet: `python scripts/orchestrate.py --plan-file .plans/features/foo.md`
-(refuses paths under `drafts/` or `completed/`).
+Headless pull (companion to `/work`, not a replacement):
+
+```bash
+python scripts/work_once.py --list --tier mid --agent-id worker-1
+python scripts/work_once.py --once --tier mid --agent-id worker-1   # → in-progress/
+python scripts/work_once.py --max-plans 3 --tier small --agent-id swarm-a
+```
+
+Uses the same priority + Preferred-models rules; moves claimed plans into
+`in-progress/` and writes leases under `.plans/.leases/` (gitignored). Prefer
+one writer per clone/worktree.
+
+**Multi-agent fleet:** unique `--agent-id` per worker; each ignores
+`in-progress/` plans it did not claim. Full guide:
+[Multi-agent fleet workers](https://carefreeinv.com/anchor/docs/tooling/fleet-workers)
+(source: `docs/docs/tooling/fleet-workers.md`). Durable timers: run **`/fleet-watch`** in your coding agent (from the project, or
+`/fleet-watch <name>` from Anchor)—see
+[docs](https://carefreeinv.com/anchor/docs/skills/fleet-watch).
 
 ## Priority (bare `/work`)
 
-1. All `bugs/*.md` before any feature
-2. Then `features/*.md` by header `Value: high | medium | low` (default medium)
-3. Keep only **model-fit** plans unless `--no-fit-check` or user names a plan
-4. Never `drafts/`, `completed/`, or this README
+1. **Your** plans already under `in-progress/` (resume first)
+2. All `bugs/*.md` before any feature
+3. Then `features/*.md` by header `Value: high | medium | low` (default medium)
+4. Keep only **model-fit** plans unless `--no-fit-check` or user names a plan
+5. Never `drafts/`, `completed/`, `ambiguous/`, `blocked/`, foreign `in-progress/`,
+   or this README
 
 ## Write / promote / finish
 
 ```text
 Write:    agents/humans → .plans/drafts/<slug>.md until ready
-Promote:  **human only** → git mv drafts/ → bugs/ or features/; Status: ready
+Promote:  **human only** → move into bugs/ or features/  (path = ready)
+Claim:    agent → move into in-progress/ + lease (path = working)
 Execute:  /work → follow Steps; verify each step
-Finish:   agent: Status: done → git mv → .plans/completed/ (optional YYYY-MM-DD-<slug>.md)
+Park:     agent → ambiguous/ (half-baked) or blocked/ (cannot fix)
+Release:  agent → bugs|features/ (give up claim; still ready for others)
+Finish:   agent: git mv in-progress/ → completed/ (optional YYYY-MM-DD-<slug>.md)
 ```
 
-Mid-session stop: leave in ready lane with `Status: in_progress` and a short
-`## Progress` note. Do **not** move to `completed/`.
+Mid-session stop: leave the file in **`in-progress/`** with a short `## Progress`
+note. Do **not** move to `completed/`. Other agents must ignore that file.
+
+Half-baked or stuck: move to **`ambiguous/`** or **`blocked/`** and note why in
+`## Progress` / session footer. Unparking back to ready is allowed when the
+blocker is cleared.
 
 ## Plan header (recommended)
 
 ```markdown
 # Plan: <title>
 
-- **Lane:** bugs | features | drafts
-- **Value:** high | medium | low    # features only
-- **Status:** draft | ready | in_progress | done
+- **Value:** high | medium | low    # features only; omit for bugs
 - **Slug:** <filename-without-md>
 - **Preferred models:** <names and/or tiers>
+- **Depends on:** <slug-a, slug-b | none>
 
 ## Goal
 ...
 ```
+
+**Do not** include `Lane:` or `Status:` — the directory is the marker.
+
+### Dependencies
+
+Plans may list other plan **slugs** they require first. When drafting or coordinating:
+
+1. Inventory existing `.plans/**` (all lanes).
+2. Compare goals — add **Depends on** when this work should wait on another plan.
+3. Use `none` only after checking.
+
+**Executors must not start** a plan while any dependency is unmet: still open outside
+`completed/`, and not evidenced complete in git history of `.plans/completed/`.
+Logical checks: open-lane presence wins over stale memory; completed file or git
+history of completed/ satisfies. Coordinators (project MCP / planners) should
+propose Depends on when discussing a plan.
 
 Body sections match `anchor/templates/plan.md`. **Preferred models** uses tiers
 `small | mid | reasoner | frontier` and/or concrete names so `/work` can leave
@@ -94,8 +144,8 @@ work for cheaper or stronger models.
 
 | Role | Writes / reads |
 |------|----------------|
-| Planner (NIM, local, human) | Write under `drafts/` only; **human** promotes when ready |
-| Executor (`/work`, Fable, Sonnet, Grok, …) | Only `bugs/` + `features/`; sole move is → `completed/` when done |
+| Planner (NIM, local, human) | Write under `drafts/` only; **human** moves when ready |
+| Executor (`/work`, Fable, Sonnet, Grok, …) | Ready → own `in-progress/` → `completed/`; ignore others’ in-progress |
 | Critic | Plan **Done when** + diff |
 
 Plans must be **self-contained** (Goal, Steps with verify commands, Done when).
@@ -107,13 +157,10 @@ Executors open the file first; do not re-plan unless Done when is impossible.
 - Untracked (local-only): `kebab-case-slug.local.md` — same **Slug** without
   the `.local` suffix; gitignored by `.plans/.gitignore` (`**/*.local.md`)
 - `/work <slug>` matches either `slug.md` or `slug.local.md` under ready lanes
+  (or your own `in-progress/`)
 - Optional on completion: `YYYY-MM-DD-<slug>.md` (or `…local.md`) under `completed/`
-
-Use `.local.md` for experiments, machine-specific notes, or work that should
-not leave the developer machine. Promote to a tracked name (drop `.local`) when
-the plan should be shared: `git mv .plans/drafts/foo.local.md .plans/drafts/foo.md`
-(then human-promote lane as usual).
 
 ## Checker
 
-Optional: `python3 scripts/check_plans.py` (lane placement, required sections).
+Optional: `python3 scripts/check_plans.py` (path under a known lane, required
+sections for executable lanes; flags obsolete `Lane:` / `Status:` headers).

@@ -10,8 +10,8 @@ A single-GPU desktop (one RTX 4090 or 5090, 24–32GB VRAM) is the top of this t
 
 | VRAM | Good picks | Tier |
 |---|---|---|
-| 24GB (RTX 4090) | Qwen3 32B FP8, Qwen3 30B-A3B, DeepSeek-R1-Distill 32B (local reasoner/critic) | `executor-heavy` / `reasoner` |
-| 32GB (RTX 5090) | Qwen3 32B FP8 at longer context, Llama 3.3 70B AWQ (tight) | `executor-heavy` |
+| 24GB (RTX 4090) | [Qwen3](https://qwen.readthedocs.io/en/latest/getting_started/quickstart.html) 32B FP8, Qwen3 30B-A3B, [DeepSeek-R1](https://huggingface.co/collections/deepseek-ai/deepseek-r1) Distill 32B (local reasoner/critic) | `executor-heavy` / `reasoner` |
+| 32GB (RTX 5090) | [Qwen3](https://qwen.readthedocs.io/en/latest/getting_started/quickstart.html) 32B FP8 at longer context, [Llama 3.3](https://huggingface.co/meta-llama/Llama-3.3-70B-Instruct) 70B AWQ (tight) | `executor-heavy` |
 
 `python scripts/fit_device.py --memory 24 --backend cuda` sizes a model to the card and prints the launch command plus `endpoints.yaml` stanza.
 

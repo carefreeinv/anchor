@@ -7,31 +7,37 @@ Newest first.
 ## [Unreleased]
 
 ### Added
-- Tracked **`.plans/`** workflow (git-tracked tree; do not ignore wholesale): lanes `bugs/` → `features/` → archive `completed/`; non-executable `drafts/`; process contract in `.plans/README.md`
-- Local-only plans: **`<slug>.local.md`** under any lane, ignored by scaffolded `.plans/.gitignore` (`**/*.local.md`); `/work <slug>` matches tracked or local filenames
-- **`/work`** entrypoint (Claude `.claude/commands/work.md`, Grok `.grok/skills/work/SKILL.md`, Chat section in `CHAT.md`) — pick/execute next ready plan; `--list`, `--no-fit-check`; honors plan **Preferred models**
-- Plan template header fields: Lane, Value, Status, Slug, Preferred models (`small|mid|reasoner|frontier` or names)
-- `scripts/check_plans.py` — lane/section sanity for `.plans/`
-- `orchestrate.py --plan-file` rejects paths under `.plans/drafts/` or `.plans/completed/`; examples use ready lanes
-- Scaffold always installs empty `.plans/` tree + README + `.plans/.gitignore` (ignores `*.local.md`); sources under `anchor/scaffold/plans/`; Claude gets `/work` command, Grok gets work skill
-- `anchor/model-fitness.md` — per-model excels/weak matrix (Claude tiers, GPT-5.6 Sol/Terra/Luna, Grok 4.5, Gemini, Nemotron, all local models; reviewed 2026-07-08) + the fit-check protocol; scaffolded into every project and mirrored on the docs site
-- Fit check (mythos-core rule 11): a model handed a poor-fit task opens with `SUGGEST-ESCALATE: <model> — <reason>` and stops; `orchestrate.py` escalates/holds immediately without burning attempts, `--insist` overrides
-- `ANCHOR-CONVENTIONS.md` now carries a model-routing section with the operator's saved model priority (generated even when no framework is detected)
-- Grok 4.5 notes in `GROK.md` (terminal-strong / repo-scale-weak, `reasoning_effort` economics) and ChatGPT/GPT-5.6 notes in `CHAT.md` (over-eagerness system-card caveats, Sol/Terra/Luna tier guidance)
-- `scripts/fit_device.py` — size a model/quant/context to a personal device's RAM/VRAM; prints a launch command and an `endpoints.yaml` stanza with the right quirks
-- `hardware/personal-devices/` tier (Mac Mini, MacBook Pro, RTX laptops, desktop towers) with `configs/serve-apple-silicon.sh` and `configs/serve-cuda.sh`
-- Model-priority preference: `./config.sh --model-priority nim,grok,openai:gpt-5,claude:sonnet,...` (also prompted interactively and via `/config`); recorded in each scaffold's `.anchor-manifest.json` and shown by `--check`
-- Registry quirks in `anchor_client.py`: `system_suffix` guardrail injection, `temperature`/`temperature_thinking` overrides, `sampling`/`sampling_thinking` passthrough, `max_context` completion cap, and a never-greedy-while-thinking clamp
-- `/commit-prep` command (Claude Code, Grok Build, chat) — pre-commit tests/release-notes/blog pass
-- Docs-site blog (Docusaurus) with `docs/blog/`
+
+- **`/draft`** skill (Claude `.claude/commands/draft.md`, Grok `.grok/skills/draft/SKILL.md`, Chat) — planning mode under `.plans/drafts/`; `--list`, `--load`, create/refine, optional `--local` → `*.local.md`; **`--promote <slug>`** infers `bugs/` vs `features/` from the plan (never from `/work`/fleet)
+- **`/fleet-watch`** skill + `scripts/fleet_watch.py` — durable multi-tier plan watchers (status/list/once, emit/install systemd user timers with linger, cron fallback); scaffolded for Claude/Grok
+- **`scripts/work_once.py`** — headless one-shot / bounded-loop puller (same priority, Preferred models, and Depends on as `/work`); leases in `.plans/.leases/`; shared `scripts/plan_select.py` + `scripts/plan_lease.py`
+- Docs: **[Savings](docs/docs/savings.md)** — inference-cost framing, 12-month adoption curves (Q1 ramp), solar-for-local-compute section, humble plain-text donate links; navbar + intro + playbook
+- Docs: **Multi-agent fleet workers** (`docs/docs/tooling/fleet-workers.md`) and Skills pages for `/work`, `/draft`, `/fleet-watch`
+- Docs site: **Mermaid** (`@docusaurus/theme-mermaid`) plus mid/high-value section graphs across doctrine, playbook, intro, platforms, tooling, hardware
+- Docs: local model names link to **official quick-start** pages (Qwen3, Gemma 3, Mistral Small, DeepSeek-R1, Llama 3.3)
+- Blog: [Plans, fleet workers, and inference savings](docs/blog/2026-07-08-plans-fleet-savings.md)
+- **Preferred orchestrator** (per project): `config.sh --orchestrator`, `anchor --orchestrator` / `--set-orchestrator`, `ANCHOR-CONVENTIONS.md`
+- Tracked **`.plans/`** workflow: path-authoritative lanes (`bugs/`, `features/`, `in-progress/`, `ambiguous/`, `blocked/`, `drafts/`, `completed/`); `*.local.md` via `.plans/.gitignore`; scaffold tree under `anchor/scaffold/plans/`
+- **`/work`** entrypoint (Claude, Grok, Chat) — pick/execute ready plans; `--list`, `--no-fit-check`; Preferred models + Depends on
+- Plan template: Value, Slug, Preferred models, Depends on (no in-file Lane/Status)
+- `scripts/check_plans.py` — path-lane + section sanity for `.plans/`
+- `anchor/model-fitness.md` + fit check (mythos-core rule 11); scaffolded into projects
+- `scripts/fit_device.py` and `hardware/personal-devices/` serve helpers
+- Model-priority preference via `./config.sh --model-priority`
+- `/commit-prep` command (Claude, Grok, chat)
 
 ### Changed
-- Docs site: top-level **Skills** sidebar section for platform-agnostic entrypoints (starts with `/work`); Platforms pages no longer re-document the skill contract
-- Docs site: hardware section split into per-device pages; added the `anchor` CLI reference and a quick start on the landing page
-- DeepSeek-R1 endpoints now fold system text into the user turn per official guidance (`system_role: fold_into_user`), emitted by `fit_device.py`
-- `endpoints.yaml` examples pin per-model sampling recommendations (Qwen3 thinking top_p/top_k, Nemotron greedy-when-off)
+
+- **Docs rule (framework-wide):** docs describe **current shipped state**, not `.plans/` backlog — mythos-core rule 12, `ANCHOR.md`, platforms, scaffold, commit-prep
+- **`.plans/` path is authoritative:** agents claim → `in-progress/`, park → `ambiguous/`|`blocked/`, finish → `completed/`; promotion via **`/draft --promote`** or human move only
+- **Plan `Depends on`:** `plan_select` satisfaction checks; `/work` and `work_once` skip unmet deps
+- **Temporary coordinator:** frontier/near-frontier may announce `TEMPORARY-COORDINATOR:` when Preferred orchestrator is unset; mid/small/local escalate
+- Scaffold fleet install includes `work_once` / `plan_select` / `plan_lease` / `fleet_watch`
+- Mid-page donate asks are **humble plain text** (link to [Savings](docs/docs/savings.md) + Stripe), not button CTA blocks
+- Docs platforms, intro, playbook, MCP, scripts aligned with fleet + plans workflow
 
 ### Fixed
-- **Agent move rule for `.plans/`:** agents may only relocate a plan ready-lane → `completed/` when Done when holds; promotion (`drafts/` → `bugs|features`) is human-only (docs, `/work`, platforms, MCP planner prompt)
-- Sidebar labels on synced docs pages (explicit `sidebar_label` front matter)
-- README note for editable installs on old distro pip/setuptools (PEP 660 workaround)
+
+- Mermaid diagrams render on the docs site (theme + `markdown.mermaid: true`)
+- `orchestrate.py --plan-file` rejects non-executable lanes (`drafts/`, `completed/`, parked)
+- README note for editable installs on old distro pip/setuptools (PEP 660)

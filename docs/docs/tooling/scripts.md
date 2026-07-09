@@ -4,7 +4,25 @@ sidebar_position: 2
 
 # Utility scripts
 
-`scripts/` — Python, OpenAI-compatible everywhere. `pip install -r scripts/requirements.txt`, then point `endpoints.yaml` at your nodes. Model quirks (Gemma system-folding, Qwen3/Nemotron toggles, `<think>` stripping) live in `anchor_client.py`, keyed by each endpoint's `quirks:` block — callers never special-case models.
+`scripts/` — Python, OpenAI-compatible everywhere. `pip install -r scripts/requirements.txt`, then point `endpoints.yaml` at your nodes. Model quirks ([Gemma](https://ai.google.dev/gemma/docs/core) system-folding, [Qwen3](https://qwen.readthedocs.io/en/latest/getting_started/quickstart.html)/Nemotron toggles, `<think>` stripping) live in `anchor_client.py`, keyed by each endpoint's `quirks:` block — callers never special-case models.
+
+```mermaid
+flowchart LR
+  ep["endpoints.yaml"]
+  fit["fit_device / router"]
+  wo["work_once"]
+  fw["fleet_watch"]
+  orch["orchestrate"]
+  bench["benchmark"]
+
+  ep --> fit
+  ep --> wo
+  ep --> orch
+  fit --> ep
+  fw --> wo
+  wo --> orch
+  bench --> ep
+```
 
 ## endpoints.yaml
 
@@ -18,9 +36,31 @@ Playbook move #3 as a command: `python prompt_tuner.py "fix the login bug"` → 
 
 The "which tier deserves this task" rule as code: regex heuristics first (free), optional tiny-model classification fallback. `--send` dispatches immediately with the mythos-core system prompt.
 
+## work_once.py
+
+Headless puller for multi-tier fleets: same priority + Preferred-models fit + **Depends on** checks as interactive `/work`, one claim per invocation (optional `--max-plans N`). Each worker passes `--tier` or `--endpoint` and a unique `--agent-id`; claims **move** plans to `.plans/in-progress/` and write leases under `.plans/.leases/`. Other agents ignore foreign in-progress work. Unmet dependencies are skipped (`--no-dep-check` to override). Park half-baked/stuck work: `--park ambiguous|blocked`. Return to ready: `--return-ready`. Exit `1` means idle backlog (normal for cron). Full setup: [Fleet workers](fleet-workers).
+
+```bash
+python work_once.py --list --tier mid --agent-id mid-1
+python work_once.py --once --endpoint h100-executor --agent-id mid-1 --run
+python work_once.py --path .plans/in-progress/x.md --park blocked --agent-id mid-1
+```
+
+Shared selection: `plan_select.py` (fit + deps). Claims + moves: `plan_lease.claim_and_move` / `park` / `return_to_ready`.
+
+## fleet_watch.py
+
+Implementation behind the [**`/fleet-watch`**](../skills/fleet-watch) skill (prefer the skill in an agent). Direct CLI for automation/CI: `--project`, `--status`, `--list` / `--once`, `--emit systemd|cron`, `--install-user` (systemd **user** timers; reboot-safe with `loginctl enable-linger $USER`). See [Fleet workers](fleet-workers) for the pull model.
+
+```bash
+python fleet_watch.py --project /path/to/app --status
+python fleet_watch.py --project /path/to/app --emit systemd \
+  --worker tier=mid,agent=mid-1,interval=5m
+```
+
 ## orchestrate.py
 
-The whole loop: plan (planner role or `--plan-file`) → split into tasks → execute each in a fresh context → verify with your `--verify` command → two-strike escalate or `--hold-on-fail` (detached mode) → fresh-context critic review → JSON run report. Format-gates every executor output (missing footer = failed attempt).
+The whole loop: plan (planner role or `--plan-file`) → split into tasks → execute each in a fresh context → verify with your `--verify` command → two-strike escalate or `--hold-on-fail` (detached mode) → fresh-context critic review → JSON run report. Format-gates every executor output (missing footer = failed attempt). Often invoked by `work_once.py --run` after a claim.
 
 ## benchmark.py
 

@@ -15,6 +15,7 @@ Usage:
   python scripts/anchor.py --list                                # show platform keys
   python scripts/anchor.py <project-dir> --platform claude --dry-run
   python scripts/anchor.py <project-dir> --check                 # compare against .anchor-manifest.json
+  python scripts/anchor.py <project-dir> --set-orchestrator claude:opus   # project preferred orchestrator
 
 If no --platform is given and ../config.sh has saved defaults (~/.config/anchor/defaults
 by default, override with $ANCHOR_CONFIG_DIR), those defaults are used automatically.
@@ -23,6 +24,12 @@ Also detects the target project's language/framework from marker files (package.
 Cargo.toml, go.mod, ...) and writes its idiomatic-composition guidance to
 ANCHOR-CONVENTIONS.md. If detection fails (blank/ambiguous project) and stdin is a
 tty, it asks — proposing the saved config.sh language default, if any.
+
+**Preferred orchestrator** (who should plan / coordinate long-horizon work for this
+project) is set via `./config.sh --orchestrator …`, scaffold `--orchestrator …`,
+`anchor <dir> --set-orchestrator …`, or by editing the bold line in
+ANCHOR-CONVENTIONS.md. Lesser models are instructed to recommend that orchestrator
+instead of attempting orchestration themselves.
 
 Every scaffold also writes .anchor-manifest.json recording which anchor commit,
 platforms, and file hashes were used. Doctrine files are a one-time copy with no
@@ -40,6 +47,7 @@ import argparse
 import hashlib
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -66,6 +74,10 @@ CORE_FILES: list[str] = [
 FLEET_FILES: list[str] = [
     "scripts/anchor_client.py",
     "scripts/orchestrate.py",
+    "scripts/work_once.py",
+    "scripts/plan_select.py",
+    "scripts/plan_lease.py",
+    "scripts/fleet_watch.py",
     "scripts/prompt_tuner.py",
     "scripts/router.py",
     "scripts/benchmark.py",
@@ -101,6 +113,9 @@ PLANS_TREE_FILES: list[tuple[str, str]] = [
     ("anchor/scaffold/plans/.gitignore", ".plans/.gitignore"),
     ("anchor/scaffold/plans/bugs/.gitkeep", ".plans/bugs/.gitkeep"),
     ("anchor/scaffold/plans/features/.gitkeep", ".plans/features/.gitkeep"),
+    ("anchor/scaffold/plans/in-progress/.gitkeep", ".plans/in-progress/.gitkeep"),
+    ("anchor/scaffold/plans/ambiguous/.gitkeep", ".plans/ambiguous/.gitkeep"),
+    ("anchor/scaffold/plans/blocked/.gitkeep", ".plans/blocked/.gitkeep"),
     ("anchor/scaffold/plans/drafts/.gitkeep", ".plans/drafts/.gitkeep"),
     ("anchor/scaffold/plans/completed/.gitkeep", ".plans/completed/.gitkeep"),
 ]
@@ -112,6 +127,8 @@ PLATFORMS: dict[str, dict] = {
             ("platforms/claude-code/CLAUDE.md", "CLAUDE.md"),
             (".claude/commands/config.md", ".claude/commands/config.md"),
             (".claude/commands/work.md", ".claude/commands/work.md"),
+            (".claude/commands/draft.md", ".claude/commands/draft.md"),
+            (".claude/commands/fleet-watch.md", ".claude/commands/fleet-watch.md"),
         ],
     },
     "grok": {
@@ -119,6 +136,8 @@ PLATFORMS: dict[str, dict] = {
         "files": [
             ("platforms/grok-build/GROK.md", "GROK.md"),
             (".grok/skills/work/SKILL.md", ".grok/skills/work/SKILL.md"),
+            (".grok/skills/draft/SKILL.md", ".grok/skills/draft/SKILL.md"),
+            (".grok/skills/fleet-watch/SKILL.md", ".grok/skills/fleet-watch/SKILL.md"),
         ],
     },
     "nemotron": {
@@ -241,6 +260,71 @@ def load_model_priority() -> list[str]:
     return [tok.strip().lower() for tok in raw.split(",") if tok.strip()]
 
 
+def load_orchestrator() -> str | None:
+    """Read the preferred orchestrator token saved by config.sh, if any.
+
+    Token form matches model-priority entries (e.g. claude:opus, grok, nim).
+    """
+    raw = _read_defaults_file().get("ORCHESTRATOR", "").strip().lower()
+    return raw or None
+
+
+def resolve_orchestrator(
+    explicit: str | None,
+    model_priority: list[str] | None,
+    saved: str | None = None,
+) -> str | None:
+    """Prefer explicit CLI → saved config → last model_priority token (frontier end)."""
+    if explicit and explicit.strip():
+        return explicit.strip().lower()
+    if saved and saved.strip():
+        return saved.strip().lower()
+    if model_priority:
+        # Convention is cheapest-first; last entry is the usual orchestrator pick.
+        return model_priority[-1]
+    return None
+
+
+# Matches the bold preferred-orchestrator line in ANCHOR-CONVENTIONS.md
+_ORCH_LINE_RE = re.compile(
+    r"^(\*\*Preferred orchestrator:\*\*\s*)(`?)([^`\n]+)\2\s*$",
+    re.MULTILINE,
+)
+
+
+def parse_orchestrator_from_conventions(text: str) -> str | None:
+    """Extract preferred orchestrator token from ANCHOR-CONVENTIONS.md body."""
+    m = _ORCH_LINE_RE.search(text)
+    if not m:
+        return None
+    token = m.group(3).strip()
+    if not token or token.startswith("_(") or token.lower() in {"unset", "(unset)"}:
+        return None
+    return token.strip("`").lower()
+
+
+def set_orchestrator_in_conventions(text: str, orchestrator: str) -> str:
+    """Replace or insert the Preferred orchestrator line; keep the rest intact."""
+    orch = orchestrator.strip()
+    new_line = f"**Preferred orchestrator:** `{orch}`"
+    if _ORCH_LINE_RE.search(text):
+        return _ORCH_LINE_RE.sub(new_line, text, count=1)
+    # Insert after title or at top of Model routing / Preferred section
+    if "## Preferred orchestrator" in text:
+        return text.replace(
+            "## Preferred orchestrator",
+            f"## Preferred orchestrator\n\n{new_line}",
+            1,
+        )
+    if "## Model routing" in text:
+        return text.replace(
+            "## Model routing (fit check)",
+            f"## Preferred orchestrator\n\n{new_line}\n\n## Model routing (fit check)",
+            1,
+        )
+    return text.rstrip() + f"\n\n## Preferred orchestrator\n\n{new_line}\n"
+
+
 def detect_framework(project_dir: Path) -> str | None:
     """Guess the project's language/framework from marker files. None if blank or ambiguous."""
     if not project_dir.exists() or not any(project_dir.iterdir()):
@@ -281,13 +365,18 @@ def resolve_framework(project_dir: Path, cli_framework: str | None, saved_langua
     return None
 
 
-def plan_conventions(project_dir: Path, framework: str | None,
-                     model_priority: list[str] | None = None) -> tuple[Path, str] | None:
+def plan_conventions(
+    project_dir: Path,
+    framework: str | None,
+    model_priority: list[str] | None = None,
+    orchestrator: str | None = None,
+) -> tuple[Path, str] | None:
     """Build the (dest, content) pair for a generated ANCHOR-CONVENTIONS.md.
 
-    None only when there is nothing to say (no framework AND no model priority).
+    None only when there is nothing to say (no framework, priority, or orchestrator).
     """
-    if not framework and not model_priority:
+    orch = (orchestrator or "").strip().lower() or None
+    if not framework and not model_priority and not orch:
         return None
     parts = ["# Anchor conventions for this project\n"]
     if framework:
@@ -301,12 +390,60 @@ Detected/declared language or framework: **{framework}**
   technical debt (name them in `## Deferred / concerns`), not silent debt.
 - Wrong guess? Edit this file — it's just a note for whichever model works on this project next.
 """)
+
+    parts.append("\n## Preferred orchestrator\n\n")
+    if orch:
+        parts.append(f"**Preferred orchestrator:** `{orch}`\n\n")
+    else:
+        parts.append(
+            "**Preferred orchestrator:** _(unset — run "
+            "`anchor <project-dir> --set-orchestrator <provider:model>` "
+            "or edit this line)_\n\n"
+        )
+    parts.append(
+        "This is who should **plan multi-step work, coordinate fleets, make architecture "
+        "calls, review large merges, and evaluate plan **Depends on** against existing "
+        "`.plans/**` for this project.\n\n"
+        "### Temporary coordinator (when Preferred orchestrator is unset)\n\n"
+        "If the Preferred orchestrator line is **unset** / empty and **no** project "
+        "MCP coordinator is registered for this tree:\n\n"
+        "1. If **you** are a **frontier or near-frontier** model (e.g. Fable-class, "
+        "Opus-class, GPT-5.x Sol/Terra-class, Grok 4.5 when used as a strong "
+        "session lead — see `anchor/model-fitness.md`), you **may take a temporary "
+        "coordinator role** for this session only.\n"
+        "2. While temporary coordinator: inventory `.plans/**`, propose/fill "
+        "**Depends on**, draft or refine plans under `drafts/`, refuse to start "
+        "work with unmet deps, and say clearly: "
+        "`TEMPORARY-COORDINATOR: <your model name> — Preferred orchestrator unset`.\n"
+        "3. Still recommend the operator set a durable Preferred orchestrator "
+        "(`anchor --set-orchestrator …`) so the next session is not ambiguous.\n"
+        "4. If you are **mid / small / local / executor-tier**, do **not** self-appoint; "
+        "escalate (below) or ask the human to pick a stronger session.\n\n"
+        "### If you are a lesser / executor / local / small model\n\n"
+        "When the user asks you to act as the project **orchestrator** (long-horizon "
+        "planning across services, multi-hour autonomy, fleet coordination, dependency "
+        "analysis across plans, promotion of drafts, or any task in your weak column "
+        "in `anchor/model-fitness.md`):\n\n"
+        "1. Do **not** silently attempt it.\n"
+        "2. Recommend the **Preferred orchestrator** above when set; otherwise recommend "
+        "a frontier/near-frontier session as temporary coordinator (or the top of the "
+        "model-priority list).\n"
+        "3. Your ENTIRE first line must be "
+        "`SUGGEST-ESCALATE: <preferred orchestrator or frontier tier> — <one-line reason>`, "
+        "then stop.\n"
+        "4. You may still execute well-scoped task specs and ready `/work` plans whose "
+        "**Preferred models** match your tier **and** whose **Depends on** are met.\n\n"
+        "Change the durable orchestrator any time: edit the bold line, or run "
+        "`anchor <project-dir> --set-orchestrator <token>`.\n"
+    )
+
     parts.append("""
 ## Model routing (fit check)
 
 Before starting any task, check your own row in `anchor/model-fitness.md`. If the
 task lands in your weak column, your ENTIRE first line must be
-`SUGGEST-ESCALATE: <better-suited model> — <one-line reason>`, then stop. The
+`SUGGEST-ESCALATE: <better-suited model> — <one-line reason>`, then stop — prefer
+the **Preferred orchestrator** above when the work is orchestration-class. The
 operator may insist you proceed — then stay strictly in scope and mark shaky
 output `(unverified)`.
 """)
@@ -315,12 +452,70 @@ output `(unverified)`.
                      "(saved by `config.sh` at scaffold time):\n\n")
         parts.extend(f"{i}. `{tok}`\n" for i, tok in enumerate(model_priority, 1))
         parts.append("\nSuggest the nearest better-fitting model from this list; skip tiers only "
-                     "when the fitness table says every intermediate one is also a poor fit.\n")
+                     "when the fitness table says every intermediate one is also a poor fit. "
+                     "For orchestration-class work, jump to the Preferred orchestrator.\n")
     else:
         parts.append("No saved model priority — set one with `./config.sh --model-priority ...` "
                      "and re-scaffold, or edit this section by hand.\n")
     content = "".join(parts)
     return project_dir / "ANCHOR-CONVENTIONS.md", content
+
+
+def set_project_orchestrator(project_dir: Path, orchestrator: str) -> None:
+    """Write preferred orchestrator into ANCHOR-CONVENTIONS.md (+ manifest if present).
+
+    Trivial path for an existing project — does not re-scaffold doctrine files.
+    """
+    orch = orchestrator.strip().lower()
+    if not orch:
+        raise SystemExit("--set-orchestrator requires a non-empty token "
+                         "(e.g. claude:opus, grok, nim).")
+
+    conv_path = project_dir / "ANCHOR-CONVENTIONS.md"
+    if conv_path.is_file():
+        text = conv_path.read_text(encoding="utf-8")
+        new_text = set_orchestrator_in_conventions(text, orch)
+        if "If you are a lesser" not in new_text:
+            block = (
+                "\nThis is who should **plan multi-step work, coordinate fleets, make "
+                "architecture calls, and review large merges** for this project.\n\n"
+                "### If you are a lesser / executor / local / small model\n\n"
+                "When the user asks you to act as the project **orchestrator**, do **not** "
+                "silently attempt it. Recommend the Preferred orchestrator. First line: "
+                f"`SUGGEST-ESCALATE: {orch} — <one-line reason>`.\n"
+            )
+            new_text = new_text.replace(
+                f"**Preferred orchestrator:** `{orch}`",
+                f"**Preferred orchestrator:** `{orch}`\n{block}",
+                1,
+            )
+        conv_path.write_text(new_text, encoding="utf-8")
+    else:
+        result = plan_conventions(project_dir, None, None, orch)
+        assert result is not None
+        conv_path.write_text(result[1], encoding="utf-8")
+
+    manifest_path = project_dir / MANIFEST_NAME
+    if manifest_path.is_file():
+        try:
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError:
+            manifest = {}
+        manifest["preferred_orchestrator"] = orch
+        files = manifest.get("files") or {}
+        if "ANCHOR-CONVENTIONS.md" in files:
+            files["ANCHOR-CONVENTIONS.md"] = {
+                "src": None,
+                "hash": _sha256(conv_path),
+            }
+            manifest["files"] = files
+        manifest_path.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
+
+    print(f"Preferred orchestrator for '{project_dir}' → `{orch}`")
+    print(f"  wrote {conv_path.name}"
+          + (f" and updated {MANIFEST_NAME}" if manifest_path.is_file() else ""))
+    print("Lesser models reading ANCHOR-CONVENTIONS.md will recommend this orchestrator "
+          "for planning/fleet/architecture work.")
 
 
 def print_platform_list() -> None:
@@ -422,7 +617,8 @@ def _repo_commit() -> str:
 def build_manifest(project_dir: Path, plan: list[tuple[Path, Path]],
                     conventions: tuple[Path, str] | None, platform_keys: list[str],
                     want_fleet: bool, framework: str | None,
-                    model_priority: list[str] | None = None) -> dict:
+                    model_priority: list[str] | None = None,
+                    preferred_orchestrator: str | None = None) -> dict:
     """Record what was scaffolded so a later --check can tell drift from local edits."""
     files: dict[str, dict] = {}
     for src, dest in plan:
@@ -441,6 +637,7 @@ def build_manifest(project_dir: Path, plan: list[tuple[Path, Path]],
         "fleet": want_fleet,
         "framework": framework,
         "model_priority": model_priority or [],
+        "preferred_orchestrator": preferred_orchestrator or "",
         "files": files,
     }
 
@@ -455,15 +652,19 @@ def check_project(project_dir: Path) -> None:
 
     manifest = json.loads(manifest_path.read_text())
     priority = manifest.get("model_priority") or []
+    orch = (manifest.get("preferred_orchestrator") or "").strip() or None
+    if not orch and priority:
+        orch = resolve_orchestrator(None, priority, None)
     print(f"Scaffolded from anchor commit {manifest.get('anchor_commit', 'unknown')} "
           f"at {manifest.get('generated_at', '?')} "
           f"(platforms={','.join(manifest.get('platforms', []))}, "
           f"fleet={manifest.get('fleet')}, framework={manifest.get('framework')}"
-          + (f", model_priority={'>'.join(priority)}" if priority else "") + ")\n")
+          + (f", model_priority={'>'.join(priority)}" if priority else "")
+          + (f", orchestrator={orch}" if orch else "") + ")\n")
 
     framework = manifest.get("framework")
-    regenerated = (plan_conventions(project_dir, framework, priority)
-                   if framework or priority else None)
+    regenerated = (plan_conventions(project_dir, framework, priority, orch)
+                   if framework or priority or orch else None)
 
     for dest_rel, info in sorted(manifest.get("files", {}).items()):
         dest = project_dir / dest_rel
@@ -497,6 +698,13 @@ def main() -> None:
     ap.add_argument("--fleet", action="store_true", help="also copy orchestrator/fleet tooling")
     ap.add_argument("--framework", help="language/framework to optimize code conventions for (e.g. node, "
                                          "python, rust); skips detection and the prompt")
+    ap.add_argument("--orchestrator",
+                    help="preferred orchestrator token for this project (e.g. claude:opus, grok); "
+                         "written into ANCHOR-CONVENTIONS.md — lesser models recommend this for "
+                         "planning/fleet work")
+    ap.add_argument("--set-orchestrator", metavar="TOKEN",
+                    help="update only the project's preferred orchestrator (ANCHOR-CONVENTIONS.md "
+                         "+ manifest); does not re-scaffold. Example: claude:opus")
     ap.add_argument("--list", action="store_true", help="print available platform keys and exit")
     ap.add_argument("--dry-run", action="store_true", help="show the copy plan / conflicts, write nothing")
     ap.add_argument("--check", action="store_true",
@@ -510,6 +718,10 @@ def main() -> None:
 
     if not args.project_dir:
         raise SystemExit("Missing project directory. Usage: anchor <project-dir> [--platform ...]")
+
+    if args.set_orchestrator is not None:
+        set_project_orchestrator(Path(args.project_dir).resolve(), args.set_orchestrator)
+        return
 
     if args.check:
         check_project(Path(args.project_dir).resolve())
@@ -545,7 +757,10 @@ def main() -> None:
 
     framework = resolve_framework(project_dir, args.framework, load_saved_language())
     model_priority = load_model_priority()
-    conventions = plan_conventions(project_dir, framework, model_priority)
+    preferred_orch = resolve_orchestrator(
+        args.orchestrator, model_priority, load_orchestrator()
+    )
+    conventions = plan_conventions(project_dir, framework, model_priority, preferred_orch)
 
     plan = plan_copy(project_dir, platform_keys, want_fleet)
     manifest_path = project_dir / MANIFEST_NAME
@@ -573,6 +788,8 @@ def main() -> None:
     print(f"  {MANIFEST_NAME} (generated — compare later with --check)")
     if model_priority:
         print(f"\nModel priority (from config, highest first): {' > '.join(model_priority)}")
+    if preferred_orch:
+        print(f"Preferred orchestrator: {preferred_orch}")
 
     if args.dry_run:
         print("\n(dry run — nothing written)")
@@ -584,7 +801,7 @@ def main() -> None:
         dest.parent.mkdir(parents=True, exist_ok=True)
         dest.write_text(content)
     manifest = build_manifest(project_dir, plan, conventions, platform_keys, want_fleet,
-                              framework, model_priority)
+                              framework, model_priority, preferred_orch)
     manifest_path.write_text(json.dumps(manifest, indent=2) + "\n")
     print("\nDone.")
 

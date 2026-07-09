@@ -3,7 +3,7 @@ sidebar_position: 5
 sidebar_label: Generic Chat
 ---
 
-<!-- synced-from: platforms/chat/CHAT.md @ 51867f6af6ba2ba846ec1f40d09002763074ee93 -->
+<!-- synced-from: platforms/chat/CHAT.md @ d028ba703e8ef3493437c617bb96ac54c7f4f165 -->
 
 # Generic Chat
 
@@ -17,10 +17,24 @@ ChatGPT currently serves GPT-5.5 with an Instant Mini fallback that can vary the
 ## The constraint that shapes everything here
 
 No shell, file, or tool access — just conversation. Every "this works" claim is
-unverifiable by the model itself, so the hard rules lean even harder on restate,
-plan, one-step-per-turn, `(unverified)` marking, and a required
-`## Result / ## How to verify / ## Deferred` footer, all addressed to the human
-who will actually run and check things.
+unverifiable by the model itself:
+
+```mermaid
+flowchart LR
+  chat["Chat model"]
+  human["Human runs commands"]
+  world["Repo / tests"]
+
+  chat -->|"propose steps"| human
+  human -->|"execute + paste"| world
+  world -->|"output"| human
+  human -->|"relay"| chat
+```
+
+Hard rules lean even harder on restate, plan, one-step-per-turn, `(unverified)`
+marking, a required `## Result / ## How to verify / ## Deferred` footer, and
+**docs describe current state not plans** (never document `.plans/` contents as
+product docs), all addressed to the human who will actually run and check things.
 
 ## /config without a shell
 
@@ -36,6 +50,7 @@ Same split for preparing a commit: the human runs the commands and relays output
 the model does the judgment. Three gates, in order — (1) run & fix tests (the CI
 set: ruff, pytest, docs-sync; fixes proposed as exact edits, two failed attempts on
 one failure → stop), (2) dictate `CHANGELOG.md` entries under `## [Unreleased]` for
-user-visible changes, (3) draft a `docs/blog/` post only if the change introduces
-or significantly updates a user-facing capability. The model never tells the human
-to commit — they decide when.
+user-visible **shipped** changes only (never `.plans/` backlog), (3) draft a
+`docs/blog/` post only if the change introduces or significantly updates a
+user-facing capability, grounded in the shipped diff. The model never tells the
+human to commit — they decide when.

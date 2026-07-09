@@ -16,7 +16,9 @@ The premise is economic: frontier models are becoming metered utilities. The
 operator skill that matters is knowing which tasks actually deserve frontier
 pricing — and routing everything else to models that are already good enough,
 whether that's a cheaper API tier, a Mac Mini on your desk, or an H100 node you
-own.
+own. The [Savings](/savings) page sketches how large that gap can be — please
+consider [donating](https://donate.stripe.com/28E6oHeq8fxQ5p7fmBdjO01) to help
+support this project.
 
 The [repo](https://github.com/carefreeinv/anchor) ships the whole loop, not just the doctrine: per-platform instruction
 files (Claude Code, Grok Build, NVIDIA NIM/Nemotron, local models, plain chat
@@ -31,4 +33,7 @@ no-system-prompt rule, repetition loops under greedy decoding — live in one pl
 stays model-agnostic.
 
 Start with [the doctrine](/doctrine), then [the playbook](/playbook) for the
-economics, then run `./config.sh` and scaffold your first project.
+economics, then run `./config.sh` and scaffold your first project. If Anchor is
+already saving you real money, please consider a
+[donation](https://donate.stripe.com/28E6oHeq8fxQ5p7fmBdjO01) — see also
+[Savings](/savings).

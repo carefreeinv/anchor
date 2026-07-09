@@ -53,12 +53,17 @@ This gives you the orchestrator pattern on a single deployed model: expensive de
 ## Tracked plans (`./.plans`)
 
 As **planner**, write self-contained plans (template: `anchor/templates/plan.md`)
-into **`.plans/drafts/<slug>.md`**, including **Preferred models** for the executor
-tier. Do **not** promote out of `drafts/` — **promotion is human-only** (`git mv`
-into `.plans/bugs/` or `.plans/features/`, `Status: ready`). Agents may only move
-a plan file when archiving: ready lane → `.plans/completed/` after true completion.
-Executors start via **`/work`** on Claude/Grok (or `orchestrate.py --plan-file`);
-do not leave plans only in chat.
+into **`.plans/drafts/<slug>.md`**, including **Preferred models** and **Depends on**
+(inventory other `.plans/**` goals first; use `none` only after checking). Do **not**
+promote out of `drafts/` except via **`/draft --promote <slug>`** (infer bugs vs
+features from the plan; or a human move; **path is the ready marker**). Executors claim → `in-progress/`,
+finish → `completed/`; park half-baked/stuck work in `ambiguous/`|`blocked/`. Prefer
+a durable Preferred orchestrator; if unset, frontier/near-frontier may be temporary
+coordinator. Executors: **`/work`** or `work_once` / `orchestrate.py --plan-file`.
+
+**Docs describe current state, not plans:** never write README/docs/CHANGELOG/blog
+from `.plans/` contents. Document **shipped** code and public contracts only.
+Documenting the `.plans/` **workflow** itself is fine when it is a shipped feature.
 
 ## Cautions
 

@@ -4,7 +4,21 @@ sidebar_position: 3
 
 # MCP servers
 
-Two stdio servers in `mcp/`, installable into Claude Code, Grok Build (if MCP-capable), or any MCP client. Together they close the loop: **anchor-prompts** makes a lesser model *behave*, **model-fleet** makes a frontier model *delegate*.
+Two stdio servers ship in `mcp/` today, installable into Claude Code, Grok Build (if MCP-capable), or any MCP client. Together they close the loop: **anchor-prompts** makes a lesser model *behave*, **model-fleet** makes a frontier model *delegate*.
+
+```mermaid
+flowchart LR
+  agent["Coding agent"]
+  ap["anchor-prompts<br/>doctrine · templates · preflight"]
+  mf["model-fleet<br/>delegate · health"]
+  hw["Local / NIM endpoints"]
+
+  agent <--> ap
+  agent <--> mf
+  mf --> hw
+```
+
+Until a Preferred orchestrator is set for a project, a frontier session may act as temporary coordinator (see [CLI — Preferred orchestrator](cli#preferred-orchestrator-per-project)).
 
 ## anchor-prompts
 

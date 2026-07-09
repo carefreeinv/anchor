@@ -25,12 +25,16 @@ from anchor_client import Fleet, has_required_footer, load_prompt
 
 MAX_ATTEMPTS = 2  # Anchor stop condition: two failures → escalate/hold, never a third.
 
-# Ready lanes only for tracked plans; drafts/completed must not be executed headlessly.
-_BLOCKED_PLAN_LANES = frozenset({"drafts", "completed"})
+# Never execute drafts/completed/ambiguous/blocked via --plan-file.
+_BLOCKED_PLAN_LANES = frozenset({"drafts", "completed", "ambiguous", "blocked"})
 
 
 def assert_plan_file_allowed(path: Path) -> None:
-    """Refuse --plan-file paths under .plans/drafts/ or .plans/completed/."""
+    """Refuse --plan-file under non-executable .plans/ lanes.
+
+    Paths under bugs/, features/, or in-progress/ are allowed (in-progress is for
+    the claiming agent; other workers should not pick foreign in-progress plans).
+    """
     parts = path.resolve().parts
     if ".plans" not in parts:
         return
@@ -39,8 +43,9 @@ def assert_plan_file_allowed(path: Path) -> None:
         lane = parts[i + 1]
         raise SystemExit(
             f"--plan-file refuses .plans/{lane}/ (not an executable lane). "
-            f"Pick a ready plan under bugs/ or features/ "
-            f"(promotion from drafts/ is human-only). Got: {path}"
+            f"Pick under bugs/, features/, or your own in-progress/ "
+            f"(ambiguous/blocked are parked; promote drafts via /draft --promote <slug> only). "
+            f"Got: {path}"
         )
 
 

@@ -17,12 +17,16 @@ three gates in order; don't move on while an earlier gate is red.
 2. **Release notes.** Review `git status` / `git diff`, then add one line per
    user-visible change to the `## [Unreleased]` section of `CHANGELOG.md`
    (`### Added` / `### Changed` / `### Fixed`). Skip internal-only churn.
+   **Hard rule — docs describe current state, not plans:** never changelog/blog/docs
+   the **contents** of `.plans/` (any project). Cover **shipped** code only; when
+   plan work ships, document the code — not the plan file.
 3. **Blog post — only when warranted.** If the commit introduces or significantly
    updates/fixes a user-facing capability (new tool/command, platform, hardware tier,
    breaking change, headline fix), write `docs/blog/YYYY-MM-DD-<slug>.md` with front
    matter (`title`, `authors: [carefree]`, `tags` from `docs/blog/tags.yml`), a lead
    paragraph, `<!-- truncate -->`, then 3–8 short paragraphs grounded in the actual
-   diff. Otherwise say in one line why no post is needed.
+   **shipped** diff — never “coming soon” from `.plans/`. Otherwise say in one line
+   why no post is needed.
 
 Finish by summarizing test status, CHANGELOG entries, and the blog post path (or why
 none). Do NOT run `git commit` — the user commits.

@@ -92,20 +92,20 @@ def test_execute_task_insist_overrides_fit_check():
     assert fleet.ep.calls == 2
 
 
-def test_assert_plan_file_allows_features_and_bugs(tmp_path):
+def test_assert_plan_file_allows_features_bugs_and_in_progress(tmp_path):
     from orchestrate import assert_plan_file_allowed
 
-    for lane in ("features", "bugs"):
+    for lane in ("features", "bugs", "in-progress"):
         p = tmp_path / ".plans" / lane / "foo.md"
         p.parent.mkdir(parents=True)
         p.write_text("# plan")
         assert_plan_file_allowed(p)  # no raise
 
 
-def test_assert_plan_file_rejects_drafts_and_completed(tmp_path):
+def test_assert_plan_file_rejects_non_executable_lanes(tmp_path):
     from orchestrate import assert_plan_file_allowed
 
-    for lane in ("drafts", "completed"):
+    for lane in ("drafts", "completed", "ambiguous", "blocked"):
         p = tmp_path / ".plans" / lane / "foo.md"
         p.parent.mkdir(parents=True)
         p.write_text("# plan")

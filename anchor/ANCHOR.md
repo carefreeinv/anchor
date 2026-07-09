@@ -74,34 +74,51 @@ Every tier defaults to these regardless of task size — they're cheap to apply 
 - **No spaghetti, no dead code.** Unreachable branches, commented-out blocks, and unused abstractions don't get left "just in case" — delete them or don't add them.
 - **Technical debt is tracked, not silent.** A shortcut taken under time pressure gets named in the task's `## Deferred / concerns`, not buried.
 
-`scripts/anchor.py` detects a scaffolded project's language/framework from marker files (`package.json`, `Cargo.toml`, `go.mod`, etc.) and writes the resolved choice — plus its idiom — to `ANCHOR-CONVENTIONS.md` in the project root. When detection fails (blank or ambiguous project), it asks, proposing the user's saved `config.sh` language default (if any) as the suggested answer.
+`scripts/anchor.py` detects a scaffolded project's language/framework from marker files (`package.json`, `Cargo.toml`, `go.mod`, etc.) and writes the resolved choice — plus its idiom — to `ANCHOR-CONVENTIONS.md` in the project root. When detection fails (blank or ambiguous project), it asks, proposing the user's saved `config.sh` language default (if any) as the suggested answer. The same file carries the project's **Preferred orchestrator** (set via `./config.sh --orchestrator`, `anchor --orchestrator` / `--set-orchestrator`, or one-line edit). Lesser models must recommend that orchestrator for planning and fleet coordination instead of attempting it themselves. If Preferred orchestrator is **unset** and no project MCP coordinator is running, a **frontier or near-frontier** model in-session may act as **temporary coordinator** (announce `TEMPORARY-COORDINATOR: …`; inventory plans; propose **Depends on**); mid/small/local models still escalate rather than self-appoint.
 
 ## Templates
 
-- `templates/plan.md` — planner output format (header: Lane / Value / Status / Preferred models when using `./.plans`)
+- `templates/plan.md` — planner output format (header: Value / Slug / Preferred models when using `./.plans`; **path** is lane/status — no in-file Lane/Status)
 - `templates/task-spec.md` — the unit of work handed to an executor
 - `templates/review.md` — critic pass format
 - `templates/verification.md` — machine-checkable done-ness checklist
 
 ## Tracked plans (`./.plans`)
 
-Committed work plans live under **`.plans/`** (dotdir — git-tracked; do not
-gitignore the whole tree). Optional **local-only** plans use the
-`<slug>.local.md` suffix and are ignored via `.plans/.gitignore`. Lanes: `bugs/`
-and `features/` are executable; `drafts/` is not; finished plans `git mv` to
-`completed/`. **Agent move rule:** the only relocate agents may perform under
-`.plans/` is ready-lane → `completed/` when Done when holds; **promotion**
-(`drafts/` → `bugs|features`) is **human-only**. Priority: all bugs before
-features, then features by `Value: high|medium|low`. Plan headers include
-**Preferred models** so executors skip work better left to cheaper or stronger
-tiers.
+### Hard rule: docs describe current state, not plans
 
-**Start execution with `/work`** (Claude: `.claude/commands/work.md`; Grok:
-`.grok/skills/work/SKILL.md`; Chat: follow the `/work` section in `CHAT.md`).
-Optional: `/work --list`, `/work <slug>`, `/work --no-fit-check`. Headless:
-`scripts/orchestrate.py --plan-file .plans/features/<slug>.md` (refuses
-`drafts/` and `completed/`). Process contract: `.plans/README.md` in repos that
-use the tree.
+**For every project following Anchor:** documentation (README, `docs/`, CHANGELOG,
+blog, release notes, public prose) describes the **project as it exists now** —
+shipped code and public contracts. **Never** document the **contents** of
+`.plans/` (especially `drafts/`, ready backlog, in-progress bodies, unfinished
+acceptance items) as product docs or roadmap. When a plan’s work **ships**,
+document the code and public contract — not the plan file. **Allowed:**
+documenting how the `.plans/` **workflow** works when that is a shipped feature
+of the product. **Forbidden:** “coming soon” from plan files; changelog/blog of
+unshipped backlog; citing plan slugs/paths as documentation.
+
+In projects that use them, committed work plans live under **`.plans/`** (dotdir —
+git-tracked; do not gitignore the whole tree). Optional **local-only** plans use the
+`<slug>.local.md` suffix and are ignored via `.plans/.gitignore`. **Path is
+authoritative:** `bugs/` and `features/` are ready; agents move claimed work to
+`in-progress/` (only the claimer continues — others **ignore**); may park to
+`ambiguous/` (half-baked) or `blocked/` (cannot fix), or return in-progress to
+ready; finished plans go to `completed/`; never execute `drafts/` / `ambiguous/`
+/ `blocked/`. Do not put `Lane:` or `Status:` inside plan files. **Promotion**
+from `drafts/` → ready is via explicit **`/draft --promote <slug>`**
+(user-authorized; agent infers `bugs/` vs `features/` from the plan) or a human
+filesystem move — never from `/work` or fleet pullers. Priority: own in-progress,
+then bugs before features by `Value`. Plan headers include **Preferred models**
+and **Depends on**.
+
+**Draft with `/draft`** (list / load / create / promote). **Start execution with
+`/work`** (Claude: `.claude/commands/work.md`; Grok: `.grok/skills/work/SKILL.md`;
+Chat: follow the `/work` section in `CHAT.md`).
+Optional: `/work --list`, `/work <slug>`, `/work --no-fit-check`. Headless pull:
+`scripts/work_once.py --once --tier mid` (claim + print path; same fit rules).
+Multi-tier always-on pollers: `docs/docs/tooling/fleet-workers.md`. Operator-named:
+`scripts/orchestrate.py --plan-file .plans/features/<slug>.md` (refuses `drafts/`
+and `completed/`). Process contract: `.plans/README.md` in repos that use the tree.
 
 ## System prompts
 

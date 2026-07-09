@@ -10,8 +10,8 @@ The portable AI workstation: an M3 Max / M4 Max with 64–128GB of unified memor
 
 | Config | Usable for models | Good picks | Tier |
 |---|---|---|---|
-| M3 Max / M4 Max, 64GB | ~48GB | Qwen3 32B, Qwen3 30B-A3B, Gemma 3 27B | `executor` / `executor-heavy` |
-| M3 Max / M4 Max, 128GB | ~110GB | Llama 3.3 70B — the biggest model this tier can hold | `executor-heavy` |
+| M3 Max / M4 Max, 64GB | ~48GB | [Qwen3](https://qwen.readthedocs.io/en/latest/getting_started/quickstart.html) 32B, Qwen3 30B-A3B, [Gemma 3](https://ai.google.dev/gemma/docs/core) 27B | `executor` / `executor-heavy` |
+| M3 Max / M4 Max, 128GB | ~110GB | [Llama 3.3](https://huggingface.co/meta-llama/Llama-3.3-70B-Instruct) 70B — the biggest model this tier can hold | `executor-heavy` |
 
 `python scripts/fit_device.py --memory 110 --backend metal` (or your usable GB) sizes a model and prints the launch command plus `endpoints.yaml` stanza.
 

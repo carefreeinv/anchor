@@ -12,17 +12,16 @@ When the user types `/config`:
 1. Ask which platform(s) they want as their Anchor default — `claude`, `grok`,
    `nemotron`, `local:<model>` (qwen3, gemma3, mistral-small, deepseek-r1-distill,
    llama33), and/or `chat` — and whether to include fleet/orchestration tooling.
-   Also ask their **model priority**: the order they'd reach for / escalate between
-   models, highest priority first (cheapest-first, frontier last is the usual
-   convention). Tokens are `<provider>` or `<provider>:<model>` — providers are
-   `claude`, `openai` (ChatGPT), `gemini`, `grok`, `nim`, `local`, `chat`; e.g.
-   `nim,grok,openai:gpt-5,claude:sonnet,claude:opus,claude:fable`.
+   Also ask their **model priority** (cheapest-first, frontier last is usual) and
+   **preferred orchestrator** (who plans/coordinates; lesser models defer to it).
+   Tokens are `<provider>` or `<provider>:<model>` — e.g.
+   `nim,grok,openai:gpt-5,claude:sonnet,claude:opus,claude:fable` and orchestrator
+   `claude:opus` (blank orchestrator = last priority token).
 2. Run, from the Anchor repo root: `./config.sh --platform <keys> [--fleet]
-   [--model-priority <ordered,list>]` (non-interactive form — the interactive prompts
-   in `./config.sh` with no flags can't be driven through a chat turn).
-3. Relay exactly what it printed: where defaults were saved, the saved model priority,
-   and the `anchor <project-dir>` command to scaffold a project with them (plain form,
-   which now uses the saved defaults automatically, and the explicit `--platform` form).
+   [--model-priority <ordered,list>] [--orchestrator <token>]` (non-interactive form —
+   the interactive prompts in `./config.sh` with no flags can't be driven through a chat turn).
+3. Relay exactly what it printed: defaults path, model priority, preferred orchestrator,
+   and `anchor <project-dir>`. Mention per-project: `anchor <dir> --set-orchestrator <token>`.
 4. Point the user to https://carefreeinv.com/anchor for further help.
 
 Mark anything about your specific Grok Build environment's command mechanism as

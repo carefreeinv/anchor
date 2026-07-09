@@ -3,13 +3,30 @@ sidebar_position: 3
 sidebar_label: Doctrine
 ---
 
-<!-- synced-from: anchor/ANCHOR.md @ a15aa2b681f768c95edc213ea8d9bf1bcfc1ad79 -->
+<!-- synced-from: anchor/ANCHOR.md @ 976b8ccc95060f12b8ecb169e10bce963906c227 -->
 
 # The Doctrine
 
 The behavioral contract in `anchor/ANCHOR.md`, summarized. Every platform file, script, and MCP tool implements some slice of this.
 
 ## Six Mythos behaviors
+
+Discipline is a **loop**, not a list of good intentions:
+
+```mermaid
+flowchart LR
+  clarify["1 Clarify"]
+  plan["2 Plan"]
+  decomp["3 Decompose"]
+  exec["4 Execute + verify"]
+  review["5 Self-review"]
+  stop["6 Stop / escalate"]
+
+  clarify --> plan --> decomp --> exec --> review
+  review --> stop
+  stop -->|"next step or handoff"| clarify
+  exec -->|"two failures"| stop
+```
 
 1. **Clarify before acting** — restate goal, constraints, acceptance criteria; ask one precise question if ambiguous, then stop.
 2. **Plan before executing** — explicit numbered plan; planning and doing never interleave.
@@ -20,7 +37,24 @@ The behavioral contract in `anchor/ANCHOR.md`, summarized. Every platform file, 
 
 ## Why external discipline beats better prompting
 
-Small models drift, conflate planning with doing, declare unearned success, and fabricate under pressure. Telling them to "think carefully" doesn't fix this. What fixes it:
+Small models drift, conflate planning with doing, declare unearned success, and fabricate under pressure. Telling them to "think carefully" doesn't fix this. What fixes it is structure **outside** the model:
+
+```mermaid
+flowchart TB
+  subgraph bad["One long chat"]
+    b1["plan + code + review mixed"]
+    b2["context rot · unearned success"]
+  end
+  subgraph good["External discipline"]
+    g1["Planner context"]
+    g2["Executor context"]
+    g3["Tooling verifies"]
+    g4["Critic context"]
+    g1 --> g2 --> g3 --> g4
+  end
+  bad -.->|"fails silently"| drift["Drift / fabrication"]
+  good --> ok["Checkable result"]
+```
 
 - **Forced structure** — templates with mandatory sections; a model that must fill `## Acceptance criteria` cannot skip thinking about them. Outputs missing the required footer are rejected and retried by the pipeline, not forgiven.
 - **One task per fresh context** — context rot hits small models hardest; never run task chains in one conversation.
@@ -30,15 +64,55 @@ Small models drift, conflate planning with doing, declare unearned success, and 
 
 ## The templates
 
-Four files in `anchor/templates/` are the doctrine's working surface: `plan.md` (planner output; lifecycle headers when using `./.plans`), `task-spec.md` (the unit of dispatched work), `review.md` (critic pass), `verification.md` (tooling-filled done-ness table). The `mythos-core.md` system prompt binds any model to the six behaviors and the required output footer.
+Four files in `anchor/templates/` are the doctrine's working surface: `plan.md` (planner output; Value / Preferred models when using `./.plans` — lane/lifecycle from **path**, not in-file Status/Lane), `task-spec.md` (the unit of dispatched work), `review.md` (critic pass), `verification.md` (tooling-filled done-ness table). The `mythos-core.md` system prompt binds any model to the six behaviors and the required output footer.
 
 ## Tracked plans (`./.plans`)
 
-Git-tracked plans live under **`.plans/`** (dotdir; do not ignore the whole tree). Optional private plans: `<slug>.local.md` (gitignored via `.plans/.gitignore`). Executable lanes: `bugs/` then `features/` (by Value). Never execute `drafts/` or `completed/`. Agents may only `git mv` a plan when archiving completed work (ready lane → `completed/`); **promotion is human-only**. Prefer [**`/work`**](skills/work) to pick and run the next ready plan (honors **Preferred models** / fit; `--no-fit-check` overrides). See `.plans/README.md` and `orchestrate.py --plan-file` for headless runs.
+### Hard rule: docs describe current state, not plans
+
+**For every project following Anchor:** documentation (README, `docs/`, CHANGELOG, blog, release notes, public prose) describes the **project as it exists now** — shipped code and public contracts. **Never** document the **contents** of `.plans/` (especially `drafts/`, ready backlog, in-progress bodies, unfinished acceptance items) as product docs or roadmap. When a plan’s work **ships**, document the code and public contract — not the plan file. **Allowed:** documenting how the `.plans/` **workflow** works when that is a shipped feature. **Forbidden:** “coming soon” from plan files; changelog/blog of unshipped backlog; citing plan slugs/paths as documentation.
+
+In **projects that use Anchor**, git-tracked plans live under **`.plans/`** (dotdir; do not ignore the whole tree). Optional private plans: `<slug>.local.md` (gitignored via `.plans/.gitignore`). **Path is authoritative:**
+
+```mermaid
+flowchart LR
+  drafts["drafts/"]
+  ready["bugs/ · features/"]
+  prog["in-progress/"]
+  done["completed/"]
+  park["ambiguous/ · blocked/"]
+
+  drafts -->|"/draft --promote slug<br/>infer bugs|features"| ready
+  ready -->|"claim"| prog
+  prog -->|"Done when"| done
+  ready --> park
+  prog --> park
+  park -->|"return"| ready
+```
+
+Ready lanes are `bugs/` then `features/` (by Value); agents move claimed work to `in-progress/` (only the claimer may continue — others ignore); may park half-baked or stuck work in `ambiguous/` or `blocked/`; finished work goes to `completed/`; never execute `drafts/`, `ambiguous/`, or `blocked/`. Do not put `Lane:` or `Status:` inside plan files. **Promotion** from drafts: [**`/draft --promote <slug>`**](skills/draft) (user-authorized; agent infers bugs vs features from the plan) or a human move — never from `/work` or fleet pullers. Prefer [**`/draft`**](skills/draft) to create/list/load drafts and [**`/work`**](skills/work) to execute ready plans. Headless: `scripts/work_once.py --once --tier mid --agent-id …`. Multi-tier pollers: [Fleet workers](tooling/fleet-workers). Preferred orchestrator: `anchor <dir> --set-orchestrator …` (if unset, frontier/near-frontier may act as temporary coordinator; lesser models escalate).
 
 ## Right-size before you start
 
-Escalation isn't the only direction that matters — before spending an expensive tier's tokens, the model should ask whether the task actually needs them. Boilerplate, formatting, a rename, or one well-specified function gets flagged, with a question about handing off to a smaller model or one already registered in `scripts/endpoints.yaml`, instead of silently burning frontier capacity. `scripts/router.py` implements the lookup.
+Escalation isn't the only direction that matters — before spending an expensive tier's tokens, the model should ask whether the task actually needs them:
+
+```mermaid
+flowchart LR
+  task["Incoming task"]
+  size{"Needs this tier?"}
+  down["Suggest cheaper / local"]
+  up["SUGGEST-ESCALATE"]
+  go["Proceed in scope"]
+
+  task --> size
+  size -->|"too hard"| up
+  size -->|"too easy"| down
+  size -->|"fit"| go
+```
+
+Boilerplate, formatting, a rename, or one well-specified function gets flagged, with a question about handing off to a smaller model or one already registered in `scripts/endpoints.yaml`, instead of silently burning frontier capacity. `scripts/router.py` implements the lookup.
+
+*Right-sizing is one of the reasons [Savings](savings) can be so large — please consider [donating](https://donate.stripe.com/28E6oHeq8fxQ5p7fmBdjO01) to help support this project.*
 
 ## Code quality defaults
 

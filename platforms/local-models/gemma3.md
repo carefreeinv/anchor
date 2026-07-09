@@ -2,6 +2,8 @@
 
 **Sizes:** 1B/4B/12B/27B (12B+ recommended for code work; 4B is fine for summaries/classification in pipelines).
 
+**Official quick start:** [Gemma docs (core)](https://ai.google.dev/gemma/docs/core) · [HF collection](https://huggingface.co/collections/google/gemma-3-release-67c6c6f89c4f76621268bb6d)
+
 ## The system-role quirk
 
 Gemma 3's chat template has **no true system role** — "system" text is folded into the first user turn. Consequences:
@@ -26,7 +28,7 @@ temp 1.0, top_k 64, top_p 0.95 (official recommendation); drop to temp 0.3–0.5
 
 - **Executor:** 27B is a strong, obedient executor — best-in-class instruction following for its size.
 - **Critic:** decent with a checklist; weaker than Qwen3-32B at catching logic errors.
-- **Planner:** no.
+- **Planner:** no. Recommend Preferred orchestrator when set; if unset, escalate to frontier/near-frontier temporary coordinator—do not self-appoint.
 
 ## Extra guardrail
 

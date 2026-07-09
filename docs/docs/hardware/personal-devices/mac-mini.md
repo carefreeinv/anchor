@@ -10,8 +10,8 @@ The always-on on-ramp: a silent, low-power desktop you can leave serving 24/7. A
 
 | Config | Usable for models | Good picks | Tier |
 |---|---|---|---|
-| M4 Pro, 64GB unified | ~48GB | Qwen3 32B, Qwen3 30B-A3B (MoE — fastest big model here), Gemma 3 27B | `executor` / `executor-heavy` |
-| M4, 16–32GB unified | 10–24GB | Qwen3 8B/14B, Gemma 3 12B | `swarm` / `executor` |
+| M4 Pro, 64GB unified | ~48GB | [Qwen3](https://qwen.readthedocs.io/en/latest/getting_started/quickstart.html) 32B, Qwen3 30B-A3B (MoE — fastest big model here), [Gemma 3](https://ai.google.dev/gemma/docs/core) 27B | `executor` / `executor-heavy` |
+| M4, 16–32GB unified | 10–24GB | [Qwen3](https://qwen.readthedocs.io/en/latest/getting_started/quickstart.html) 8B/14B, [Gemma 3](https://ai.google.dev/gemma/docs/core) 12B | `swarm` / `executor` |
 
 Budget ~25% of total RAM for macOS (a 64GB Mac → ~48GB for models). `python scripts/fit_device.py --memory 48 --backend metal` picks the exact model, context, launch command, and `endpoints.yaml` stanza.
 
@@ -29,3 +29,5 @@ Register under tier `executor` in `scripts/endpoints.yaml`.
 ## Role
 
 The cheapest way to stop paying frontier credits for routine execution — and the Mac Mini is built for exactly this: near-silent, sips power, happy as an always-on endpoint. Start here before investing in a larger swarm or an H100 node.
+
+*Desk-side execution is why [Savings](../../savings) can look so large — please consider [donating](https://donate.stripe.com/28E6oHeq8fxQ5p7fmBdjO01) to help support this project.*

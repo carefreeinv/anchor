@@ -2,6 +2,8 @@
 
 The generalist workhorse if you have ~40GB+ VRAM (Q4). Well-rounded: no thinking toggle, no template quirks, real system role, huge ecosystem.
 
+**Official quick start:** [Llama 3.3 70B Instruct (HF)](https://huggingface.co/meta-llama/Llama-3.3-70B-Instruct)
+
 ## Setup
 
 - System prompt: `mythos-core.md` verbatim.
@@ -12,7 +14,7 @@ The generalist workhorse if you have ~40GB+ VRAM (Q4). Well-rounded: no thinking
 ## Role fit
 
 - **Executor + critic in one box:** the safe pick when you want a single local model doing both (still use fresh contexts per role — never let it review its own conversation).
-- **Planner:** acceptable for small/medium plans; it plans conservatively, which is the right failure mode. Escalate architecture to a frontier model anyway.
+- **Planner:** acceptable for small/medium plans; it plans conservatively, which is the right failure mode. Escalate architecture to the project's Preferred orchestrator (`ANCHOR-CONVENTIONS.md`) or a frontier model.
 
 ## Guardrails
 

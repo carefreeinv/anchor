@@ -1,6 +1,10 @@
 # Anchor fleet registry. All endpoints are OpenAI-compatible (/v1/chat/completions).
 # tiers: swarm (tiny executors) | executor (mid) | executor-heavy | reasoner | frontier | detached
 #
+# work_once.py maps registry tiers → Preferred-models fit tiers:
+#   swarm→small, executor|executor-heavy|detached→mid, reasoner→reasoner, frontier→frontier
+# Example: python scripts/work_once.py --once --endpoint h100-executor --registry scripts/endpoints.yaml
+#
 # quirks (full reference in anchor_client.py; per-model guidance in platforms/local-models/):
 #   system_role: fold_into_user      Gemma 3 (no system slot) AND DeepSeek-R1 distills
 #                                    (official guidance: no system prompt)

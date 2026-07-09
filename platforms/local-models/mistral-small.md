@@ -2,6 +2,8 @@
 
 **~24B dense.** The community's "fast executor" pick: low latency, good function calling, permissive Apache license.
 
+**Official quick start:** [Mistral Small 3.1 Instruct (HF)](https://huggingface.co/mistralai/Mistral-Small-3.1-24B-Instruct-2503) · [Mistral announcement](https://mistral.ai/news/mistral-small-3-1/)
+
 ## Setup
 
 - Use the official chat template exactly; Mistral is sensitive to template drift.
@@ -20,7 +22,7 @@ quirks:
 
 - **Executor:** primary role. Excellent for scoped code edits, tool-calling steps, and structured extraction inside pipelines.
 - **Tool-use node:** best local model per VRAM for reliable JSON/function-call outputs — use it as the "hands" of the `model-fleet` MCP server on mid-size hardware.
-- **Planner/critic:** not its strength; it optimizes for concision and will under-explain reasoning.
+- **Planner/critic:** not its strength; it optimizes for concision and will under-explain reasoning. Defer orchestration-class work to the project's Preferred orchestrator in `ANCHOR-CONVENTIONS.md`.
 
 ## Guardrails
 

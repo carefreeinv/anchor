@@ -2,6 +2,8 @@
 
 **Sizes:** 0.6B–32B dense; 30B-A3B MoE (best quality/VRAM ratio for executors; runs well even on CPU-heavy rigs).
 
+**Official quick start:** [Qwen3 Quickstart](https://qwen.readthedocs.io/en/latest/getting_started/quickstart.html) · [HF collection](https://huggingface.co/collections/Qwen/qwen3)
+
 ## Thinking toggle
 
 Qwen3 supports hybrid reasoning. Control per message:
@@ -33,6 +35,7 @@ Use `anchor/system-prompts/mythos-core.md` as-is (Qwen3 respects system role wel
 - **Executor:** 30B-A3B or 14B/32B dense. Excellent at scoped, spec-driven edits.
 - **Critic:** 32B `/think` with `templates/review.md` — checklist review is where mid models punch above weight.
 - **Planner:** only 32B `/think`, and only for small plans; prefer a frontier model or Nemotron Super.
+- **Not the project orchestrator:** recommend the Preferred orchestrator when set; if unset, escalate to a frontier/near-frontier session as temporary coordinator—do not self-appoint.
 
 ## Serving
 

@@ -1,21 +1,46 @@
 # Plan: <title>
 
-<!-- When writing into a repo that uses `./.plans`, agents save under drafts/
-     until a human promotes to bugs/ or features/. The only agent git mv is
-     ready-lane → completed/ when Done when holds. Private plans: use
-     <slug>.local.md (gitignored). See `.plans/README.md`. -->
+<!-- When writing into a repo that uses `./.plans`, use /draft (planning mode)
+     so agents save under drafts/ until a human moves the file into bugs/ or
+     features/. The only agent git mv is ready-lane → completed/ when Done when
+     holds. Private plans: /draft --local → <slug>.local.md (gitignored). See
+     `.plans/README.md`.
 
-- **Lane:** bugs | features | drafts
+     Path is authoritative — do NOT put Lane: or Status: in the file.
+     drafts/ = not ready · bugs|features/ = ready · completed/ = done. -->
+
 - **Value:** high | medium | low          <!-- features only; omit for bugs -->
-- **Status:** draft | ready | in_progress | done
 - **Slug:** <filename without .md and without .local>
 - **Preferred models:** <names and/or tiers — who should execute this plan>
+- **Depends on:** <comma-separated plan slugs, or `none`>  <!-- other .plans work that must be done first -->
 
 ## Goal
 <one sentence — the user-visible outcome>
 
 ## Context read
 <files/docs actually read to form this plan>
+
+## Dependencies (how to fill)
+
+Before finalizing this plan, **inventory existing plans** under `.plans/` (all lanes:
+drafts, bugs, features, in-progress, ambiguous, blocked, completed). For each other
+plan, read at least its Goal (and Done when if present) and decide whether *this*
+work should wait on it:
+
+- Shared modules, APIs, or scaffolds that plan must land first → list its **Slug**
+- Same problem already tracked elsewhere → depend on it or merge; do not duplicate
+- Only soft thematic overlap → do **not** depend; mention under Context if useful
+
+Write slugs in **Depends on** (header). Executors **must not** start this plan while
+any dependency is unmet (still open outside `completed/`, and not evidenced complete
+in git history of `completed/`). Use `none` if you truly checked and found none.
+
+Optional detail list:
+
+```markdown
+## Depends on (detail)
+- `other-slug` — why this blocks us
+```
 
 ## Constraints
 - <hard constraints: language, versions, style, perf, no-touch zones>

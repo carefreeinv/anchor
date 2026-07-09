@@ -13,17 +13,20 @@ Help the user set their Anchor defaults, then show them how to use them.
      highest priority first (the usual convention is cheapest-first, frontier last).
      Tokens are `<provider>` or `<provider>:<model>` — providers are `claude`, `openai`
      (ChatGPT), `gemini`, `grok`, `nim`, `local`, `chat`; e.g.
-     `nim,grok,openai:gpt-5,claude:sonnet,claude:opus,claude:fable`.
-   If `$ARGUMENTS` already looks like `--platform ...` / `--model-priority ...` flags,
-   use those instead of asking.
-2. Run `./config.sh --platform <keys> [--fleet] [--model-priority <ordered,list>]` from
-   the Anchor repo root via the Bash tool (non-interactive form — don't run it with no
-   flags, since its interactive prompts can't be answered through this command). If
-   `./config.sh` isn't at the current directory, find the Anchor repo root first (it
-   contains `ANCHOR.md`, `platforms/`, `scripts/anchor.py`).
-3. Report back exactly what it printed: where the defaults were saved, the saved model
-   priority, and the `anchor <project-dir>` command (both the plain form that now uses
-   the saved defaults automatically, and the explicit `--platform ... --fleet` form).
+     `nim,grok,openai:gpt-5,claude:sonnet,claude:opus,claude:fable`;
+   - their **preferred orchestrator** (who plans/coordinates multi-step work; lesser
+     models should recommend this instead of orchestrating themselves) — same token
+     form, e.g. `claude:opus`. Blank = last model-priority entry.
+   If `$ARGUMENTS` already looks like `--platform ...` / `--model-priority ...` /
+   `--orchestrator ...` flags, use those instead of asking.
+2. Run `./config.sh --platform <keys> [--fleet] [--model-priority <ordered,list>]
+   [--orchestrator <token>]` from the Anchor repo root via the Bash tool (non-interactive
+   form — don't run it with no flags, since its interactive prompts can't be answered
+   through this command). If `./config.sh` isn't at the current directory, find the
+   Anchor repo root first (it contains `ANCHOR.md`, `platforms/`, `scripts/anchor.py`).
+3. Report back exactly what it printed: where the defaults were saved, model priority,
+   preferred orchestrator, and the `anchor <project-dir>` command. Mention per-project
+   change: `anchor <project-dir> --set-orchestrator <token>`.
 4. Point the user to https://carefreeinv.com/anchor for further help.
 
 Don't invent platform keys or file paths beyond what `./config.sh --help` and

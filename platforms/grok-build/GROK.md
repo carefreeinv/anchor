@@ -20,6 +20,7 @@ You are one worker in a verified pipeline, not the whole pipeline. Speed is wort
 7. Touch only files listed in the task spec. Full stop.
 8. End every response with `## Result`, `## How to verify`, `## Deferred / concerns`.
 9. SOLID by default; use the project's idiomatic composition mechanism (check `ANCHOR-CONVENTIONS.md`) over deep inheritance; no dead code, no spaghetti control flow.
+10. **Docs describe current state, not plans.** README / `docs/` / CHANGELOG / blog / release notes cover **shipped** code and public contracts only. Never document the **contents** of `.plans/` as product docs or roadmap. When plan work ships, document the code — not the plan file. Documenting the `.plans/` **workflow** itself is fine when that is a shipped feature.
 
 ## Grok-specific tuning
 
@@ -51,17 +52,31 @@ You are one worker in a verified pipeline, not the whole pipeline. Speed is wort
 - Task specs come from `anchor/templates/task-spec.md`; demand one if handed a vague task.
 - If MCP is supported in your Grok Build environment, connect `mcp/anchor-prompts` and call `tune_prompt` on any vague task before starting.
 
+## /draft
+
+**Planning mode** on **`.plans/drafts/`**: create/refine, `--list`, load existing
+draft for discussion, optional `--local`. **Promote** with
+`/draft --promote <slug>` (infer bugs vs features from the plan). Do not
+implement product code; do not promote from `/work`. Skill:
+`.grok/skills/draft/SKILL.md`.
+
 ## /work
 
 Execute the next (or named) ready plan from **`.plans/`** (dotdir). Contract:
-bugs before features; honor each plan’s **Preferred models** (skip work cheaper
-or stronger models should do unless the user names the plan or passes
-`--no-fit-check`); never execute `drafts/` or `completed/`; on finish `git mv`
-to `.plans/completed/` (the **only** agent move under `.plans/`; promotion is
-human-only). In a Grok project, install as `.grok/skills/work/SKILL.md` (see
-Anchor’s copy) or use `commands/work.md` in this folder. Args: bare `/work`,
-`/work --list`, `/work --no-fit-check`, `/work <slug>`, or a path under
-`.plans/bugs|features`.
+resume own `in-progress/` first; bugs before features; honor **Preferred models**
+and **Depends on** (skip unmet deps); never execute `drafts/` / `completed/` /
+`ambiguous/` / `blocked/`; ignore foreign `in-progress/`; claim ready →
+`in-progress/`; park half-baked → `ambiguous/` or stuck → `blocked/`; finish
+`in-progress/` → `completed/`. Do not promote drafts from `/work` (use
+`/draft --promote`). If Preferred orchestrator is unset, frontier/near-frontier
+(including Grok 4.5 as session lead) may act as temporary coordinator
+(`TEMPORARY-COORDINATOR:`). Skill: `.grok/skills/work/SKILL.md`.
+
+## /fleet-watch
+
+Configure durable plan pollers: `/fleet-watch` (this project) or
+`/fleet-watch other-app`. Watchers run a work-style claim/execute loop in the
+background. Skill: `.grok/skills/fleet-watch/SKILL.md`. Prefer the skill over raw CLI.
 
 ## /config
 

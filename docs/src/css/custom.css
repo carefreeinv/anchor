@@ -31,3 +31,111 @@
   background: #e0503c;
   text-decoration: none;
 }
+
+/* Chart + overlay legend (Mermaid xychart series keys) */
+.chart-with-legend {
+  position: relative;
+  margin: 1rem 0 1.75rem;
+  /* Room for the plot before Mermaid hydrates */
+  min-height: 16rem;
+}
+
+.chart-with-legend .mermaid,
+.chart-with-legend pre {
+  margin-bottom: 0;
+}
+
+.chart-with-legend .chart-key {
+  position: absolute;
+  top: 2.75rem;
+  right: 0.75rem;
+  z-index: 2;
+  max-width: min(20rem, 46%);
+  margin: 0;
+  padding: 0.55rem 0.7rem;
+  border-radius: 8px;
+  border: 1px solid var(--ifm-color-emphasis-300);
+  background: color-mix(in srgb, var(--ifm-background-surface-color, #1b1b1d) 92%, transparent);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.18);
+  font-size: 0.8rem;
+  line-height: 1.35;
+  pointer-events: none;
+}
+
+[data-theme='light'] .chart-with-legend .chart-key {
+  background: color-mix(in srgb, #fff 94%, transparent);
+}
+
+.chart-with-legend .chart-key--below {
+  position: static;
+  max-width: none;
+  margin-top: 0.5rem;
+  pointer-events: auto;
+  box-shadow: none;
+}
+
+.chart-key .chart-key-title {
+  margin: 0 0 0.35rem;
+  font-weight: 700;
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  opacity: 0.85;
+}
+
+.chart-key table {
+  margin: 0;
+  width: 100%;
+  font-size: 0.78rem;
+  border-collapse: collapse;
+}
+
+.chart-key table th,
+.chart-key table td {
+  border: none;
+  padding: 0.2rem 0.25rem;
+  background: transparent;
+  vertical-align: middle;
+}
+
+.chart-key table tr:nth-child(2n) {
+  background: transparent;
+}
+
+/* Must match docusaurus.config.js mermaid themeVariables.xyChart.plotColorPalette */
+.chart-key .swatch {
+  display: inline-block;
+  width: 0.95rem;
+  height: 0.95rem;
+  border-radius: 3px;
+  vertical-align: middle;
+  margin-right: 0.4rem;
+  flex-shrink: 0;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.2);
+}
+
+.chart-key .swatch-1 {
+  background: #4e79a7 !important;
+}
+.chart-key .swatch-2 {
+  background: #f28e2b !important;
+}
+.chart-key .swatch-3 {
+  background: #59a14f !important;
+}
+
+.chart-key .series-cell {
+  display: flex;
+  align-items: center;
+  gap: 0.15rem;
+  font-weight: 600;
+}
+
+@media (max-width: 720px) {
+  .chart-with-legend .chart-key {
+    position: static;
+    max-width: none;
+    margin-top: 0.5rem;
+    pointer-events: auto;
+  }
+}

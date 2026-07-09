@@ -6,11 +6,11 @@ Fleet tier: **executor** (a well-specced one can reach **executor-heavy**). The 
 
 | Device | Memory for models | Serving | Good for |
 |---|---|---|---|
-| Mac Mini (M4 Pro, 64GB unified) | ~48GB usable | llama.cpp (Metal) or MLX | Qwen3 30B-A3B, Gemma 3 27B — always-on, silent, cheap to run 24/7 |
-| Mac Mini (M4, 16–32GB unified) | 10–24GB usable | llama.cpp (Metal) or MLX | Qwen3 8B/14B, Gemma 3 12B — swarm-tier executor at desk-toy price |
+| Mac Mini (M4 Pro, 64GB unified) | ~48GB usable | llama.cpp (Metal) or MLX | [Qwen3](https://qwen.readthedocs.io/en/latest/getting_started/quickstart.html) 30B-A3B, [Gemma 3](https://ai.google.dev/gemma/docs/core) 27B — always-on, silent, cheap to run 24/7 |
+| Mac Mini (M4, 16–32GB unified) | 10–24GB usable | llama.cpp (Metal) or MLX | [Qwen3](https://qwen.readthedocs.io/en/latest/getting_started/quickstart.html) 8B/14B, [Gemma 3](https://ai.google.dev/gemma/docs/core) 12B — swarm-tier executor at desk-toy price |
 | MacBook Pro (M3 Max / M4 Max, 64–128GB unified) | up to ~110GB usable | llama.cpp (Metal) or MLX | Same ceiling as a Mac Mini Pro but portable; doubles as a dev machine |
-| RTX-equipped laptop (RTX 4080/4090 Laptop, 12–16GB VRAM) | 12–16GB VRAM | llama.cpp or vLLM (CUDA) | Qwen3 14B/32B AWQ, fastest prompt-processing of this group |
-| Desktop tower, single RTX 4090/5090 (24–32GB VRAM) | 24–32GB VRAM | vLLM (CUDA) | Qwen3 32B FP8, Llama 3.3 70B AWQ — brushes up against `executor-heavy` |
+| RTX-equipped laptop (RTX 4080/4090 Laptop, 12–16GB VRAM) | 12–16GB VRAM | llama.cpp or vLLM (CUDA) | [Qwen3](https://qwen.readthedocs.io/en/latest/getting_started/quickstart.html) 14B/32B AWQ, fastest prompt-processing of this group |
+| Desktop tower, single RTX 4090/5090 (24–32GB VRAM) | 24–32GB VRAM | vLLM (CUDA) | [Qwen3](https://qwen.readthedocs.io/en/latest/getting_started/quickstart.html) 32B FP8, [Llama 3.3](https://huggingface.co/meta-llama/Llama-3.3-70B-Instruct) 70B AWQ — brushes up against `executor-heavy` |
 
 Apple Silicon's unified memory is the deciding factor for this tier: it lets a $600–2000 consumer machine hold models that would otherwise need a discrete GPU with equivalent VRAM. Trade-off is prompt-processing speed — Metal is slower than CUDA at long-context prefill, so CUDA laptops/desktops still win on latency-sensitive executor work.
 

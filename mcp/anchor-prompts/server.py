@@ -91,10 +91,14 @@ def plan_task(goal: str) -> str:
             f"{_read('anchor/templates/plan.md')}\n\n"
             f"If the project uses tracked plans under ./.plans, emit the full plan file "
             f"content ready to save under .plans/drafts/<slug>.md (agents must not "
-            f"promote to bugs/ or features/ — promotion is human-only), fill "
+            f"promote via /draft --promote <slug> only (infer bugs|features from plan — not from /work), fill "
             f"Preferred models from complexity, and note that executors start via /work "
-            f"(not by re-deriving the plan from chat). The only agent move of a plan "
-            f"file is ready-lane → completed/ when Done when holds.\n\n"
+            f"(not by re-deriving the plan from chat).\n\n"
+            f"DEPENDENCIES (required when ./.plans exists): inventory other plans under "
+            f".plans/ (all lanes). For each, consider Goal/Done when and decide whether "
+            f"THIS goal should wait on that work. Fill **Depends on:** with comma-separated "
+            f"slugs (or `none` if you checked and found none). Explain non-obvious deps "
+            f"under ## Depends on (detail). Executors must not start plans with unmet deps.\n\n"
             f"GOAL: {goal}")
 
 

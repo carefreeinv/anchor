@@ -10,6 +10,22 @@ The **detached tier**: Vera Rubin-generation modules on the Space-1 platform —
 
 The full Anchor pipeline — plan, execute, verify, review — runs onboard with no human in the loop. Downlink carries *decisions and evidence* (plans, diffs, verification tables, verdicts), not logs. Token budgets are power budgets: reasoning runs are scheduled, not default.
 
+```mermaid
+flowchart TB
+  plan["Plan onboard"]
+  exec["Execute"]
+  ver["Verify + critic"]
+  ok{"Pass?"}
+  cp["Checkpoint"]
+  hold["HOLD for downlink"]
+  dl["Downlink: decisions + evidence"]
+
+  plan --> exec --> ver --> ok
+  ok -->|yes| cp --> exec
+  ok -->|two fails / disagree| hold --> dl
+  cp --> dl
+```
+
 ## Hard requirements (not recommendations, here)
 
 1. No task without a machine-checkable definition of done

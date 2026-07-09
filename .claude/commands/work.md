@@ -11,6 +11,10 @@ markdown under **`.plans/`** (dotdir — use that path explicitly; many UIs hide
 If `.plans/README.md` exists, treat it as the process contract. This command is
 the entrypoint; do not re-derive priority rules from chat history alone.
 
+**Path is authoritative.** A plan’s lane and lifecycle are determined only by
+which directory it lives in — never by `Lane:` or `Status:` fields inside the
+file. Ignore those fields if present; do not write them.
+
 `$ARGUMENTS` is everything after `/work`. Parse flags and the optional target from it.
 
 ## Usage
@@ -26,36 +30,48 @@ the entrypoint; do not re-derive priority rules from chat history alone.
 
 ## Lanes (hard rules)
 
-| Path | Read? | Execute? | Complete (`git mv` to completed)? |
-|------|-------|----------|----------------------------------|
-| `.plans/bugs/` | yes | **yes** (highest priority) | **yes** |
-| `.plans/features/` | yes | **yes** (after all bugs) | **yes** |
-| `.plans/drafts/` | yes (edit plan only) | **no** | **no** |
-| `.plans/completed/` | yes (history) | **no** | n/a |
+| Path | Read? | Execute? | Notes |
+|------|-------|----------|-------|
+| `.plans/bugs/` | yes | **yes** (pick → move to in-progress) | highest priority ready |
+| `.plans/features/` | yes | **yes** (after all bugs) | ready |
+| `.plans/in-progress/` | yes | **only if you moved it there** | claimed; others **ignore** |
+| `.plans/ambiguous/` | yes | **no** | half-baked; agent may park here |
+| `.plans/blocked/` | yes | **no** | cannot fix now; agent may park here |
+| `.plans/drafts/` | yes (edit plan only) | **no** | |
+| `.plans/completed/` | yes (history) | **no** | |
 
-**Never** implement from `drafts/` or `completed/`. If the user names a draft:
-refuse execution; offer **edit-only**. Do **not** promote it.
+**Never** implement from `drafts/` or `completed/`. **Ignore** every plan under
+`in-progress/` that **you** did not move there (ownership = lease under
+`.plans/.leases/` with your agent id, or you performed the mv this session).
+If the user names a draft: refuse execution; offer **edit-only**. Do **not** promote it.
 
 ### Agent move rule (hard)
 
-The **only** `git mv` (or equivalent relocate) an agent may perform under
-`.plans/` is ready-lane → `completed/` when **Done when** holds:
+Agents may relocate plan files **only** as:
 
 ```text
-.plans/bugs|features/<slug>.md  →  .plans/completed/
+bugs|features/     →  in-progress/     (start work + lease)
+in-progress/       →  completed/       (Done when holds)
+bugs|features|in-progress/  →  ambiguous/   (half-baked)
+bugs|features|in-progress/  →  blocked/     (cannot fix now)
+in-progress/       →  bugs|features/   (release for others)
+ambiguous|blocked/ →  bugs|features/   (return when unblocked)
 ```
 
-Agents must **never** move plans between `drafts/`, `bugs/`, and `features/`
-(no promote, demote, or lane swaps). **Promotion is human-only.**
+Agents must **never** promote drafts, move work into `drafts/`, or touch another
+agent's `in-progress/` plan. **Promotion from drafts is human-only.**
 
 ## Priority (when no target is given)
 
-1. All of `.plans/bugs/*.md` before any feature.
-2. Then `.plans/features/*.md` ordered by header `Value: high | medium | low`
+1. **Your** plans under `.plans/in-progress/` first (resume).
+2. All of `.plans/bugs/*.md` before any feature.
+3. Then `.plans/features/*.md` ordered by header `Value: high | medium | low`
    (default **medium** if absent): high → medium → low; ties by filename.
-3. Among those, keep only **model-fit** plans (next section) — unless
+4. Among ready plans, keep only **model-fit** plans (next section) — unless
    `--no-fit-check` is set.
-4. Skip `drafts/`, `completed/`, and `README.md`.
+5. **Skip plans with unmet `Depends on`** — do not start; report blockers.
+6. Skip `drafts/`, `completed/`, `ambiguous/`, `blocked/`, foreign `in-progress/`,
+   and `README.md`.
 
 If multiple plans share the top priority and the user did not say "just pick",
 print a short menu (path + first heading + Preferred models) and ask which to
@@ -107,8 +123,8 @@ clearly in the same class.
    mean “run every plan in `.plans/`.”
 4. **User names slug/path** (without `--no-fit-check`): explicit target overrides
    the skip — but **state the fit mismatch in one line first**, then proceed.
-5. **`--list`:** for each ready plan show path, lane, Value, Status, Preferred
-   models, and your fit (`good` / `overqualified` / `underqualified` /
+5. **`--list`:** for each ready plan show path, lane (from directory), Value,
+   Preferred models, and your fit (`good` / `overqualified` / `underqualified` /
    `unknown`). Do not implement. Fit is still computed under `--list` even if
    `--no-fit-check` is also passed (list is informational).
 6. Per-step **Route to** still applies after load for mixed-difficulty steps
@@ -126,12 +142,14 @@ small models do not grab architecture plans to "try hard."
 - Confirm `.plans/` exists (`ls -la .plans` — include the leading dot).
 - If missing: stop and explain that `/work` needs a `.plans/` tree; point at
   Anchor's formalize-plans workflow or create the layout if the user asks.
-- Skim headers of ready-lane `*.md` for Value, Status, Preferred models.
+- Inventory: your `in-progress/` (if any), then ready `bugs/`, `features/`.
+  **Ignore** foreign `in-progress/` files. Skim headers for Value and Preferred
+  models only (not Status/Lane).
 
 ### 2. Parse arguments
 
 - Flags may combine with a slug/path: e.g. `/work --no-fit-check formalize-plans-workflow`.
-- `--list` / `-l` → list ready plans (path, lane, Value, Status, Preferred
+- `--list` / `-l` → list ready plans (path, lane-from-dir, Value, Preferred
   models, fit); stop.
 - `--no-fit-check` → disable model-fit skip for this run (see Model fit rules);
   does not change lane priority and does not execute more than one plan.
@@ -143,16 +161,21 @@ small models do not grab architecture plans to "try hard."
 ### 3. Load the plan
 
 - Read the full markdown file.
-- Restate **Goal**, **Preferred models**, and **Done when** in ≤10 lines.
+- Restate **Goal**, **Preferred models**, **Depends on**, and **Done when** in ≤10 lines.
+- **Dependencies:** verify each Depends-on slug is satisfied (under `completed/` or
+  git history of `completed/`, and not still open elsewhere). If unmet → **do not
+  execute**; report blockers.
 - Do **not** rewrite the plan unless a step is impossible (then stop and say why).
-- If `Status: in_progress` or a `## Progress` section exists, resume from the
-  first incomplete step.
+- If a `## Progress` section exists, resume from the first incomplete step.
 
 ### 4. Mark in progress
 
-- Set header `Status: in_progress` if that field exists or the file uses the
-  Anchor plan header block. Do not require a mid-flight commit unless the user
-  wants one.
+- If the plan is still under `bugs/` or `features/`, **move it** to
+  `.plans/in-progress/` (same filename) before substantive work. Prefer
+  `git mv` when the file is tracked. Optionally record a lease via
+  `work_once.py` / `.plans/.leases/` with a stable agent id.
+- Optionally add or update a brief `## Progress` note. Do **not** write
+  `Status:` or `Lane:` fields.
 
 ### 5. Execute
 
@@ -167,15 +190,20 @@ small models do not grab architecture plans to "try hard."
 
 **Done when** all checklist items hold and verifications pass:
 
-1. Set `Status: done` (and optional date).
-2. `git mv` the file to `.plans/completed/` (create the dir if needed). Optional
-   rename: `YYYY-MM-DD-<slug>.md`.
-3. Session footer: `## Result`, `## How to verify`, `## Deferred / concerns`,
+1. `git mv` the file from `in-progress/` to `.plans/completed/` (create the dir
+   if needed). Optional rename: `YYYY-MM-DD-<slug>.md`. That move **is** the
+   done marker — do not set a Status field. Drop any lease for the plan.
+2. Session footer: `## Result`, `## How to verify`, `## Deferred / concerns`,
    including the new path under `completed/`.
 
-**If the user stops mid-plan:** leave the file in its ready lane with
-`Status: in_progress` and a brief `## Progress` note (what finished / what's
-next). Do **not** move to `completed/`.
+**If the user stops mid-plan:** leave the file in **`in-progress/`** with a
+brief `## Progress` note. Do **not** move to `completed/`. Other agents must
+ignore it.
+
+**If the plan is half-baked:** move to `.plans/ambiguous/` and note what is missing.
+
+**If you cannot fix the issue:** move to `.plans/blocked/` (out of ready queue) or
+return to `bugs/`|`features/` (release for another agent).
 
 ## Output footer
 
@@ -189,15 +217,19 @@ End every substantive `/work` turn with:
 
 ## Out of scope
 
-- Creating new plans (use plan mode / write under `.plans/drafts/`)
-- **Promoting** drafts → `bugs/` or `features/` (human-only; never `git mv` between those lanes)
+- Creating new plans (use **`/draft`** → `.plans/drafts/`; optional `--local`)
+- **Promoting** drafts → ready (use **`/draft --promote <slug>`**; never from `/work`)
 - Executing every ready plan in one shot unless the user explicitly asks to
   continue to the next after finishing one
 - Running `git commit` unless the user asks
+- **Documenting plan backlog** as product docs (hard rule: docs describe **current
+  shipped state**, not `.plans/` contents). When work ships, document the code —
+  not this plan file.
 
 ## Quick discovery commands
 
 ```bash
 ls -la .plans
-ls .plans/bugs .plans/features .plans/drafts .plans/completed 2>/dev/null
+ls .plans/bugs .plans/features .plans/in-progress \
+   .plans/ambiguous .plans/blocked .plans/drafts .plans/completed 2>/dev/null
 ```

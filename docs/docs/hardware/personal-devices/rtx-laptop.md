@@ -10,7 +10,7 @@ An AI-optimized Windows/Linux laptop with a discrete NVIDIA GPU (RTX 4080/4090 L
 
 | VRAM | Good picks | Tier |
 |---|---|---|
-| 12–16GB | Qwen3 14B AWQ, Qwen3 8B, Gemma 3 12B | `swarm` / `executor` |
+| 12–16GB | [Qwen3](https://qwen.readthedocs.io/en/latest/getting_started/quickstart.html) 14B AWQ, Qwen3 8B, [Gemma 3](https://ai.google.dev/gemma/docs/core) 12B | `swarm` / `executor` |
 
 VRAM is the hard limit here — the model plus its KV cache must fit the card, with no unified-memory fallback. `python scripts/fit_device.py --memory 16 --backend cuda` picks a model that fits and prints the launch command plus `endpoints.yaml` stanza.
 

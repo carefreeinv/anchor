@@ -28,6 +28,11 @@ pending commit is about — use it to focus the release notes and blog decision.
    `CHANGELOG.md`, in the appropriate `### Added` / `### Changed` / `### Fixed`
    subsection. Imperative mood, mention the file/flag/command a user would touch.
    Skip internal churn (refactors, test-only changes) — the changelog is for operators.
+   **Hard rule — docs describe current state, not plans:** CHANGELOG, blog, and docs
+   cover **shipped** code only. Never restate `.plans/` contents (drafts, backlog,
+   unfinished acceptance) as release notes or product docs. When plan work ships,
+   document the code — not the plan file. (Anchor repo: `.plans/` is private backlog;
+   same rule, extra care.)
 
 ## Gate 3 — blog post (only when warranted)
 
@@ -41,9 +46,10 @@ When warranted:
 - File: `docs/blog/YYYY-MM-DD-<slug>.md` (today's date, kebab-case slug).
 - Front matter: `title`, `authors: [carefree]`, `tags:` from `docs/blog/tags.yml`.
 - Lead paragraph, then `<!-- truncate -->`, then 3–8 short paragraphs: what changed,
-  why an operator cares, how to use it (real commands from the diff).
+  why an operator cares, how to use it (real commands from the **shipped** diff).
 - Cross-check every claim against the diff — the post must not promise anything the
-  code doesn't do. Mark anything you couldn't verify `(unverified)`.
+  code doesn't do, and must not source “coming soon” from `.plans/`. Mark anything
+  you couldn't verify `(unverified)`.
 
 ## Finish
 

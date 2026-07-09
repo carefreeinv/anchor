@@ -11,8 +11,10 @@ const config = {
   trailingSlash: false,
   onBrokenLinks: 'warn',
   markdown: {
+    mermaid: true,
     hooks: { onBrokenMarkdownLinks: 'warn' },
   },
+  themes: ['@docusaurus/theme-mermaid'],
   i18n: { defaultLocale: 'en', locales: ['en'] },
   presets: [
     [
@@ -41,6 +43,7 @@ const config = {
         title: 'Anchor',
         items: [
           { type: 'docSidebar', sidebarId: 'docs', position: 'left', label: 'Docs' },
+          { to: 'savings', label: 'Savings', position: 'left' },
           { to: 'blog', label: 'Blog', position: 'left' },
           {
             href: 'https://github.com/carefreeinv/anchor',
@@ -61,6 +64,10 @@ const config = {
           {
             title: 'Anchor',
             items: [
+              {
+                label: 'Savings',
+                to: 'savings',
+              },
               {
                 label: 'GitHub',
                 href: 'https://github.com/carefreeinv/anchor',
@@ -85,6 +92,18 @@ const config = {
           'Anchor — orchestrate cheap models with expensive judgment.<br />An open-source project by <a href="https://carefreeinv.com">Carefree Investments LLC</a>. Source on <a href="https://github.com/carefreeinv/anchor">GitHub</a>.',
       },
       colorMode: { defaultMode: 'dark' },
+      mermaid: {
+        theme: { light: 'neutral', dark: 'dark' },
+        // Fixed series colors so page legends can match line/bar strokes
+        options: {
+          themeVariables: {
+            xyChart: {
+              plotColorPalette:
+                '#4e79a7,#f28e2b,#59a14f,#e15759,#b07aa1,#edc948,#76b7b2,#ff9da7',
+            },
+          },
+        },
+      },
     }),
 };
 

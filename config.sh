@@ -13,8 +13,12 @@
 # Usage:
 #   ./config.sh                                             interactive prompts
 #   ./config.sh --platform claude,grok --fleet --language node \
-#     --model-priority nim,grok,claude:sonnet,claude:opus,claude:fable   non-interactive
+#     --model-priority nim,grok,claude:sonnet,claude:opus,claude:fable \
+#     --orchestrator claude:opus   non-interactive
 #   ./config.sh --show                                      print saved defaults and exit
+#
+# Preferred orchestrator: who should plan/coordinate long-horizon work; written
+# into each scaffold's ANCHOR-CONVENTIONS.md so lesser models recommend it.
 #
 # Backs the /config command in Claude Code and Grok Build — see
 # .claude/commands/config.md and platforms/grok-build/commands/config.md.
@@ -37,7 +41,8 @@ usage() {
 Usage:
   ./config.sh                                             interactive prompts
   ./config.sh --platform claude,grok --fleet --language node \
-    --model-priority nim,grok,claude:sonnet,claude:opus,claude:fable   non-interactive
+    --model-priority nim,grok,claude:sonnet,claude:opus,claude:fable \
+    --orchestrator claude:opus                                    non-interactive
   ./config.sh --show                                      print saved defaults and exit
 
 Platforms: claude, grok, nemotron, local:<model>, chat
@@ -47,6 +52,9 @@ Language: free-form (e.g. node, python, rust, go, java, ruby, dotnet, php) — p
 Model priority: ordered, comma-separated, highest priority first. Providers:
           claude, openai (ChatGPT), gemini, grok, nim, local, chat — optionally with a
           specific model after a colon (claude:sonnet, openai:gpt-5, gemini:2.5-pro).
+Orchestrator: single token (same form as priority entries) — preferred planner/coordinator
+          for scaffolded projects. If omitted and priority is set, defaults to the last
+          priority token (frontier end of a cheapest-first list).
 EOF
 }
 
@@ -54,6 +62,7 @@ platform_arg=""
 fleet_flag="0"
 language_arg=""
 priority_arg=""
+orchestrator_arg=""
 show_only="0"
 
 while [ $# -gt 0 ]; do
@@ -65,6 +74,8 @@ while [ $# -gt 0 ]; do
     --language=*) language_arg="${1#--language=}"; shift ;;
     --model-priority) priority_arg="$2"; shift 2 ;;
     --model-priority=*) priority_arg="${1#--model-priority=}"; shift ;;
+    --orchestrator) orchestrator_arg="$2"; shift 2 ;;
+    --orchestrator=*) orchestrator_arg="${1#--orchestrator=}"; shift ;;
     --show) show_only="1"; shift ;;
     -h|--help) usage; exit 0 ;;
     *) echo "Unknown argument: $1" >&2; usage >&2; exit 1 ;;
@@ -193,6 +204,13 @@ elif [ -t 0 ]; then
     read -rp "e.g. nim,grok,openai:gpt-5,claude:sonnet,claude:opus,claude:fable (blank to skip): " priority_input
     priority_raw="$priority_input"
   fi
+  if [ -z "$orchestrator_arg" ]; then
+    echo
+    echo "Preferred orchestrator for new projects (plans multi-step work; lesser models defer to it)."
+    echo "Same token form as model priority (e.g. claude:opus, grok, nim). Blank = last priority token."
+    read -rp "Preferred orchestrator (blank to infer from priority): " orch_input
+    orchestrator_arg="$(echo "$orch_input" | xargs | tr '[:upper:]' '[:lower:]')"
+  fi
 else
   echo "No --platform given and no interactive terminal available." >&2
   usage >&2
@@ -227,6 +245,15 @@ if [ -n "$priority_raw" ]; then
 fi
 priority_csv="$(IFS=,; echo "${priority_keys[*]:-}")"
 
+# Preferred orchestrator: explicit flag/prompt, else last priority token.
+orchestrator="$(echo "$orchestrator_arg" | xargs | tr '[:upper:]' '[:lower:]')"
+if [ -z "$orchestrator" ] && [ "${#priority_keys[@]}" -gt 0 ]; then
+  orchestrator="${priority_keys[${#priority_keys[@]}-1]}"
+fi
+if [ -n "$orchestrator" ]; then
+  validate_priority_key "$orchestrator"
+fi
+
 mkdir -p "$CONFIG_DIR"
 {
   echo "# Written by config.sh on $(date -u +%Y-%m-%dT%H:%M:%SZ)"
@@ -238,6 +265,9 @@ mkdir -p "$CONFIG_DIR"
   if [ -n "$priority_csv" ]; then
     echo "MODEL_PRIORITY=$priority_csv"
   fi
+  if [ -n "$orchestrator" ]; then
+    echo "ORCHESTRATOR=$orchestrator"
+  fi
 } > "$CONFIG_FILE"
 
 echo
@@ -247,6 +277,10 @@ if [ -n "$language" ]; then
 fi
 if [ -n "$priority_csv" ]; then
   echo "Model priority (highest first): $priority_csv"
+fi
+if [ -n "$orchestrator" ]; then
+  echo "Preferred orchestrator: $orchestrator"
+  echo "  (per-project change later: anchor <project-dir> --set-orchestrator <token>)"
 fi
 echo
 echo "From now on, this scaffolds a project using those defaults automatically:"

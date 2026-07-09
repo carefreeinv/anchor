@@ -1,3 +1,6 @@
 # Private/dev plans — stay untracked. Use <slug>.local.md in any lane.
 # Tracked plans use <slug>.md (no .local). See README.md.
 **/*.local.md
+
+# work_once.py claim leases (advisory coordination; path remains ready marker)
+.leases/

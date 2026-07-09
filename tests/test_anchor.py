@@ -49,7 +49,9 @@ def test_plan_copy_includes_plans_tree_and_work_commands(tmp_path):
     assert ".plans/drafts/.gitkeep" in dests
     assert ".plans/completed/.gitkeep" in dests
     assert ".claude/commands/work.md" in dests
+    assert ".claude/commands/draft.md" in dests
     assert ".grok/skills/work/SKILL.md" in dests
+    assert ".grok/skills/draft/SKILL.md" in dests
 
 
 def test_check_conflicts_flags_existing_destination(tmp_path):
@@ -146,12 +148,13 @@ def test_build_manifest_records_commit_platforms_and_file_hashes(tmp_path):
     conventions = anchor.plan_conventions(tmp_path, "node")
 
     manifest = anchor.build_manifest(tmp_path, plan, conventions, ["chat"], False, "node",
-                                     ["nim", "claude:sonnet"])
+                                     ["nim", "claude:sonnet"], "claude:sonnet")
 
     assert manifest["platforms"] == ["chat"]
     assert manifest["fleet"] is False
     assert manifest["framework"] == "node"
     assert manifest["model_priority"] == ["nim", "claude:sonnet"]
+    assert manifest["preferred_orchestrator"] == "claude:sonnet"
     assert "anchor_commit" in manifest and "generated_at" in manifest
 
     dest_rel = str(plan[0][1].relative_to(tmp_path))
@@ -206,23 +209,76 @@ def test_check_project_reports_all_four_states(tmp_path, monkeypatch, capsys):
 
 
 def test_plan_conventions_includes_model_routing_with_priority(tmp_path):
-    result = anchor.plan_conventions(tmp_path, "node", ["nim", "grok", "claude:sonnet"])
+    result = anchor.plan_conventions(tmp_path, "node", ["nim", "grok", "claude:sonnet"], "claude:sonnet")
 
     assert result is not None
     _, content = result
     assert "SUGGEST-ESCALATE" in content
     assert "anchor/model-fitness.md" in content
     assert "1. `nim`" in content and "3. `claude:sonnet`" in content
+    assert "**Preferred orchestrator:** `claude:sonnet`" in content
+    assert "lesser / executor / local / small model" in content
+    assert "Temporary coordinator" in content
+    assert "TEMPORARY-COORDINATOR" in content
 
 
 def test_plan_conventions_generated_from_priority_alone(tmp_path):
-    result = anchor.plan_conventions(tmp_path, None, ["claude:sonnet"])
+    result = anchor.plan_conventions(tmp_path, None, ["claude:sonnet"], "claude:sonnet")
 
     assert result is not None
     _, content = result
     assert "Model routing" in content
-    assert "framework" not in content.split("## Model routing")[0]  # no framework section
+    assert "framework" not in content.split("## Preferred orchestrator")[0]
+
+
+def test_plan_conventions_from_orchestrator_alone(tmp_path):
+    result = anchor.plan_conventions(tmp_path, None, None, "claude:opus")
+    assert result is not None
+    assert "**Preferred orchestrator:** `claude:opus`" in result[1]
+
+
+def test_plan_conventions_unset_orchestrator_still_describes_temp_role(tmp_path):
+    result = anchor.plan_conventions(tmp_path, "python", ["mid"], None)
+    assert result is not None
+    content = result[1]
+    assert "unset" in content.lower() or "_(unset" in content
+    assert "Temporary coordinator" in content
+    assert "frontier or near-frontier" in content
 
 
 def test_plan_conventions_none_when_nothing_to_say(tmp_path):
-    assert anchor.plan_conventions(tmp_path, None, None) is None
+    assert anchor.plan_conventions(tmp_path, None, None, None) is None
+
+
+def test_resolve_orchestrator_prefers_explicit_then_saved_then_priority_tail():
+    assert anchor.resolve_orchestrator("claude:opus", ["nim", "claude:fable"], "grok") == "claude:opus"
+    assert anchor.resolve_orchestrator(None, ["nim", "claude:fable"], "grok") == "grok"
+    assert anchor.resolve_orchestrator(None, ["nim", "claude:fable"], None) == "claude:fable"
+    assert anchor.resolve_orchestrator(None, None, None) is None
+
+
+def test_set_project_orchestrator_writes_conventions(tmp_path):
+    project = tmp_path / "proj"
+    project.mkdir()
+    (project / "ANCHOR-CONVENTIONS.md").write_text(
+        "# Anchor conventions for this project\n\n## Model routing (fit check)\n\nnotes\n"
+    )
+    (project / ".anchor-manifest.json").write_text(
+        json.dumps({
+            "files": {"ANCHOR-CONVENTIONS.md": {"src": None, "hash": "x"}},
+            "model_priority": [],
+        })
+    )
+    anchor.set_project_orchestrator(project, "Claude:Opus")
+    text = (project / "ANCHOR-CONVENTIONS.md").read_text()
+    assert "**Preferred orchestrator:** `claude:opus`" in text
+    assert "SUGGEST-ESCALATE" in text or "lesser" in text
+    manifest = json.loads((project / ".anchor-manifest.json").read_text())
+    assert manifest["preferred_orchestrator"] == "claude:opus"
+
+
+def test_load_orchestrator_from_defaults(tmp_path, monkeypatch):
+    defaults_file = tmp_path / "defaults"
+    defaults_file.write_text("PLATFORMS=chat\nORCHESTRATOR=Claude:Fable\n")
+    monkeypatch.setattr(anchor, "DEFAULTS_FILE", defaults_file)
+    assert anchor.load_orchestrator() == "claude:fable"

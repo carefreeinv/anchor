@@ -34,6 +34,7 @@ Before dispatching any frontier-model run, rewrite the task on a cheap model int
 - Touch only files named in the current task spec.
 - End every task with: `## Result`, `## How to verify`, `## Deferred / concerns`.
 - SOLID by default; use the project's idiomatic composition mechanism (check `ANCHOR-CONVENTIONS.md`) over deep inheritance; no dead code, no spaghetti control flow.
+- **Docs describe current state, not plans:** README / `docs/` / CHANGELOG / blog / release notes cover **shipped** code and public contracts only. Never document the **contents** of `.plans/` (drafts, backlog, unfinished acceptance) as product docs or roadmap. When plan work ships, document the code — not the plan file. Documenting the `.plans/` **workflow** itself is fine when that is a shipped feature.
 
 ## Hooks & automation suggestions
 
@@ -45,16 +46,31 @@ Before dispatching any frontier-model run, rewrite the task on a cheap model int
 
 Connect `mcp/anchor-prompts` (templates + tune/critique tools) and `mcp/model-fleet` (delegate steps to local/NIM endpoints) from this repo. Prefer delegating mechanical steps to the local fleet before spending plan-limit tokens.
 
+## /draft
+
+**Planning mode** on **`.plans/drafts/`**: create/refine, `--list`, load existing
+slug for discussion (`--load` or slug that exists), optional `--local` →
+`*.local.md`. **Promote** with `/draft --promote <slug>` (infer `bugs/` vs
+`features/` from the plan; user-authorized). Do not implement product code; do
+not promote from `/work`. Command: `.claude/commands/draft.md`.
+
 ## /work
 
 Execute the next (or named) ready plan from **`.plans/`** (dotdir). Contract:
-bugs before features; honor each plan’s **Preferred models** (skip work cheaper
-or stronger models should do unless the user names the plan or passes
-`--no-fit-check`); never execute `drafts/` or `completed/`; on finish `git mv`
-to `.plans/completed/` (the **only** agent move under `.plans/`; promotion is
-human-only). Command file: `.claude/commands/work.md` (scaffolded with this
-platform). Args: bare `/work`, `/work --list`, `/work --no-fit-check`,
-`/work <slug>`, or a path under `.plans/bugs|features`.
+resume own `in-progress/` first; bugs before features; honor **Preferred models**
+and **Depends on** (skip unmet deps); never execute `drafts/` / `completed/` /
+`ambiguous/` / `blocked/`; ignore foreign `in-progress/`; claim ready →
+`in-progress/`; park half-baked → `ambiguous/` or stuck → `blocked/`; finish
+`in-progress/` → `completed/`. Do not promote drafts from `/work` (use
+`/draft --promote`). If Preferred orchestrator is unset, frontier/near-frontier
+may act as temporary coordinator (`TEMPORARY-COORDINATOR:`). Command:
+`.claude/commands/work.md`.
+
+## /fleet-watch
+
+Configure durable plan pollers for a project: `/fleet-watch` (CWD) or
+`/fleet-watch other-app`. Watchers run a work-style claim/execute loop in the
+background. Command: `.claude/commands/fleet-watch.md`. Prefer the skill over raw CLI.
 
 ## /config
 
