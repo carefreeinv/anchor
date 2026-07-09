@@ -46,11 +46,14 @@ No shell here, so the human runs file commands. When the user types `/draft`:
    Goal / Preferred models / Depends on / Steps / Done when; discuss; dictate
    edits only when they ask.
 3. **`--promote <slug>`** (or `promote <slug>`): read the pasted draft (or ask
-   for it); **infer** bug vs feature from Goal/Value/wording; dictate
-   `git mv .plans/drafts/<file> .plans/bugs|features/<file>` and state why that
-   lane. Confirm target free first (`ls` that lane).
-4. **Create/refine:** dictate full plan markdown for `.plans/drafts/<slug>.md`
-   (or `.local.md` with `--local`). Template: `anchor/templates/plan.md`.
+   for it); **infer** bug vs feature from Goal/Value/wording; **publish** — dictate
+   `mv .plans/drafts/<slug>.local.md .plans/bugs|features/<slug>.md` (drop the
+   `.local` suffix so the promoted plan is tracked; keep `.local.md` only if they
+   want it private) and state why that lane. Confirm target free first (`ls` that lane).
+4. **Create/refine:** dictate full plan markdown. **Default path is
+   `.plans/drafts/<slug>.local.md`** (private/uncommitted — a fresh draft usually
+   isn't ready to commit); use `.plans/drafts/<slug>.md` when they pass `--shared`.
+   Template: `anchor/templates/plan.md`.
 5. **Planning only** — no product implementation. Execution is `/work` after the
    plan is in a ready lane.
 

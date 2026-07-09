@@ -107,7 +107,7 @@ one writer per clone/worktree.
 ## Write / promote / finish
 
 ```text
-Write:    /draft → .plans/drafts/<slug>.md  (or <slug>.local.md with --local)
+Write:    /draft → .plans/drafts/<slug>.local.md (private default; --shared → tracked .md)
 List:     /draft --list
 Load:     /draft --load <slug>  (or /draft <slug> if file exists)
 Promote:  /draft --promote <slug>  (infer bugs|features from plan; path = ready)
@@ -183,6 +183,8 @@ Executors open the file first; do not re-plan unless Done when is impossible.
 - Tracked: `kebab-case-slug.md` — **Slug** is the stem without `.md`
 - Untracked (local-only): `kebab-case-slug.local.md` — same **Slug** without
   the `.local` suffix; gitignored by `.plans/.gitignore` (`**/*.local.md`)
+- **Fresh drafts default to `<slug>.local.md`** (private/uncommitted); `/draft --promote`
+  publishes to a tracked `<slug>.md`, or `/draft --shared` creates one directly
 - `/work <slug>` matches either `slug.md` or `slug.local.md` under ready lanes
   (or your own `in-progress/`)
 - Optional on completion: `YYYY-MM-DD-<slug>.md` (or `…local.md`) under `completed/`
