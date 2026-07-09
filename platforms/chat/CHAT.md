@@ -66,13 +66,14 @@ No shell here, so you cannot list files or `git mv` yourself. When the user type
       .plans/ambiguous .plans/blocked .plans/drafts .plans/completed 2>/dev/null
    ```
 2. **Lanes:** resume their `in-progress/` first; else `bugs/` then `features/`
-   (by `Value:` high→medium→low). Honor **Preferred models** and **Depends on**
+   (within a lane by `Priority:` P1→P2→P3, default **P2**, then `Value:`
+   high→medium→low, then oldest first). Honor **Preferred models** and **Depends on**
    (skip unmet deps). Never execute `drafts/` / `completed/` / `ambiguous/` /
    `blocked/`. **Ignore** foreign `in-progress/`. If they name a draft, offer
    edit-only — use `/draft --promote` to promote, not `/work`. Relocates: ready → `in-progress/`
    when starting; park half-baked → `ambiguous/` or stuck → `blocked/`; finish
    `in-progress/` → `completed/`.
-3. **`--list`:** from their paste, table path / Value / Preferred models / fit for
+3. **`--list`:** from their paste, table path / Priority / Value / Preferred models / fit for
    the model they are chatting with — do not implement. **Path is authoritative**
    (ignore any in-file `Lane:` / `Status:`; do not dictate writing those fields).
 4. **Bare `/work`:** pick highest-priority **model-fit** plan (or all priority order

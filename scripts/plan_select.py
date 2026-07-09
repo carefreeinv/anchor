@@ -14,7 +14,8 @@ Priority for bare pick:
 
   1. Own in-progress plans first (resume)
   2. All bugs/*.md before any feature
-  3. features by Value high → medium → low (default medium), then filename
+  3. within a lane by Priority P1 → P2 → P3 (default P2), then Value high →
+     medium → low (default medium), then oldest first (mtime), then filename
   4. Model-fit filter unless no_fit_check or explicit slug/path override
   5. Skip plans with **unmet Depends on** unless no_dep_check
 
@@ -43,6 +44,8 @@ NON_EXECUTABLE_LANES = frozenset({"drafts", "completed", "ambiguous", "blocked"}
 # Back-compat alias used by assert helpers
 BLOCKED_LANES = NON_EXECUTABLE_LANES
 VALUE_RANK = {"high": 0, "medium": 1, "low": 2}
+PRIORITY_RANK = {"P1": 0, "P2": 1, "P3": 2}
+DEFAULT_PRIORITY = "P2"
 FIT_TIERS = ("small", "mid", "reasoner", "frontier")
 FIT_RANK = {t: i for i, t in enumerate(FIT_TIERS)}
 
@@ -57,6 +60,9 @@ REGISTRY_TIER_TO_FIT: dict[str, str] = {
 }
 
 VALUE_RE = re.compile(r"^\s*-\s*\*\*Value:\*\*\s*(\w+)", re.MULTILINE | re.IGNORECASE)
+PRIORITY_RE = re.compile(
+    r"^\s*-\s*\*\*Priority:\*\*\s*(\S+)", re.MULTILINE | re.IGNORECASE
+)
 PREFERRED_RE = re.compile(
     r"^\s*-\s*\*\*Preferred models:\*\*\s*(.+)$", re.MULTILINE | re.IGNORECASE
 )
@@ -108,6 +114,7 @@ class PlanRecord:
     lane: str
     slug: str
     value: str
+    priority: str
     preferred: str | None
     title: str
     fit: Fit = Fit.UNKNOWN
@@ -151,6 +158,22 @@ def parse_value(text: str) -> str:
         return "medium"
     v = m.group(1).lower()
     return v if v in VALUE_RANK else "medium"
+
+
+def parse_priority(text: str) -> str:
+    """Parse the ``Priority:`` header → ``P1|P2|P3``; tolerant, default ``P2``.
+
+    Accepts ``P1``/``p1``/``1`` and trailing junk (``P1.``, ``P2 — note``).
+    Anything unrecognized falls back to the default priority.
+    """
+    m = PRIORITY_RE.search(text)
+    if not m:
+        return DEFAULT_PRIORITY
+    raw = m.group(1).strip().strip("`").upper()
+    m2 = re.match(r"P?([123])", raw)
+    if m2:
+        return f"P{m2.group(1)}"
+    return DEFAULT_PRIORITY
 
 
 def parse_preferred(text: str) -> str | None:
@@ -431,6 +454,7 @@ def _record_from_path(
         lane=lane,
         slug=plan_slug(path),
         value=parse_value(text),
+        priority=parse_priority(text),
         preferred=preferred,
         title=parse_title(text, path.name),
         fit=classify_fit(worker, preferred),
@@ -440,6 +464,24 @@ def _record_from_path(
         deps_unmet=unmet,
         deps_notes=notes,
     )
+
+
+def plan_sort_key(r: PlanRecord) -> tuple:
+    """Ready-lane ordering key: lane → priority → value → oldest → filename.
+
+    Bugs (lane 0) always precede features (lane 1) — priority never lets a
+    feature jump a ready bug. Within a lane: ``P1`` before ``P2`` before ``P3``
+    (default ``P2``), then ``high`` before ``medium`` before ``low`` (default
+    ``medium``), then oldest first (file mtime), with filename as final tiebreak.
+    """
+    lane_i = 0 if r.lane == "bugs" else 1
+    pri_i = PRIORITY_RANK.get(r.priority, PRIORITY_RANK[DEFAULT_PRIORITY])
+    val_i = VALUE_RANK.get(r.value, VALUE_RANK["medium"])
+    try:
+        mtime = r.path.stat().st_mtime
+    except OSError:
+        mtime = 0.0
+    return (lane_i, pri_i, val_i, mtime, r.path.name.lower())
 
 
 def inventory_ready(plans_root: Path, worker: Worker | None = None) -> list[PlanRecord]:
@@ -458,12 +500,7 @@ def inventory_ready(plans_root: Path, worker: Worker | None = None) -> list[Plan
                 continue
             records.append(_record_from_path(path, lane, w, plans_root=plans_root))
 
-    def sort_key(r: PlanRecord) -> tuple:
-        lane_i = 0 if r.lane == "bugs" else 1
-        val_i = VALUE_RANK.get(r.value, VALUE_RANK["medium"])
-        return (lane_i, val_i, r.path.name.lower())
-
-    records.sort(key=sort_key)
+    records.sort(key=plan_sort_key)
     return records
 
 
@@ -616,6 +653,7 @@ def resolve_target(
                 lane="features",
                 slug=plan_slug(resolved),
                 value=parse_value(text),
+                priority=parse_priority(text),
                 preferred=parse_preferred(text),
                 title=parse_title(text, resolved.name),
             )
@@ -705,6 +743,7 @@ def select_one(
             lane=rec.lane,
             slug=rec.slug,
             value=rec.value,
+            priority=rec.priority,
             preferred=rec.preferred,
             title=rec.title,
             fit=fit,
@@ -743,7 +782,7 @@ def select_one(
 def format_list_table(records: list[PlanRecord]) -> str:
     if not records:
         return "(no ready plans under bugs/ or features/; no owned in-progress)"
-    lines = ["path\tlane\tvalue\tpreferred\tfit\tdeps\towner"]
+    lines = ["path\tlane\tpriority\tvalue\tpreferred\tfit\tdeps\towner"]
     for r in records:
         pref = r.preferred or "(default mid)"
         owner = r.owner or "-"
@@ -754,6 +793,7 @@ def format_list_table(records: list[PlanRecord]) -> str:
         else:
             deps = "UNMET:" + ",".join(r.deps_unmet)
         lines.append(
-            f"{r.rel}\t{r.lane}\t{r.value}\t{pref}\t{r.fit.value}\t{deps}\t{owner}"
+            f"{r.rel}\t{r.lane}\t{r.priority}\t{r.value}\t{pref}"
+            f"\t{r.fit.value}\t{deps}\t{owner}"
         )
     return "\n".join(lines)

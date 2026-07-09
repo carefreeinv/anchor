@@ -82,7 +82,9 @@ one writer per clone/worktree.
 
 1. **Your** plans already under `in-progress/` (resume first)
 2. All `bugs/*.md` before any feature
-3. Then `features/*.md` by header `Value: high | medium | low` (default medium)
+3. Within each lane by header `Priority: P1 | P2 | P3` (default **P2**), then
+   `Value: high | medium | low` (default medium), then oldest first (mtime):
+   P1 → P2 → P3, then high → medium → low
 4. Keep only **model-fit** plans unless `--no-fit-check` or user names a plan
 5. Never `drafts/`, `completed/`, `ambiguous/`, `blocked/`, foreign `in-progress/`,
    or this README
@@ -119,6 +121,7 @@ blocker is cleared.
 # Plan: <title>
 
 - **Value:** high | medium | low    # features only; omit for bugs
+- **Priority:** P1 | P2 | P3         # P1 > P2 > P3; default P2; orders within a lane
 - **Slug:** <filename-without-md>
 - **Preferred models:** <names and/or tiers>
 - **Depends on:** <slug-a, slug-b | none>

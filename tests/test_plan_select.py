@@ -5,11 +5,20 @@ from plan_lease import claim_and_move
 from plan_select import Fit, Worker, classify_fit, inventory, inventory_ready, select_one
 
 
-def _plan(path: Path, *, value: str = "medium", preferred: str = "mid", title: str = "t") -> None:
+def _plan(
+    path: Path,
+    *,
+    value: str = "medium",
+    preferred: str = "mid",
+    title: str = "t",
+    priority: str | None = None,
+) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
+    prio_line = f"- **Priority:** {priority}\n" if priority is not None else ""
     path.write_text(
         f"# Plan: {title}\n\n"
         f"- **Value:** {value}\n"
+        f"{prio_line}"
         f"- **Preferred models:** {preferred}\n\n"
         "## Goal\ng\n\n## Steps\n| 1 | x |\n\n## Done when\n- [ ] ok\n",
         encoding="utf-8",
@@ -35,6 +44,44 @@ def test_priority_bugs_before_features_then_value(tmp_path):
         "features/high.md",
         "features/low.md",
     ]
+
+
+def test_parse_priority_tolerant():
+    from plan_select import parse_priority
+
+    assert parse_priority("- **Priority:** P1\n") == "P1"
+    assert parse_priority("- **priority:** p3\n") == "P3"
+    assert parse_priority("- **Priority:** 2\n") == "P2"
+    assert parse_priority("- **Priority:** P1 — foundational\n") == "P1"
+    assert parse_priority("- **Priority:** `P1`\n") == "P1"
+    assert parse_priority("no priority header at all") == "P2"
+    assert parse_priority("- **Priority:** banana\n") == "P2"
+
+
+def test_priority_orders_within_lane_and_bugs_first(tmp_path):
+    plans = _tree(tmp_path)
+    # Same lane: P1 beats P2 even though the P2 plan has higher Value.
+    _plan(plans / "features" / "p2high.md", value="high", preferred="mid", priority="P2")
+    _plan(plans / "features" / "p1low.md", value="low", preferred="mid", priority="P1")
+    # A P1 bug still precedes any feature (lane is authoritative over priority).
+    _plan(plans / "bugs" / "p1bug.md", value="low", preferred="mid", priority="P1")
+    recs = inventory_ready(plans, Worker("t", "mid"))
+    assert [r.rel for r in recs] == [
+        "bugs/p1bug.md",
+        "features/p1low.md",
+        "features/p2high.md",
+    ]
+
+
+def test_missing_priority_defaults_p2(tmp_path):
+    plans = _tree(tmp_path)
+    _plan(plans / "features" / "noprio.md", value="high", preferred="mid")  # no Priority
+    _plan(plans / "features" / "p1.md", value="low", preferred="mid", priority="P1")
+    recs = inventory_ready(plans, Worker("t", "mid"))
+    # Explicit P1 sorts before default-P2, regardless of Value.
+    assert [r.rel for r in recs] == ["features/p1.md", "features/noprio.md"]
+    noprio = next(r for r in recs if r.rel == "features/noprio.md")
+    assert noprio.priority == "P2"
 
 
 def test_fit_skip_overqualified_and_underqualified():
