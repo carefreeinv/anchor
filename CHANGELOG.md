@@ -34,6 +34,7 @@ Newest first.
 
 ### Changed
 
+- **`/work` just-picks on ties by default** — when multiple ready plans share the top priority, `/work` takes the first in sorted order (Priority → Value → oldest → filename) and starts, instead of printing a menu and asking; it names the other tied plans so the user can redirect. Only pauses to ask when the user explicitly asks to choose (Claude + Grok `/work`)
 - **Agents must run `/commit-prep` before any `git commit`** — standing rule on Claude/Grok/Chat platforms, `/work`, `/commit-prep` itself, and `.plans/` README (tests + CHANGELOG + blog-if-warranted gates)
 - **`/commit-prep` is project-agnostic:** discover CI/tests per repo; no assumed Docusaurus build; blog posts are plain Markdown under `docs/blog/` (create the directory if missing)
 - **After green `/commit-prep`, agents finishing plan work commit on the feature branch** (`/work` + platform rules — not inside `/commit-prep` itself; prep stays prep-only)
