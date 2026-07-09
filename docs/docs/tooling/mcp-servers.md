@@ -4,18 +4,26 @@ sidebar_position: 3
 
 # MCP servers
 
-Two stdio servers ship in `mcp/` today, installable into Claude Code, Grok Build (if MCP-capable), or any MCP client. Together they close the loop: **anchor-prompts** makes a lesser model *behave*, **model-fleet** makes a frontier model *delegate*.
+Three stdio servers ship in `mcp/`, installable into Claude Code, Grok Build (if MCP-capable), or any MCP client:
+
+- **anchor-prompts** — makes a lesser model *behave* (doctrine, templates, preflight)
+- **model-fleet** — makes a frontier model *delegate* to OpenAI-compatible endpoints
+- **project-orchestrator** — binds to **one project** and exposes a **limited** `.plans/` surface (list/claim/complete, deps suggest, stale warnings)
 
 ```mermaid
 flowchart LR
   agent["Coding agent"]
   ap["anchor-prompts<br/>doctrine · templates · preflight"]
   mf["model-fleet<br/>delegate · health"]
+  po["project-orchestrator<br/>.plans list · claim · complete"]
   hw["Local / NIM endpoints"]
+  plans["Project .plans/"]
 
   agent <--> ap
   agent <--> mf
+  agent <--> po
   mf --> hw
+  po --> plans
 ```
 
 Until a Preferred orchestrator is set for a project, a frontier session may act as temporary coordinator (see [CLI — Preferred orchestrator](cli#preferred-orchestrator-per-project)).
@@ -37,7 +45,21 @@ The delegation arm of the orchestrator pattern:
 - `delegate_parallel_review(task_spec, work)` — two independent critics must agree; disagreement → HOLD (the Space-1 verify-twice rule, available everywhere)
 - `list_fleet` / `fleet_health` — registry view and reachability sweep
 
+## project-orchestrator
+
+**Per-project** limited plan coordinator (`mcp/project-orchestrator/`). One server process is bound to one project root (`--project` or `.anchor/mcp.yaml`). Tools only touch that tree’s `.plans/` — no promote, no plan-file writes, no MCP-initiated git push.
+
+| Cap | Tools (v1) | Notes |
+|-----|------------|--------|
+| L0 | `project_info`, `plans_list`, `plan_read`, `conventions_get`, `plans_inventory_for_deps`, `plans_stale_report` | stale/tier-gap warnings are warn-only |
+| L0.5 | `plans_suggest_dependencies` | heuristic token overlap; **propose only** (no LLM) |
+| L1 | `plans_claim`, `plans_release`, `plans_complete` | complete is **move only** (client asserts Done when) |
+
+Uses the same `plan_select` / `plan_lease` rules as [`/work`](../skills/work) and `work_once`. Use a **distinct** `--agent-id` from fleet_watch timers. Full matrix and registration examples: `mcp/project-orchestrator/README.md`.
+
 ```bash
 claude mcp add anchor-prompts -- python /abs/path/mcp/anchor-prompts/server.py
 claude mcp add model-fleet   -- python /abs/path/mcp/model-fleet/server.py
+claude mcp add myapp-orch -- python /abs/path/mcp/project-orchestrator/server.py \
+  --project /abs/path/to/myapp --agent-id cursor-mid-1 --tier mid
 ```

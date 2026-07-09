@@ -8,6 +8,8 @@ Newest first.
 
 ### Added
 
+- **`mcp/project-orchestrator/`** — per-project limited orchestrator MCP (L0+L1): `plans_list` / `plans_claim` / `plans_complete` (move-only), heuristic `plans_suggest_dependencies` (propose-only), `plans_stale_report` (tier-gap / age warnings); reuses `plan_select` + `plan_lease`; config `.anchor/mcp.yaml`
+- Docs: MCP servers page documents project-orchestrator alongside anchor-prompts and model-fleet
 - **`/draft`** skill (Claude `.claude/commands/draft.md`, Grok `.grok/skills/draft/SKILL.md`, Chat) — planning mode under `.plans/drafts/`; `--list`, `--load`, create/refine, optional `--local` → `*.local.md`; **`--promote <slug>`** infers `bugs/` vs `features/` from the plan (never from `/work`/fleet)
 - **`/fleet-watch`** skill + `scripts/fleet_watch.py` — durable multi-tier plan watchers (status/list/once, emit/install systemd user timers with linger, cron fallback); scaffolded for Claude/Grok
 - **`scripts/work_once.py`** — headless one-shot / bounded-loop puller (same priority, Preferred models, and Depends on as `/work`); leases in `.plans/.leases/`; shared `scripts/plan_select.py` + `scripts/plan_lease.py`

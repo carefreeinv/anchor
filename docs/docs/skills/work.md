@@ -134,6 +134,7 @@ Shared rules with `/work`: resume own in-progress, bugs before features, Value o
 
 - [Multi-agent fleet workers](../tooling/fleet-workers) — architecture for multi-tier pull
 - [`/fleet-watch`](fleet-watch) — install durable timers for a project
+- [MCP servers](../tooling/mcp-servers) — **project-orchestrator** exposes list/claim/complete for a bound project without shell
 - [Doctrine — tracked plans](../doctrine)
 - [Playbook — orchestrator pattern](../playbook)
 - [Platforms](../platforms/claude-code) — install and model-specific notes
