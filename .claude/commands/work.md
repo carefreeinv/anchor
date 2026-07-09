@@ -65,18 +65,20 @@ agent's `in-progress/` plan. **Promotion from drafts is human-only.**
 
 1. **Your** plans under `.plans/in-progress/` first (resume).
 2. All of `.plans/bugs/*.md` before any feature.
-3. Then `.plans/features/*.md` ordered by header `Value: high | medium | low`
-   (default **medium** if absent): high → medium → low; ties by filename.
+3. Within each lane, order by header `Priority: P1 | P2 | P3` (default **P2** if
+   absent): P1 → P2 → P3; then `Value: high | medium | low` (default **medium**):
+   high → medium → low; then oldest first (mtime), ties by filename.
 4. Among ready plans, keep only **model-fit** plans (next section) — unless
    `--no-fit-check` is set.
 5. **Skip plans with unmet `Depends on`** — do not start; report blockers.
 6. Skip `drafts/`, `completed/`, `ambiguous/`, `blocked/`, foreign `in-progress/`,
    and `README.md`.
 
-If multiple plans share the top priority and the user did not say "just pick",
-print a short menu (path + first heading + Preferred models) and ask which to
-run. If they said "just pick" / "go" / equivalent, take the first in sorted
-order without asking again.
+If multiple plans share the top priority, **just pick the first in sorted order**
+(Priority → Value → oldest → filename) and start — this is the default; do **not**
+print a menu or ask which to run. Name the other tied plans in one line so the
+user can redirect if they want a different one. Only pause to ask when the user
+**explicitly** asks to choose (e.g. "let me pick", "which should I run?").
 
 ## Model fit (required)
 
@@ -123,8 +125,8 @@ clearly in the same class.
    mean “run every plan in `.plans/`.”
 4. **User names slug/path** (without `--no-fit-check`): explicit target overrides
    the skip — but **state the fit mismatch in one line first**, then proceed.
-5. **`--list`:** for each ready plan show path, lane (from directory), Value,
-   Preferred models, and your fit (`good` / `overqualified` / `underqualified` /
+5. **`--list`:** for each ready plan show path, lane (from directory), Priority,
+   Value, Preferred models, and your fit (`good` / `overqualified` / `underqualified` /
    `unknown`). Do not implement. Fit is still computed under `--list` even if
    `--no-fit-check` is also passed (list is informational).
 6. Per-step **Route to** still applies after load for mixed-difficulty steps
@@ -143,8 +145,8 @@ small models do not grab architecture plans to "try hard."
 - If missing: stop and explain that `/work` needs a `.plans/` tree; point at
   Anchor's formalize-plans workflow or create the layout if the user asks.
 - Inventory: your `in-progress/` (if any), then ready `bugs/`, `features/`.
-  **Ignore** foreign `in-progress/` files. Skim headers for Value and Preferred
-  models only (not Status/Lane).
+  **Ignore** foreign `in-progress/` files. Skim headers for Priority, Value, and
+  Preferred models only (not Status/Lane).
 
 ### 2. Parse arguments
 

@@ -46,11 +46,14 @@ No shell here, so the human runs file commands. When the user types `/draft`:
    Goal / Preferred models / Depends on / Steps / Done when; discuss; dictate
    edits only when they ask.
 3. **`--promote <slug>`** (or `promote <slug>`): read the pasted draft (or ask
-   for it); **infer** bug vs feature from Goal/Value/wording; dictate
-   `git mv .plans/drafts/<file> .plans/bugs|features/<file>` and state why that
-   lane. Confirm target free first (`ls` that lane).
-4. **Create/refine:** dictate full plan markdown for `.plans/drafts/<slug>.md`
-   (or `.local.md` with `--local`). Template: `anchor/templates/plan.md`.
+   for it); **infer** bug vs feature from Goal/Value/wording; **publish** — dictate
+   `mv .plans/drafts/<slug>.local.md .plans/bugs|features/<slug>.md` (drop the
+   `.local` suffix so the promoted plan is tracked; keep `.local.md` only if they
+   want it private) and state why that lane. Confirm target free first (`ls` that lane).
+4. **Create/refine:** dictate full plan markdown. **Default path is
+   `.plans/drafts/<slug>.local.md`** (private/uncommitted — a fresh draft usually
+   isn't ready to commit); use `.plans/drafts/<slug>.md` when they pass `--shared`.
+   Template: `anchor/templates/plan.md`.
 5. **Planning only** — no product implementation. Execution is `/work` after the
    plan is in a ready lane.
 
@@ -66,13 +69,14 @@ No shell here, so you cannot list files or `git mv` yourself. When the user type
       .plans/ambiguous .plans/blocked .plans/drafts .plans/completed 2>/dev/null
    ```
 2. **Lanes:** resume their `in-progress/` first; else `bugs/` then `features/`
-   (by `Value:` high→medium→low). Honor **Preferred models** and **Depends on**
+   (within a lane by `Priority:` P1→P2→P3, default **P2**, then `Value:`
+   high→medium→low, then oldest first). Honor **Preferred models** and **Depends on**
    (skip unmet deps). Never execute `drafts/` / `completed/` / `ambiguous/` /
    `blocked/`. **Ignore** foreign `in-progress/`. If they name a draft, offer
    edit-only — use `/draft --promote` to promote, not `/work`. Relocates: ready → `in-progress/`
    when starting; park half-baked → `ambiguous/` or stuck → `blocked/`; finish
    `in-progress/` → `completed/`.
-3. **`--list`:** from their paste, table path / Value / Preferred models / fit for
+3. **`--list`:** from their paste, table path / Priority / Value / Preferred models / fit for
    the model they are chatting with — do not implement. **Path is authoritative**
    (ignore any in-file `Lane:` / `Status:`; do not dictate writing those fields).
 4. **Bare `/work`:** pick highest-priority **model-fit** plan (or all priority order

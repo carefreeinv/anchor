@@ -8,6 +8,9 @@ Newest first.
 
 ### Added
 
+- **`scripts/scope_gate.py`** — machine-enforced scope gate (mythos-core rule 7): rejects any worktree change outside a task spec's `## Files in scope` **before** tests run. Pure `check_scope` + git-backed `worktree_changes`/`enforce_scope`; gitignore-style globs; `Allowed generated files:` allowlist. Wired into `orchestrate.py --scope-spec` (out-of-scope → `failed-scope`, tests skipped, routed back to planner) and usable standalone as a verify pre-step (`scope_gate.py --root . --spec spec.md && pytest -q`, exit `3` = violation). Task-spec template + docs updated
+- **`scripts/pending_merges.py`** — surfaces finished work committed but **not yet merged** into integration: counts each local branch's commits ahead of its merge target (`feature/*` → `dev`/`develop` → mainline) and flags `feature/<slug>` branches matching a plan under `.plans/completed/` as *completed work awaiting merge*. Advisory table by default; `--json`, `--exit-code` (exit `1` when pending) for coordinators/monitors/CI
+- **Plan `Priority:` header** (`P1` > `P2` > `P3`, default `P2`) — orders ready plans **within a lane** ahead of `Value`; parsed by `scripts/plan_select.py` (`parse_priority` + `plan_sort_key`), shown in `work_once.py --list`; documented in the plan template, `.plans/` README, `/work` (Claude/Grok/Chat), ANCHOR.md, and docs
 - **`scripts/worktree_for_agent.py`** — per-`agent-id` git worktrees under `var/worktrees/` (ensure/list/path/remove; auto-create `dev` from main/master); `work_once.py --ensure-worktree` after claim
 - **Scaffold / project config ensures `var/`** — creates `var/` + `var/worktrees/`, appends `var/` to root `.gitignore` (scaffold + `--set-orchestrator`)
 - **`mcp/project-orchestrator/`** — per-project limited orchestrator MCP (L0+L1): `plans_list` / `plans_claim` / `plans_complete` (move-only), heuristic `plans_suggest_dependencies` (propose-only), `plans_stale_report` (tier-gap / age warnings); reuses `plan_select` + `plan_lease`; config `.anchor/mcp.yaml`
@@ -34,6 +37,9 @@ Newest first.
 
 ### Changed
 
+- **Fresh drafts are private by default** — `/draft` now creates `<slug>.local.md` (gitignored) instead of a tracked `.md`, since a new draft usually isn't ready to commit; **promotion publishes** (`/draft --promote` drops `.local` → tracked `<slug>.md`). New `/draft --shared` creates a tracked draft directly; `/draft --promote --local` keeps a promoted plan private. Applies to Claude, Grok, and Chat `/draft`
+- **`/work` selection order now honors `Priority`** — own in-progress → bugs before features → `Priority` (`P1`>`P2`>`P3`, default `P2`) → `Value` → oldest first; applied consistently across `/work`, `scripts/work_once.py`, and fleet pullers
+- **`/work` just-picks on ties by default** — when multiple ready plans share the top priority, `/work` takes the first in sorted order (Priority → Value → oldest → filename) and starts, instead of printing a menu and asking; it names the other tied plans so the user can redirect. Only pauses to ask when the user explicitly asks to choose (Claude + Grok `/work`)
 - **Agents must run `/commit-prep` before any `git commit`** — standing rule on Claude/Grok/Chat platforms, `/work`, `/commit-prep` itself, and `.plans/` README (tests + CHANGELOG + blog-if-warranted gates)
 - **`/commit-prep` is project-agnostic:** discover CI/tests per repo; no assumed Docusaurus build; blog posts are plain Markdown under `docs/blog/` (create the directory if missing)
 - **After green `/commit-prep`, agents finishing plan work commit on the feature branch** (`/work` + platform rules — not inside `/commit-prep` itself; prep stays prep-only)

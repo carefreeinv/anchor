@@ -10,6 +10,7 @@
      drafts/ = not ready · bugs|features/ = ready · completed/ = done. -->
 
 - **Value:** high | medium | low          <!-- features only; omit for bugs -->
+- **Priority:** P1 | P2 | P3               <!-- P1 > P2 > P3; default P2 if omitted; orders within a lane -->
 - **Slug:** <filename without .md and without .local>
 - **Preferred models:** <names and/or tiers — who should execute this plan>
 - **Depends on:** <comma-separated plan slugs, or `none`>  <!-- other .plans work that must be done first -->
