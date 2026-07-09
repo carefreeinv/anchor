@@ -12,10 +12,9 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-import yaml
-
 import plan_lease
 import plan_select
+import yaml
 from plan_lease import ClaimError
 from plan_select import Worker, normalize_fit_tier, plan_slug
 
@@ -515,8 +514,6 @@ def plans_stale_report(cfg: CoordinatorConfig) -> dict[str, Any]:
     known = {normalize_fit_tier(t) for t in cfg.worker_tiers}
     capacity = "known" if known else "unknown"
     now = time.time()
-    stale_sec = cfg.stale_after_hours * 3600.0
-    parked_sec = cfg.parked_stale_hours * 3600.0
 
     for lane in ("bugs", "features"):
         lane_dir = cfg.plans_root / lane

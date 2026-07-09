@@ -25,9 +25,8 @@ REPO = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO / "scripts"))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from mcp.server.fastmcp import FastMCP  # noqa: E402
-
 import coordinator as coord  # noqa: E402
+from mcp.server.fastmcp import FastMCP  # noqa: E402
 
 mcp = FastMCP("project-orchestrator")
 _CFG: coord.CoordinatorConfig | None = None

@@ -91,7 +91,10 @@ Imports `plan_select` and `plan_lease` from Anchor `scripts/` via `sys.path` (sa
 
 ## Agent git (implementers of *this* repo)
 
-If the project uses Git: branch from **dev** (or the repo’s integration branch — Anchor itself uses `main` when no `dev`) → `feature/<slug>`; **push to origin only**; never auto-merge to dev/main.
+If the project uses Git: use **`dev`**, else **`develop`**. If neither exists,
+**create `dev` from `main` (else `master`)** and push `origin dev` when allowed.
+Then `feature/<slug>` from that line; **`/commit-prep` before any `git commit`**;
+**push the feature branch to origin only**; never auto-merge to dev/main.
 
 ## Non-goals (v1)
 
