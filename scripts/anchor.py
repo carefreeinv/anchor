@@ -77,6 +77,7 @@ FLEET_FILES: list[str] = [
     "scripts/work_once.py",
     "scripts/plan_select.py",
     "scripts/plan_lease.py",
+    "scripts/worktree_for_agent.py",
     "scripts/fleet_watch.py",
     "scripts/prompt_tuner.py",
     "scripts/router.py",
@@ -470,11 +471,15 @@ def set_project_orchestrator(project_dir: Path, orchestrator: str) -> None:
     """Write preferred orchestrator into ANCHOR-CONVENTIONS.md (+ manifest if present).
 
     Trivial path for an existing project — does not re-scaffold doctrine files.
+    Always refreshes ``var/`` + root ``.gitignore`` ignore rule.
     """
     orch = orchestrator.strip().lower()
     if not orch:
         raise SystemExit("--set-orchestrator requires a non-empty token "
                          "(e.g. claude:opus, grok, nim).")
+
+    var_info = ensure_project_var(project_dir)
+    print(f"var/: ensured ({var_info['gitignore']} .gitignore rule for var/)")
 
     conv_path = project_dir / "ANCHOR-CONVENTIONS.md"
     if conv_path.is_file():
@@ -601,6 +606,80 @@ def apply_copy(plan: list[tuple[Path, Path]]) -> None:
         shutil.copy2(src, dest)
 
 
+# Local project state (worktrees, caches, agent scratch). Never committed.
+VAR_DIR_NAME = "var"
+VAR_GITIGNORE_ENTRY = "var/"
+VAR_GITIGNORE_COMMENT = "# Anchor local state (worktrees, caches) — never commit"
+
+
+def _gitignore_covers_var(text: str) -> bool:
+    """True if root .gitignore already ignores the var/ tree."""
+    for raw in text.splitlines():
+        line = raw.strip()
+        if not line or line.startswith("#"):
+            continue
+        # Common forms that cover var/
+        if line in {
+            "var/",
+            "/var/",
+            "var",
+            "/var",
+            "var/**",
+            "/var/**",
+            "**/var/",
+        }:
+            return True
+    return False
+
+
+def ensure_var_gitignored(project_dir: Path) -> str:
+    """Ensure project root ``.gitignore`` ignores ``var/``. Returns action label.
+
+    Labels: ``created`` | ``updated`` | ``unchanged``
+    """
+    gi = project_dir / ".gitignore"
+    if gi.is_file():
+        text = gi.read_text(encoding="utf-8")
+        if _gitignore_covers_var(text):
+            return "unchanged"
+        if text and not text.endswith("\n"):
+            text += "\n"
+        if text and not text.endswith("\n\n"):
+            text += "\n"
+        text += f"{VAR_GITIGNORE_COMMENT}\n{VAR_GITIGNORE_ENTRY}\n"
+        gi.write_text(text, encoding="utf-8")
+        return "updated"
+    gi.write_text(f"{VAR_GITIGNORE_COMMENT}\n{VAR_GITIGNORE_ENTRY}\n", encoding="utf-8")
+    return "created"
+
+
+def ensure_project_var(project_dir: Path) -> dict[str, str]:
+    """Create ``var/`` (and ``var/worktrees/``) and ensure root ``.gitignore`` ignores them.
+
+    Safe to call on every scaffold / project config; never overwrites non-gitignore
+    content except appending a missing ``var/`` rule to ``.gitignore``.
+    """
+    project_dir = project_dir.resolve()
+    var = project_dir / VAR_DIR_NAME
+    var.mkdir(parents=True, exist_ok=True)
+    worktrees = var / "worktrees"
+    worktrees.mkdir(parents=True, exist_ok=True)
+    # Placeholder so empty dirs survive tooling that skips empty folders
+    keep = var / ".gitkeep"
+    if not keep.exists():
+        keep.write_text(
+            "# Local Anchor state lives under var/ (gitignored). "
+            "Worktrees: var/worktrees/<agent-id>/\n",
+            encoding="utf-8",
+        )
+    gi_action = ensure_var_gitignored(project_dir)
+    return {
+        "var": str(var),
+        "worktrees": str(worktrees),
+        "gitignore": gi_action,
+    }
+
+
 def _sha256(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
@@ -654,6 +733,16 @@ def check_project(project_dir: Path) -> None:
     if not manifest_path.exists():
         raise SystemExit(f"No {MANIFEST_NAME} in '{project_dir}' — nothing to check "
                           "(only projects scaffolded by this anchor.py have one).")
+
+    # Non-destructive note about var/ layout (scaffold/config should create it)
+    var = project_dir / VAR_DIR_NAME
+    gi = project_dir / ".gitignore"
+    if not var.is_dir():
+        print(f"note: {VAR_DIR_NAME}/ missing — re-run scaffold or "
+              f"`anchor {project_dir} --set-orchestrator …` / ensure_project_var")
+    elif gi.is_file() and not _gitignore_covers_var(gi.read_text(encoding="utf-8")):
+        print(f"note: root .gitignore does not ignore {VAR_GITIGNORE_ENTRY} — "
+              f"re-run ensure (scaffold or --set-orchestrator) to append the rule")
 
     manifest = json.loads(manifest_path.read_text())
     priority = manifest.get("model_priority") or []
@@ -797,6 +886,8 @@ def main() -> None:
         print(f"Preferred orchestrator: {preferred_orch}")
 
     if args.dry_run:
+        print(f"  {VAR_DIR_NAME}/ (+ {VAR_DIR_NAME}/worktrees/, root .gitignore → "
+              f"{VAR_GITIGNORE_ENTRY}) (would ensure)")
         print("\n(dry run — nothing written)")
         return
 
@@ -805,6 +896,9 @@ def main() -> None:
         dest, content = conventions
         dest.parent.mkdir(parents=True, exist_ok=True)
         dest.write_text(content)
+    var_info = ensure_project_var(project_dir)
+    print(f"  {VAR_DIR_NAME}/ (local state; gitignored via root .gitignore "
+          f"[{var_info['gitignore']}])")
     manifest = build_manifest(project_dir, plan, conventions, platform_keys, want_fleet,
                               framework, model_priority, preferred_orch)
     manifest_path.write_text(json.dumps(manifest, indent=2) + "\n")

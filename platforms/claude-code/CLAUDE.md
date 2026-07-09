@@ -35,11 +35,12 @@ Before dispatching any frontier-model run, rewrite the task on a cheap model int
 - End every task with: `## Result`, `## How to verify`, `## Deferred / concerns`.
 - SOLID by default; use the project's idiomatic composition mechanism (check `ANCHOR-CONVENTIONS.md`) over deep inheritance; no dead code, no spaghetti control flow.
 - **Docs describe current state, not plans:** README / `docs/` / CHANGELOG / blog / release notes cover **shipped** code and public contracts only. Never document the **contents** of `.plans/` (drafts, backlog, unfinished acceptance) as product docs or roadmap. When plan work ships, document the code — not the plan file. Documenting the `.plans/` **workflow** itself is fine when that is a shipped feature.
+- **Before any `git commit`:** run **`/commit-prep`** (prep only: tests, CHANGELOG, blog-if-warranted). Do not skip prep for “small” changes. After gates are **green**, if plan work is complete (or the user asked to land the work), **stage + commit on the feature branch** (worktree preferred); optional feature-branch push; never commit on main/dev; never auto-merge.
 
 ## Hooks & automation suggestions
 
 - PostToolUse hook on Edit/Write: run the project's linter; feed failures back verbatim.
-- Pre-commit: run the step's definition-of-done command; block commit on failure.
+- Pre-commit: run **`/commit-prep`**, then the step's definition-of-done command; block commit on failure.
 - Use git worktrees for parallel subagent tasks to keep diffs scoped and reviewable.
 
 ## MCP
@@ -63,7 +64,10 @@ and **Depends on** (skip unmet deps); never execute `drafts/` / `completed/` /
 `in-progress/`; park half-baked → `ambiguous/` or stuck → `blocked/`; finish
 `in-progress/` → `completed/`. Do not promote drafts from `/work` (use
 `/draft --promote`). If Preferred orchestrator is unset, frontier/near-frontier
-may act as temporary coordinator (`TEMPORARY-COORDINATOR:`). Command:
+may act as temporary coordinator (`TEMPORARY-COORDINATOR:`). On Git projects: **worktree per agent**
+(`scripts/worktree_for_agent.py ensure --agent-id … --slug …`); feature-branch
+from **`dev`**/`develop` (**create `dev` from main/master if missing**);
+**`/commit-prep` before commit**; never auto-merge. Command:
 `.claude/commands/work.md`.
 
 ## /fleet-watch
@@ -71,6 +75,13 @@ may act as temporary coordinator (`TEMPORARY-COORDINATOR:`). Command:
 Configure durable plan pollers for a project: `/fleet-watch` (CWD) or
 `/fleet-watch other-app`. Watchers run a work-style claim/execute loop in the
 background. Command: `.claude/commands/fleet-watch.md`. Prefer the skill over raw CLI.
+
+## /commit-prep
+
+**Required before any `git commit`.** Run `/commit-prep` (command:
+`.claude/commands/commit-prep.md`): tests → CHANGELOG → blog-if-warranted.
+**Prep only** — does not commit. After a green prep, commit policy is under
+**`/work`** / standing rules (feature branch + worktree; never merge to `dev`/`main`).
 
 ## /config
 

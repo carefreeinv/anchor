@@ -3,7 +3,7 @@ sidebar_position: 5
 sidebar_label: Generic Chat
 ---
 
-<!-- synced-from: platforms/chat/CHAT.md @ d028ba703e8ef3493437c617bb96ac54c7f4f165 -->
+<!-- synced-from: platforms/chat/CHAT.md @ f2f6bae14d12be623f88e355505b1763958762a6 -->
 
 # Generic Chat
 
@@ -47,10 +47,8 @@ command to run in their own terminal. Help: https://carefreeinv.com/anchor
 ## /commit-prep without a shell
 
 Same split for preparing a commit: the human runs the commands and relays output,
-the model does the judgment. Three gates, in order — (1) run & fix tests (the CI
-set: ruff, pytest, docs-sync; fixes proposed as exact edits, two failed attempts on
-one failure → stop), (2) dictate `CHANGELOG.md` entries under `## [Unreleased]` for
-user-visible **shipped** changes only (never `.plans/` backlog), (3) draft a
-`docs/blog/` post only if the change introduces or significantly updates a
-user-facing capability, grounded in the shipped diff. The model never tells the
-human to commit — they decide when.
+the model does the judgment. **Project-agnostic** (no Docusaurus required). Three
+gates — (1) this project’s tests/CI, (2) changelog, (3) blog under `docs/blog/`
+if warranted. **`/commit-prep` is prep only.** After green gates, follow
+[**`/work`**](../skills/work) for feature-branch commit (dictate `git add` /
+commit / optional push); never merge to dev/main.

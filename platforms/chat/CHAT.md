@@ -119,27 +119,29 @@ flags in their terminal instead of the flagged form above.
 
 No shell here either, so the human runs the commands and relays output; you do the
 judgment. Work the three gates in order; don't move on while an earlier gate is red.
+**Project-agnostic:** do not assume Docusaurus or a specific test stack.
 
-1. **Tests.** Ask them to run, from the repo root: `ruff check . && pytest -q &&
-   python3 scripts/check_docs_sync.py` and paste failures. Propose fixes as exact
-   file edits for them to apply, then have them re-run. Two failed fix attempts on
-   the same failure → stop and recommend escalating. Never propose weakening or
-   deleting a test to go green.
-2. **Release notes.** Ask for `git status` + `git diff` output (or a summary of the
-   pending change). Dictate the exact lines to add under `## [Unreleased]` in
-   `CHANGELOG.md` (`### Added` / `### Changed` / `### Fixed`) — user-visible
-   **shipped** changes only. Never restate `.plans/` contents as release notes
-   (docs describe current state, not plans).
-3. **Blog post — only when warranted.** If the change introduces or significantly
-   updates/fixes a user-facing capability, draft the full contents of
-   `docs/blog/YYYY-MM-DD-<slug>.md` (front matter: `title`, `authors: [carefree]`,
-   `tags` from `docs/blog/tags.yml`; lead paragraph, then `<!-- truncate -->`) for
-   the human to save. Ground every claim in the **shipped** diff they showed you —
-   not plan backlog; mark anything you couldn't verify `(unverified)`. Otherwise
-   say in one line why no post is needed.
+1. **Tests.** Ask what CI or local test command the project uses (or infer from
+   files they describe). Have them run **that** from the repo root and paste
+   failures. Propose fixes as exact file edits; re-run. Two failed attempts on the
+   same failure → stop. Never weaken or delete a test to go green. Skip docs-site
+   builds unless they actually have a docs app and docs changed.
+2. **Release notes.** Ask for `git status` + `git diff` (or a summary). Dictate
+   lines for existing `CHANGELOG.md` / Unreleased (or a new `CHANGELOG.md` if
+   none). User-visible **shipped** changes only — never `.plans/` backlog.
+3. **Blog post — only when warranted.** If the change is a real user-facing
+   capability, draft `docs/blog/YYYY-MM-DD-<slug>.md` as plain Markdown (title +
+   short body). If `docs/blog/` does not exist, tell them to **create it** and
+   drop the file there — no docs-app scaffold required. Match Docusaurus-style
+   front matter only when their existing posts already use it. Ground claims in
+   the shipped diff; mark `(unverified)` where needed. Otherwise one line why no
+   post.
 
 End with the standard footer, listing exactly which files the human should have
-changed. Do not tell them to commit — they decide when.
+changed. **`/commit-prep` is prep only** — do not treat it as “commit now.” After
+gates are green, follow **`/work`** / project rules: if plan work is complete,
+dictate `git add` / `git commit` on the **feature branch** (not main/dev);
+optional `git push -u origin HEAD`. Never merge to integration.
 
 ## Cautions specific to chat UIs
 

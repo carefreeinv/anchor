@@ -228,15 +228,33 @@ So “monitor the project folder” means: **poll `.plans/bugs`, `.plans/feature
 
 ### 4. Isolation (git multi-writer)
 
-Leases prevent two workers from **starting** the same plan; they do **not** merge git trees.
+Leases prevent two workers from **starting** the same plan; they do **not** give each worker its own `HEAD`. **One working tree ⇒ one branch tip.** Parallel code edits need separate checkouts.
 
 | Pattern | When to use |
 |---------|-------------|
+| **Per-worker worktree (preferred)** | Parallel agents on the same repo — use `scripts/worktree_for_agent.py` |
 | **One writer clone** | Single machine; all tiers share one checkout; only one process writes at a time |
-| **Per-worker worktree** | Parallel execution; each agent-id has `git worktree add …`; merge/PR when done |
 | **Read-only claim + human merge** | Worker prints path; human or CI runs steps and commits |
 
-v1 intentionally is **not** a multi-tenant queue product. Prefer one active writer per clone.
+#### `worktree_for_agent.py` (shipped)
+
+Creates a **git worktree per `--agent-id`** under `var/worktrees/<agent-id>/` (registry: `var/worktrees/registry.json`). Ensures integration branch **`dev`** (or `develop`); if neither exists, **creates `dev` from `main` (else `master`)**.
+
+```bash
+# Create / reuse worktree; optional plan slug → feature/<slug> inside it
+python scripts/worktree_for_agent.py ensure \
+  --project /srv/myapp --agent-id mid-1 --slug fix-login
+# → WORKTREE=…  BRANCH=feature/fix-login  INTEGRATION=dev
+
+python scripts/worktree_for_agent.py list --project /srv/myapp
+python scripts/worktree_for_agent.py path --project /srv/myapp --agent-id mid-1
+python scripts/worktree_for_agent.py remove --project /srv/myapp --agent-id mid-1 --force
+
+# After claim, claim + worktree in one shot:
+python scripts/work_once.py --once --tier mid --agent-id mid-1 --ensure-worktree
+```
+
+**Rules:** edit code **only** in your worktree path; `/commit-prep` before commit; push the **feature branch** only; never auto-merge to `dev`/`main`. Plan leases stay under the project’s `.plans/` (shared); the worktree is for the *code* tree only.
 
 ## Leases and claims
 
@@ -280,7 +298,7 @@ Never “drain entire backlog forever” as the default—bounded polls keep eco
 3. [ ] Humans promote only ready work: `drafts/` → `bugs|features/`.
 4. [ ] Each worker has unique `--agent-id` and correct `--tier` / `--endpoint`.
 5. [ ] Pollers treat exit `1` as idle; alert only on exit `2` or repeated claim storms.
-6. [ ] Git isolation agreed (single writer vs worktrees).
+6. [ ] Git isolation: **worktree per agent-id** (`worktree_for_agent.py` / `work_once --ensure-worktree`) or single-writer clone.
 7. [ ] On completion, executor archives: `git mv .plans/in-progress/<slug>.md .plans/completed/`.
 8. [ ] Spot-check with `--list` per tier (deps column shows met/UNMET):
 

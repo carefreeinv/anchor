@@ -215,13 +215,48 @@ End every substantive `/work` turn with:
 ## Deferred / concerns
 ```
 
+## Git worktrees + branches + commits (when the project uses Git)
+
+**One working tree ⇒ one HEAD.** Parallel agents must not share a single checkout.
+
+### Worktree (preferred for parallel agents)
+
+Before substantive code edits, ensure a **per-agent worktree** and do all file
+work there:
+
+```bash
+python scripts/worktree_for_agent.py ensure \
+  --project <repo> --agent-id <your-id> --slug <plan-slug>
+# or after claim: work_once.py … --ensure-worktree
+```
+
+Layout: `var/worktrees/<agent-id>/` + `registry.json`. The helper ensures
+integration **`dev`**/`develop` (creates **`dev` from `main`/`master`** if
+missing). Optional `--slug` checks out `feature/<slug>` inside the worktree.
+
+### Integration + feature branch
+
+1. Prefer **`dev`**, else **`develop`**; create **`dev` from main/master** if neither
+   exists (report creation; push `origin dev` when allowed).
+2. Feature branch `feature/<slug>` **in your worktree** — never auto-merge to
+   `dev`/`main`/`master`.
+3. When plan work is complete (Done when holds / finishing `/work`):
+   - Run **`/commit-prep`** first (**prep only** — tests, CHANGELOG, blog).
+   - If gates are **green**: **stage + commit on the feature branch** (HEREDOC
+     message). Optional `git push -u origin HEAD` when a remote feature branch is
+     expected. Report branch + commit SHA.
+   - If gates are **red**: do not commit; fix or stop per stop rules.
+   - **Never** commit on `main`/`master`/`dev`/`develop`; **never** auto-merge to
+     integration. Leave PR/merge to the human.
+
 ## Out of scope
 
 - Creating new plans (use **`/draft`** → `.plans/drafts/`; optional `--local`)
 - **Promoting** drafts → ready (use **`/draft --promote <slug>`**; never from `/work`)
 - Executing every ready plan in one shot unless the user explicitly asks to
   continue to the next after finishing one
-- Running `git commit` unless the user asks
+- Running `git commit` **without** `/commit-prep`, or committing when the user did
+  not ask and the plan does not require it
 - **Documenting plan backlog** as product docs (hard rule: docs describe **current
   shipped state**, not `.plans/` contents). When work ships, document the code —
   not this plan file.

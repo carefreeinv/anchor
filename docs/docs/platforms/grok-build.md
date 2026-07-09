@@ -3,7 +3,7 @@ sidebar_position: 2
 sidebar_label: Grok Build
 ---
 
-<!-- synced-from: platforms/grok-build/GROK.md @ aebe47fa8cea29b42096d8eee0ba50ed871ad9f6 -->
+<!-- synced-from: platforms/grok-build/GROK.md @ c228d3db940437fa1fcf951d7814fa4adb250368 -->
 
 # Grok Build
 
@@ -28,7 +28,7 @@ flowchart LR
   s -->|"two fails"| stop["Stop + escalate"]
 ```
 
-The hard rules (restate → plan → one-step-per-turn → verify-don't-claim → mark `(unverified)` → two-fail stop → scope → footer → **docs describe current state, not plans**) plus three Grok-specific ones:
+The hard rules (restate → plan → one-step-per-turn → verify-don't-claim → mark `(unverified)` → two-fail stop → scope → footer → **docs describe current state, not plans** → **`/commit-prep` before any `git commit`**) plus three Grok-specific ones:
 
 - Force risk enumeration before the plan ("list 3 ways this could go wrong") — surfaces the reasoning Grok skips.
 - **One task spec per session.** Restart instead of accumulating context; instruction decay makes long Grok sessions untrustworthy.
@@ -42,4 +42,8 @@ If MCP is available, connect `anchor-prompts` and call `tune_prompt` on any vagu
 
 ## Tracked plans
 
-Scaffold installs [**`/draft`**](../skills/draft), [**`/work`**](../skills/work), and [**`/fleet-watch`**](../skills/fleet-watch). Draft: create/list/load/`--promote <slug>` (infer bugs vs features); optional `--local`. Grok 4.5 may act as temporary coordinator when Preferred orchestrator is unset. Full contract: source `platforms/grok-build/GROK.md`.
+Scaffold installs [**`/draft`**](../skills/draft), [**`/work`**](../skills/work), and [**`/fleet-watch`**](../skills/fleet-watch). Draft: create/list/load/`--promote <slug>` (infer bugs vs features); optional `--local`. Git: **worktree per agent** (`worktree_for_agent.py`), feature branches from `dev`/`develop` (**create `dev` from main/master if missing**). Grok 4.5 may act as temporary coordinator when Preferred orchestrator is unset. Full contract: source `platforms/grok-build/GROK.md`.
+
+## /commit-prep
+
+**Required before any `git commit`.** Agents run `/commit-prep` (discover this project’s tests/CI; CHANGELOG; blog-if-warranted — no Docusaurus required). **Prep only** — does not commit. After a green prep, [**`/work`**](../skills/work) / standing rules cover feature-branch commit (worktree preferred; never merge to dev/main).

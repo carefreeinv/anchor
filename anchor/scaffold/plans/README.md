@@ -114,6 +114,13 @@ Execute:  /work → follow Steps; verify each step
 Park:     agent → ambiguous/ (half-baked) or blocked/ (cannot fix)
 Release:  agent → bugs|features/ (give up claim; still ready for others)
 Finish:   agent: git mv in-progress/ → completed/ (optional YYYY-MM-DD-<slug>.md)
+Worktree: parallel agents use scripts/worktree_for_agent.py ensure
+          --agent-id … [--slug …] (var/worktrees/<id>/); or work_once --ensure-worktree
+Branch:   from **dev** (else **develop**); if neither exists, **create dev**
+          from **main** (else **master**) and push origin when possible
+Commit:   **/commit-prep** first (prep only: tests + CHANGELOG + blog); if green
+          and plan complete, commit on feature branch (see /work); optional push
+          of that branch only; never auto-merge to dev/main.
 ```
 
 Mid-session stop: leave the file in **`in-progress/`** with a short `## Progress`
