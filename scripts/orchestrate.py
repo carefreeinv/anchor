@@ -22,6 +22,7 @@ import time
 from pathlib import Path
 
 from anchor_client import Fleet, has_required_footer, load_prompt
+from scope_gate import ScopeConfig, ScopeError, enforce_config, parse_scope
 
 MAX_ATTEMPTS = 2  # Anchor stop condition: two failures → escalate/hold, never a third.
 
@@ -90,7 +91,8 @@ def split_tasks(plan: str) -> list[str]:
 
 
 def execute_task(task: str, plan: str, fleet: Fleet, verify_cmd: str | None,
-                 hold_on_fail: bool, insist: bool = False) -> dict:
+                 hold_on_fail: bool, insist: bool = False,
+                 scope: ScopeConfig | None = None) -> dict:
     system = load_prompt("anchor/system-prompts/mythos-core.md")
     history: list[str] = []
     for attempt in range(1, MAX_ATTEMPTS + 1):
@@ -120,6 +122,26 @@ def execute_task(task: str, plan: str, fleet: Fleet, verify_cmd: str | None,
         if not has_required_footer(out):
             history.append("FORMAT: output missing required '## Result'/'## How to verify' footer")
             continue
+
+        # Scope gate (mythos-core rule 7, machine-enforced): reject any change
+        # outside the task spec's ## Files in scope BEFORE running tests. A scope
+        # violation is not a retryable failure — widening scope is the planner's
+        # call, so route it straight back rather than burning another attempt.
+        if scope is not None:
+            try:
+                verdict = enforce_config(scope)
+            except ScopeError as exc:
+                print(f"[scope] could not check scope: {exc}", file=sys.stderr)
+                status = "hold" if hold_on_fail else "escalate"
+                history.append(f"SCOPE: could not determine worktree changes: {exc}")
+                return {"task": task, "status": status, "attempts": attempt,
+                        "history": history}
+            if not verdict.ok:
+                print(f"[scope] rejected: {', '.join(verdict.offending)}", file=sys.stderr)
+                return {"task": task, "status": "failed-scope", "attempts": attempt,
+                        "offending": list(verdict.offending), "message": verdict.message,
+                        "output": out}
+
         if verify_cmd:
             ok, log = run_cmd(verify_cmd)
             if not ok:
@@ -157,6 +179,11 @@ def main() -> None:
                     help="detached mode: hold failed tasks for later instead of escalating")
     ap.add_argument("--insist", action="store_true",
                     help="override workers' SUGGEST-ESCALATE fit checks and make them proceed")
+    ap.add_argument("--scope-spec",
+                    help="task-spec markdown with '## Files in scope'; changes outside it "
+                         "are rejected before --verify runs")
+    ap.add_argument("--worktree", default=".",
+                    help="worktree root for scope checks (default: cwd)")
     ap.add_argument("--out", default="orchestration_run.json")
     ap.add_argument("--registry", default=None)
     args = ap.parse_args()
@@ -177,7 +204,13 @@ def main() -> None:
     except ValueError as exc:
         sys.exit(str(exc))
 
-    results = [execute_task(t, plan, fleet, args.verify, args.hold_on_fail, args.insist)
+    scope = None
+    if args.scope_spec:
+        in_scope, allowed = parse_scope(Path(args.scope_spec).read_text(encoding="utf-8"))
+        scope = ScopeConfig(root=Path(args.worktree),
+                            in_scope=tuple(in_scope), allowed_generated=tuple(allowed))
+
+    results = [execute_task(t, plan, fleet, args.verify, args.hold_on_fail, args.insist, scope)
                for t in tasks]
     verdict = review(args.goal or "(plan file)", plan, results, fleet)
 

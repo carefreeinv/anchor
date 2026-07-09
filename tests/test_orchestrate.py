@@ -92,6 +92,51 @@ def test_execute_task_insist_overrides_fit_check():
     assert fleet.ep.calls == 2
 
 
+def test_execute_task_rejects_out_of_scope_before_tests(git_repo):
+    """Out-of-scope worktree edit → failed-scope, and --verify never runs."""
+    from pathlib import Path
+
+    from orchestrate import execute_task
+    from scope_gate import ScopeConfig
+
+    # Executor "touched" a file outside scope (untracked new file).
+    (git_repo / "secret.py").write_text("x = 1\n", encoding="utf-8")
+    marker = git_repo / "verify-ran.txt"
+    scope = ScopeConfig(root=git_repo, in_scope=("README",))
+
+    fleet = FakeFleet([GOOD_OUTPUT])
+    result = execute_task(
+        "do the thing", "plan", fleet,
+        verify_cmd=f"touch {marker}", hold_on_fail=False, scope=scope,
+    )
+
+    assert result["status"] == "failed-scope"
+    assert "secret.py" in result["offending"]
+    assert not Path(marker).exists()  # tests never ran on an out-of-scope diff
+    assert fleet.ep.calls == 1  # not retried — routed back to planner
+
+
+def test_execute_task_in_scope_runs_verify(git_repo):
+    """In-scope changes pass the gate and proceed to --verify."""
+    from pathlib import Path
+
+    from orchestrate import execute_task
+    from scope_gate import ScopeConfig
+
+    (git_repo / "README").write_text("edited in scope\n", encoding="utf-8")
+    marker = git_repo / "verify-ran.txt"
+    scope = ScopeConfig(root=git_repo, in_scope=("README",))
+
+    fleet = FakeFleet([GOOD_OUTPUT])
+    result = execute_task(
+        "edit the readme", "plan", fleet,
+        verify_cmd=f"touch {marker}", hold_on_fail=False, scope=scope,
+    )
+
+    assert result["status"] == "ok"
+    assert Path(marker).exists()  # gate passed → verify ran
+
+
 def test_assert_plan_file_allows_features_bugs_and_in_progress(tmp_path):
     from orchestrate import assert_plan_file_allowed
 
