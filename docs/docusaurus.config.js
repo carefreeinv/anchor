@@ -39,6 +39,14 @@ const config = {
   themeConfig:
     /** @type {import('@docusaurus/preset-classic').ThemeConfig} */
     ({
+      // Default og:image / twitter:image for social shares (1200×630)
+      image: 'img/og-card.png',
+      metadata: [
+        {
+          name: 'twitter:card',
+          content: 'summary_large_image',
+        },
+      ],
       navbar: {
         title: 'Anchor',
         items: [
