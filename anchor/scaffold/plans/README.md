@@ -97,7 +97,9 @@ one writer per clone/worktree.
 
 1. **Your** plans already under `in-progress/` (resume first)
 2. All `bugs/*.md` before any feature
-3. Then `features/*.md` by header `Value: high | medium | low` (default medium)
+3. Within each lane by header `Priority: P1 | P2 | P3` (default **P2**), then
+   `Value: high | medium | low` (default medium), then oldest first (mtime):
+   P1 → P2 → P3, then high → medium → low
 4. Keep only **model-fit** plans unless `--no-fit-check` or user names a plan
 5. Never `drafts/`, `completed/`, `ambiguous/`, `blocked/`, foreign `in-progress/`,
    or this README
@@ -105,7 +107,7 @@ one writer per clone/worktree.
 ## Write / promote / finish
 
 ```text
-Write:    /draft → .plans/drafts/<slug>.md  (or <slug>.local.md with --local)
+Write:    /draft → .plans/drafts/<slug>.local.md (private default; --shared → tracked .md)
 List:     /draft --list
 Load:     /draft --load <slug>  (or /draft <slug> if file exists)
 Promote:  /draft --promote <slug>  (infer bugs|features from plan; path = ready)
@@ -136,6 +138,7 @@ blocker is cleared.
 # Plan: <title>
 
 - **Value:** high | medium | low    # features only; omit for bugs
+- **Priority:** P1 | P2 | P3         # P1 > P2 > P3; default P2; orders within a lane
 - **Slug:** <filename-without-md>
 - **Preferred models:** <names and/or tiers>
 - **Depends on:** <slug-a, slug-b | none>
@@ -180,6 +183,8 @@ Executors open the file first; do not re-plan unless Done when is impossible.
 - Tracked: `kebab-case-slug.md` — **Slug** is the stem without `.md`
 - Untracked (local-only): `kebab-case-slug.local.md` — same **Slug** without
   the `.local` suffix; gitignored by `.plans/.gitignore` (`**/*.local.md`)
+- **Fresh drafts default to `<slug>.local.md`** (private/uncommitted); `/draft --promote`
+  publishes to a tracked `<slug>.md`, or `/draft --shared` creates one directly
 - `/work <slug>` matches either `slug.md` or `slug.local.md` under ready lanes
   (or your own `in-progress/`)
 - Optional on completion: `YYYY-MM-DD-<slug>.md` (or `…local.md`) under `completed/`

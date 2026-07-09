@@ -5,7 +5,7 @@ sidebar_label: Fleet workers
 
 # Multi-agent fleet workers
 
-Configure several agents—with **different model capabilities**—to watch a project’s **`.plans/`** tree and pull only the plans they are fit to complete (and whose **Depends on** are met). This is the headless companion to interactive [**`/work`**](../skills/work): same priority, Preferred-models, and dependency rules; no central assigner; no daemon baked into `/work` itself.
+Configure several agents—with **different model capabilities**—to watch a project’s **`.plans/`** tree and pull only the plans they are fit to complete (and whose **Depends on** are met). This is the headless companion to interactive [**`/work`**](../skills/work): same selection rules — lane, then **`Priority`** (`P1`>`P2`>`P3`, default `P2`) then `Value`, then model-fit and dependencies; no central assigner; no daemon baked into `/work` itself.
 
 **Operator shortcut:** run [**`/fleet-watch`**](../skills/fleet-watch) in your coding agent from the project (or `/fleet-watch my-app` from the Anchor repo) to inspect and install **reboot-persistent** watchers. You should not need to memorize CLI flags—the skill is the entrypoint.
 
@@ -37,10 +37,11 @@ flowchart TB
 
 1. Project has a **`.plans/`** tree (scaffold creates it): `bugs/`, `features/`, `in-progress/`, `ambiguous/`, `blocked/`, `drafts/`, `completed/`.
 2. Plans that should run live under **`bugs/`** or **`features/`** only (then claim → `in-progress/`). Path is authoritative—see [`.plans/README`](https://github.com/carefreeinv/anchor/blob/main/anchor/scaffold/plans/README.md) and [doctrine](../doctrine).
-3. Each plan header includes **Preferred models** and **Depends on** (slugs or `none`), e.g.:
+3. Each plan header includes **Priority**, **Preferred models**, and **Depends on** (slugs or `none`), e.g.:
 
    ```markdown
    - **Value:** medium
+   - **Priority:** P2            # P1 > P2 > P3; default P2; orders within a lane
    - **Preferred models:** mid, Grok 4.5, Qwen3 32B
    - **Depends on:** other-slug   # or `none` after checking existing plans
    ```

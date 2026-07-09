@@ -107,9 +107,10 @@ ready; finished plans go to `completed/`; never execute `drafts/` / `ambiguous/`
 / `blocked/`. Do not put `Lane:` or `Status:` inside plan files. **Promotion**
 from `drafts/` → ready is via explicit **`/draft --promote <slug>`**
 (user-authorized; agent infers `bugs/` vs `features/` from the plan) or a human
-filesystem move — never from `/work` or fleet pullers. Priority: own in-progress,
-then bugs before features by `Value`. Plan headers include **Preferred models**
-and **Depends on**.
+filesystem move — never from `/work` or fleet pullers. Selection order: own
+in-progress, then bugs before features; within a lane by **`Priority`**
+(`P1`>`P2`>`P3`, default `P2`) then `Value`, then oldest first. Plan headers
+include **Priority**, **Preferred models** and **Depends on**.
 
 **Draft with `/draft`** (list / load / create / promote). **Start execution with
 `/work`** (Claude: `.claude/commands/work.md`; Grok: `.grok/skills/work/SKILL.md`;

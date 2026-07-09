@@ -13,15 +13,15 @@ Does **not** implement product code. Does **not** run [`/work`](work). Promotion
 
 | Invocation | Behavior |
 |------------|----------|
-| `/draft` | Create from conversation goal → `.plans/drafts/<slug>.md` |
-| `/draft <topic…>` | Create; slug from topic |
-| `/draft <slug>` | **File exists → load/discuss**; missing → create |
+| `/draft` | Create from conversation goal → **`.plans/drafts/<slug>.local.md`** (private by default) |
+| `/draft <topic…>` | Create; slug from topic (`.local.md` by default) |
+| `/draft <slug>` | **File exists → load/discuss**; missing → create (`.local.md`) |
 | `/draft --load <slug>` | Load existing draft for discussion (must exist) |
 | `/draft --list` | List drafts (path, local?, Goal snippet) |
-| `/draft --promote <slug>` | Move draft → **`bugs/` or `features/`** (agent **infers** lane from plan) |
+| `/draft --promote <slug>` | Move draft → **`bugs/` or `features/`** (agent **infers** lane); publishes as tracked `<slug>.md` |
 | `/draft promote <slug>` | Same as `--promote` |
-| `/draft --local …` | Create/refine as **`<slug>.local.md`** (gitignored) |
-| `/draft local …` | Same as `--local` |
+| `/draft --shared …` | Create/refine as a **tracked** `<slug>.md` (committable draft) |
+| `/draft --local …` | Explicitly private `<slug>.local.md` (already the default) |
 
 No `bugs` / `features` flag on promote — the plan body should decide.
 
@@ -35,10 +35,10 @@ No `bugs` / `features` flag on promote — the plan body should decide.
 
 | Flag | Create filename | Git |
 |------|-----------------|-----|
-| (default) | `<slug>.md` | Tracked |
-| `--local` / `local` | `<slug>.local.md` | Ignored via `.plans/.gitignore` |
+| **(default)** | `<slug>.local.md` | Ignored via `.plans/.gitignore` — a fresh draft usually isn't ready to commit |
+| `--shared` / `--tracked` | `<slug>.md` | Tracked (committable draft) |
 
-Promote keeps the same basename in the ready lane.
+**Promotion publishes:** a `.local.md` draft lands as a tracked `<slug>.md` in the ready lane by default (drop the `.local` suffix); pass `--local` to keep it private.
 
 ```mermaid
 flowchart LR
