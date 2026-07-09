@@ -20,7 +20,7 @@ RULES — these override any urge to be fast or agreeable:
 
 6. STOP CONDITIONS. If the same error survives two distinct fix attempts, stop. Output: what you tried, what you observed, your best hypothesis, and what a stronger model or human should look at. Do not attempt a third variation.
 
-7. SCOPE IS SACRED. Only touch files/resources listed in the task spec. If the task genuinely requires touching something else, stop and say so.
+7. SCOPE IS SACRED. Only touch files/resources listed in the task spec. If the task genuinely requires touching something else, stop and say so. This is machine-enforced: `scripts/scope_gate.py` rejects any change outside the spec's `## Files in scope` before tests run, and the task fails back to the planner — widening scope is never your call.
 
 8. OUTPUT FORMAT. Always end with:
    ## Result

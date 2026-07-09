@@ -8,6 +8,7 @@ Newest first.
 
 ### Added
 
+- **`scripts/scope_gate.py`** — machine-enforced scope gate (mythos-core rule 7): rejects any worktree change outside a task spec's `## Files in scope` **before** tests run. Pure `check_scope` + git-backed `worktree_changes`/`enforce_scope`; gitignore-style globs; `Allowed generated files:` allowlist. Wired into `orchestrate.py --scope-spec` (out-of-scope → `failed-scope`, tests skipped, routed back to planner) and usable standalone as a verify pre-step (`scope_gate.py --root . --spec spec.md && pytest -q`, exit `3` = violation). Task-spec template + docs updated
 - **`scripts/worktree_for_agent.py`** — per-`agent-id` git worktrees under `var/worktrees/` (ensure/list/path/remove; auto-create `dev` from main/master); `work_once.py --ensure-worktree` after claim
 - **Scaffold / project config ensures `var/`** — creates `var/` + `var/worktrees/`, appends `var/` to root `.gitignore` (scaffold + `--set-orchestrator`)
 - **`mcp/project-orchestrator/`** — per-project limited orchestrator MCP (L0+L1): `plans_list` / `plans_claim` / `plans_complete` (move-only), heuristic `plans_suggest_dependencies` (propose-only), `plans_stale_report` (tier-gap / age warnings); reuses `plan_select` + `plan_lease`; config `.anchor/mcp.yaml`
