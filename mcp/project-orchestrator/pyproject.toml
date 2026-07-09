@@ -1,0 +1,6 @@
+[project]
+name = "project-orchestrator-mcp"
+version = "0.1.0"
+description = "Per-project MCP server for limited .plans/ orchestration (L0+L1)"
+requires-python = ">=3.10"
+dependencies = ["mcp[cli]>=1.2.0", "PyYAML>=6.0"]

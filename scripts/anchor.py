@@ -90,6 +90,11 @@ FLEET_FILES: list[str] = [
     "mcp/model-fleet/server.py",
     "mcp/model-fleet/pyproject.toml",
     "mcp/model-fleet/README.md",
+    "mcp/project-orchestrator/server.py",
+    "mcp/project-orchestrator/coordinator.py",
+    "mcp/project-orchestrator/pyproject.toml",
+    "mcp/project-orchestrator/README.md",
+
 ]
 
 LOCAL_MODEL_FILES: dict[str, str] = {
