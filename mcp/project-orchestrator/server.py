@@ -4,8 +4,14 @@
 Binds to a single project root. Tools operate only under that project's ``.plans/``.
 No promote, no plan-file writes, no arbitrary shell. ``plans_complete`` is move-only.
 
+Toolsets are role-scoped (``scripts/roles.py``): a session opened as ``--role
+planner`` or ``--role critic`` never even sees the plan-lifecycle tools
+(``plans_claim`` / ``plans_release`` / ``plans_complete``) — deny by omission,
+not by refusal. No ``--role`` keeps the full orchestrator surface.
+
 Run:
   python server.py --project /path/to/app --agent-id cursor-mid-1 --tier mid
+  python server.py --project /path/to/app --role planner   # read-only toolset
 
 Claude Code:
   claude mcp add myapp-orch -- python /path/to/mcp/project-orchestrator/server.py \\
@@ -39,9 +45,8 @@ for _scripts in (REPO / ".anchor" / "scripts", REPO / "scripts"):
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import coordinator as coord  # noqa: E402
-from mcp.server.fastmcp import FastMCP  # noqa: E402
+import roles  # noqa: E402
 
-mcp = FastMCP("project-orchestrator")
 _CFG: coord.CoordinatorConfig | None = None
 
 
@@ -61,7 +66,6 @@ def _err(exc: BaseException) -> str:
     return _out({"ok": False, "error": str(exc)})
 
 
-@mcp.tool()
 def project_info() -> str:
     """Project root, agent_id, tiers, Preferred orchestrator, compact stale warnings."""
     try:
@@ -70,7 +74,6 @@ def project_info() -> str:
         return _err(e)
 
 
-@mcp.tool()
 def plans_list() -> str:
     """List ready + in-progress plans (priority order) with fit/deps + stale warnings."""
     try:
@@ -79,7 +82,6 @@ def plans_list() -> str:
         return _err(e)
 
 
-@mcp.tool()
 def plan_read(plan_ref: str) -> str:
     """Read one plan under .plans/ by slug or path. Refuses paths outside the project."""
     try:
@@ -88,7 +90,6 @@ def plan_read(plan_ref: str) -> str:
         return _err(e)
 
 
-@mcp.tool()
 def plans_inventory_for_deps() -> str:
     """Summaries of all plan lanes for dependency analysis."""
     try:
@@ -97,7 +98,6 @@ def plans_inventory_for_deps() -> str:
         return _err(e)
 
 
-@mcp.tool()
 def plans_suggest_dependencies(goal_or_plan_text: str, exclude_slug: str = "") -> str:
     """Heuristic Depends-on suggestions (propose only; no file writes; no LLM)."""
     try:
@@ -112,7 +112,6 @@ def plans_suggest_dependencies(goal_or_plan_text: str, exclude_slug: str = "") -
         return _err(e)
 
 
-@mcp.tool()
 def plans_stale_report() -> str:
     """Stale / languishing plan warnings (age, tier-gap, expired lease, unmet deps). Warn-only."""
     try:
@@ -121,7 +120,6 @@ def plans_stale_report() -> str:
         return _err(e)
 
 
-@mcp.tool()
 def plans_claim(plan_ref: str, allow_unmet_deps: bool = False) -> str:
     """Claim a ready plan → in-progress + lease. Refuses unmet Depends on unless override."""
     try:
@@ -132,7 +130,6 @@ def plans_claim(plan_ref: str, allow_unmet_deps: bool = False) -> str:
         return _err(e)
 
 
-@mcp.tool()
 def plans_release(plan_ref: str, target_lane: str = "") -> str:
     """Return in-progress plan to bugs|features or drop a ready-path lease."""
     try:
@@ -145,7 +142,6 @@ def plans_release(plan_ref: str, target_lane: str = "") -> str:
         return _err(e)
 
 
-@mcp.tool()
 def plans_complete(plan_ref: str) -> str:
     """Move in-progress plan to completed/ only. Client asserts Done when — no verify in MCP."""
     try:
@@ -154,13 +150,51 @@ def plans_complete(plan_ref: str) -> str:
         return _err(e)
 
 
-@mcp.tool()
 def conventions_get() -> str:
     """Project conventions excerpt + Preferred orchestrator if present."""
     try:
         return _out(coord.conventions_get(_cfg()))
     except coord.CoordinatorError as e:
         return _err(e)
+
+
+_TOOL_FUNCS = {
+    fn.__name__: fn
+    for fn in (
+        project_info,
+        plans_list,
+        plan_read,
+        plans_inventory_for_deps,
+        plans_suggest_dependencies,
+        plans_stale_report,
+        plans_claim,
+        plans_release,
+        plans_complete,
+        conventions_get,
+    )
+}
+
+
+def register_tools(server, role: str | None = None) -> list[str]:
+    """Register only the tools the role may see (roles.mcp_toolset_for).
+
+    ``server`` needs a FastMCP-style ``tool()`` decorator factory. Returns the
+    registered tool names, in registration order.
+    """
+    names = [n for n in roles.mcp_toolset_for(role) if n in _TOOL_FUNCS]
+    for name in names:
+        server.tool()(_TOOL_FUNCS[name])
+    return names
+
+
+def build_server(role: str | None = None):
+    """FastMCP server exposing the role's toolset (import deferred so the
+    registration logic stays testable without the mcp package installed)."""
+    from mcp.server.fastmcp import FastMCP
+
+    server = FastMCP("project-orchestrator")
+    register_tools(server, role)
+    return server
 
 
 def main(argv: list[str] | None = None) -> None:
@@ -181,6 +215,12 @@ def main(argv: list[str] | None = None) -> None:
         default=None,
         help="Default fit tier: small|mid|reasoner|frontier",
     )
+    parser.add_argument(
+        "--role",
+        default=None,
+        choices=sorted(roles.ROLES),
+        help="Scope the exposed toolset to this role (default: full orchestrator surface)",
+    )
     args, _unknown = parser.parse_known_args(argv)
 
     try:
@@ -193,7 +233,7 @@ def main(argv: list[str] | None = None) -> None:
         print(f"project-orchestrator: {e}", file=sys.stderr)
         sys.exit(2)
 
-    mcp.run()
+    build_server(args.role).run()
 
 
 if __name__ == "__main__":

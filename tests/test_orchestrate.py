@@ -164,3 +164,139 @@ def test_assert_plan_file_allows_paths_outside_plans(tmp_path):
     p = tmp_path / "adhoc-plan.md"
     p.write_text("# plan")
     assert_plan_file_allowed(p)
+
+
+class SideEffectEndpoint:
+    """Fake endpoint whose chat() optionally performs a filesystem side effect
+    before replying — models the executor agent editing its worktree."""
+
+    name = "fake-ep"
+
+    def __init__(self, replies):
+        self.replies = list(replies)
+
+    def chat(self, messages, **kwargs):
+        side_effect, reply = self.replies.pop(0)
+        if side_effect:
+            side_effect()
+        return reply
+
+
+class SideEffectFleet:
+    def __init__(self, replies):
+        self.ep = SideEffectEndpoint(replies)
+
+    def pick(self, role):
+        return self.ep
+
+
+PLAN_TEXT = (
+    "## Steps\n"
+    "| # | Task | Touches | Verify by | Route to |\n"
+    "|---|------|---------|-----------|----------|\n"
+    "| 1 | say hello | README | none | mid |\n"
+)
+
+
+def _run_main(monkeypatch, git_repo, fleet, extra_args=()):
+    import orchestrate
+
+    out = git_repo / "run.json"
+    monkeypatch.setattr(orchestrate, "Fleet", lambda *a, **k: fleet)
+    monkeypatch.setattr(orchestrate, "load_prompt", lambda p: "PROMPT")
+    monkeypatch.setattr(
+        "sys.argv",
+        ["orchestrate.py", "--goal", "greet", "--worktree", str(git_repo),
+         "--out", str(out), *extra_args],
+    )
+    return out
+
+
+def test_main_planner_product_write_hard_error_run_still_outputs(
+    git_repo, monkeypatch
+):
+    """Planner phase writing a product file → hard error (exit 4), but the run
+    continues to its plan/review output (the spec text is not lost)."""
+    import json
+
+    import orchestrate
+
+    fleet = SideEffectFleet([
+        # planner: illegally writes a product file alongside its plan text
+        (lambda: (git_repo / "api.py").write_text("x = 1\n"), PLAN_TEXT),
+        (None, GOOD_OUTPUT),   # executor
+        (None, "review: ok"),  # critic
+    ])
+    out = _run_main(monkeypatch, git_repo, fleet)
+
+    with pytest.raises(SystemExit) as exc_info:
+        orchestrate.main()
+    assert exc_info.value.code == orchestrate.ROLE_VIOLATION_EXIT
+
+    run = json.loads(out.read_text())
+    assert run["plan"] == PLAN_TEXT          # run continued to spec output
+    assert run["review"] == "review: ok"
+    assert [v["role"] for v in run["role_violations"]] == ["planner"]
+    assert run["role_violations"][0]["offending"] == ["api.py"]
+    assert any(e["event"] == "role-violation" for e in run["events"])
+    assert any(e["event"] == "role-transition" for e in run["events"])
+
+
+def test_main_executor_plans_write_fails_role(git_repo, monkeypatch):
+    """Executor phase touching .plans/** → task marked failed-role, exit 4."""
+    import json
+
+    import orchestrate
+
+    def executor_touches_plans():
+        p = git_repo / ".plans" / "features" / "sneaky.md"
+        p.parent.mkdir(parents=True)
+        p.write_text("# widened my own mandate\n")
+
+    fleet = SideEffectFleet([
+        (None, PLAN_TEXT),                     # planner (clean)
+        (executor_touches_plans, GOOD_OUTPUT),  # executor (illegal write)
+        (None, "review: ok"),                  # critic
+    ])
+    out = _run_main(monkeypatch, git_repo, fleet)
+
+    with pytest.raises(SystemExit) as exc_info:
+        orchestrate.main()
+    assert exc_info.value.code == orchestrate.ROLE_VIOLATION_EXIT
+
+    run = json.loads(out.read_text())
+    assert run["results"][0]["status"] == "failed-role"
+    assert run["results"][0]["role_offending"] == [".plans/features/sneaky.md"]
+
+
+def test_main_clean_run_has_no_violations_and_exits_zero(git_repo, monkeypatch):
+    import json
+
+    import orchestrate
+
+    fleet = SideEffectFleet([
+        (None, PLAN_TEXT),
+        (None, GOOD_OUTPUT),
+        (None, "review: ok"),
+    ])
+    out = _run_main(monkeypatch, git_repo, fleet)
+
+    orchestrate.main()  # no SystemExit
+
+    run = json.loads(out.read_text())
+    assert run["role_violations"] == []
+    assert run["results"][0]["status"] == "ok"
+
+
+def test_enforce_role_phase_ignores_preexisting_changes(git_repo):
+    """Only writes made during the phase are attributed to the role."""
+    from orchestrate import enforce_role_phase, snapshot_changes
+    from roles import CRITIC
+
+    (git_repo / "dirty.py").write_text("pre-existing\n")
+    before = snapshot_changes(git_repo)
+
+    events = []
+    verdict = enforce_role_phase(CRITIC, git_repo, before, events)
+    assert verdict.ok  # critic wrote nothing new; dirty.py not blamed
+    assert events == []

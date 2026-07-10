@@ -209,3 +209,51 @@ def test_config_yaml(tmp_path: Path):
     assert cfg.default_tier == "small"
     assert "mid" in cfg.worker_tiers
     assert cfg.stale_after_hours == 24.0
+
+
+# ---- role-scoped toolsets (server.register_tools + scripts/roles.py) ----
+
+import server  # noqa: E402  (mcp/project-orchestrator on sys.path above)
+
+
+class FakeMCP:
+    """Records what a FastMCP server would register — no mcp package needed."""
+
+    def __init__(self):
+        self.registered: list[str] = []
+
+    def tool(self):
+        def deco(fn):
+            self.registered.append(fn.__name__)
+            return fn
+
+        return deco
+
+
+LIFECYCLE = {"plans_claim", "plans_release", "plans_complete"}
+
+
+def test_planner_session_lists_no_write_or_dispatch_tools():
+    fake = FakeMCP()
+    server.register_tools(fake, role="planner")
+    assert set(fake.registered) & LIFECYCLE == set()
+    assert "plans_list" in fake.registered
+    assert "plan_read" in fake.registered
+
+
+def test_critic_session_lists_no_write_or_dispatch_tools():
+    fake = FakeMCP()
+    server.register_tools(fake, role="critic")
+    assert set(fake.registered) & LIFECYCLE == set()
+
+
+def test_executor_and_default_sessions_get_lifecycle_tools():
+    for role in ("executor", None):
+        fake = FakeMCP()
+        server.register_tools(fake, role=role)
+        assert LIFECYCLE <= set(fake.registered)
+    # every declared tool name exists as a registered function
+    fake = FakeMCP()
+    names = server.register_tools(fake, role=None)
+    assert names == fake.registered
+    assert set(names) == set(server._TOOL_FUNCS)

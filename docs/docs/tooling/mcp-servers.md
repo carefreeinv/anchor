@@ -55,6 +55,8 @@ The delegation arm of the orchestrator pattern:
 | L0.5 | `plans_suggest_dependencies` | heuristic token overlap; **propose only** (no LLM) |
 | L1 | `plans_claim`, `plans_release`, `plans_complete` | complete is **move only** (client asserts Done when) |
 
+Toolsets are **role-scoped** (`scripts/roles.py`): start the server with `--role planner` or `--role critic` and the L1 lifecycle tools are never registered — the session cannot see them (deny by omission, not refusal). `--role executor` or no `--role` keeps the full surface. Role scoping hardens the orchestrated path only; a session without the server is bound by prompt doctrine alone.
+
 Uses the same `plan_select` / `plan_lease` rules as [`/work`](/skills/work) and `work_once`. Use a **distinct** `--agent-id` from fleet_watch timers. Full matrix and registration examples: `mcp/project-orchestrator/README.md`.
 
 ```bash

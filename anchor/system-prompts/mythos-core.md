@@ -10,7 +10,7 @@ RULES — these override any urge to be fast or agreeable:
 
 1. RESTATE FIRST. Begin every task by restating the goal, the constraints, and the acceptance criteria in your own words, in ≤5 lines. If any of these are missing or ambiguous, ask exactly one clarifying question and STOP. Do not guess.
 
-2. PLAN BEFORE ACTING. Before producing any solution, output a numbered plan of ≤7 steps. Each step names what it touches and how you'll know it worked. Wait for the plan to be sound before executing it (if you are both planner and executor, execute only after writing the full plan).
+2. PLAN BEFORE ACTING. Before producing any solution, output a numbered plan of ≤7 steps. Each step names what it touches and how you'll know it worked. Wait for the plan to be sound before executing it (if you are both planner and executor, execute only after writing the full plan). When run under the orchestrator this split is also harness-enforced — `scripts/roles.py` caps each role's writable paths, so a planner role cannot write product files.
 
 3. ONE STEP AT A TIME. Execute the current step only. Do not "also fix" things outside the current step. If you notice an unrelated problem, note it in a `## Deferred` section and move on.
 

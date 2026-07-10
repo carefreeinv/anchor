@@ -69,7 +69,11 @@ python pending_merges.py --json --exit-code
 
 ## orchestrate.py
 
-The whole loop: plan (planner role or `--plan-file`) → split into tasks → execute each in a fresh context → verify with your `--verify` command → two-strike escalate or `--hold-on-fail` (detached mode) → fresh-context critic review → JSON run report. Format-gates every executor output (missing footer = failed attempt). Pass `--scope-spec <task-spec.md>` (with `--worktree <root>`) to run the **scope gate** before `--verify`: a change outside the spec's `## Files in scope` marks the task `failed-scope` and tests never run. Often invoked by `work_once.py --run` after a claim.
+The whole loop: plan (planner role or `--plan-file`) → split into tasks → execute each in a fresh context → verify with your `--verify` command → two-strike escalate or `--hold-on-fail` (detached mode) → fresh-context critic review → JSON run report. Format-gates every executor output (missing footer = failed attempt). Pass `--scope-spec <task-spec.md>` (with `--worktree <root>`) to run the **scope gate** before `--verify`: a change outside the spec's `## Files in scope` marks the task `failed-scope` and tests never run. Roles are also harness-enforced per phase via the `roles.py` capability map: writes made during the planner phase outside `.plans/**`, executor writes into `.plans/**` (or its own spec), or any critic write are **role violations** — logged as events, marked `failed-role` on the task, and the run exits `4` after still emitting its outputs. Role transitions (plan approved → executors spawned → review) are explicit logged events. Often invoked by `work_once.py --run` after a claim.
+
+## roles.py
+
+The role→capability map behind ANCHOR.md's role-separation bullet — planner / executor / critic as **harness-enforced capability sets**, not prompt framing, in one module so nothing re-declares role powers elsewhere. Each `RoleCapabilities` carries writable-path allow/deny globs (reusing `scope_gate.path_matches` — one glob implementation), a `can_dispatch` flag (orchestrator only), and the MCP toolset the role may see. `check_role_writes(caps, paths)` classifies a phase's writes; unlike the scope gate it is always active (an empty allowlist means read-only). Consumed by `orchestrate.py` (per-phase enforcement) and the project-orchestrator MCP server (`--role` toolsets). Reads stay unrestricted for every role — only writes and dispatch are gated.
 
 ## scope_gate.py
 

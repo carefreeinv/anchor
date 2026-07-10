@@ -3,7 +3,7 @@ sidebar_position: 2
 sidebar_label: Grok Build
 ---
 
-<!-- synced-from: platforms/grok-build/GROK.md @ eedbb938c9491b9e2e6aa6b54b41cb507fd9407f -->
+<!-- synced-from: platforms/grok-build/GROK.md @ 6bbc4477de6568a2f7c4b26dce00377e19d78dbd -->
 
 # Grok Build
 

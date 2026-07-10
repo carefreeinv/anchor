@@ -14,6 +14,14 @@ Per-project **limited** orchestrator for Anchor `.plans/`. Coding agents get lis
 | **L2–L4** | handoff / orchestrate / allowlisted shell | **off** (not shipped in v1) |
 | **Forbidden** | promote drafts, MCP git push/merge, plan markdown writes, path escape, foreign in-progress | always |
 
+### Role-scoped toolsets (`--role`)
+
+`--role planner|executor|critic|orchestrator` scopes the registered tools to the
+role's capability set from Anchor `scripts/roles.py` — deny by omission: a
+planner or critic session never even sees the L1 lifecycle tools
+(`plans_claim` / `plans_release` / `plans_complete`), an executor keeps them.
+No `--role` = full orchestrator surface (pre-role behavior).
+
 ### Refuse matrix
 
 | Action | Result |
@@ -46,6 +54,8 @@ python mcp/project-orchestrator/server.py \
   --project /path/to/myapp \
   --agent-id cursor-mid-1 \
   --tier mid
+# read-only toolset for a planning session:
+python mcp/project-orchestrator/server.py --project /path/to/myapp --role planner
 ```
 
 ### Claude Code
