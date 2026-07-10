@@ -237,7 +237,7 @@ def _worker(cfg: CoordinatorConfig) -> Worker:
 
 
 def _read_conventions(cfg: CoordinatorConfig) -> dict[str, Any]:
-    for name in ("ANCHOR-CONVENTIONS.md", "CLAUDE.md", "AGENTS.md"):
+    for name in (".anchor/conventions.md", "ANCHOR-CONVENTIONS.md", "CLAUDE.md", "AGENTS.md"):
         p = cfg.project_root / name
         if p.is_file():
             try:

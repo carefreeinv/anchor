@@ -13,14 +13,29 @@ from pathlib import Path
 
 from mcp.server.fastmcp import FastMCP
 
-REPO = Path(__file__).resolve().parents[2]
-sys.path.insert(0, str(REPO / "scripts"))
+
+def _project_root() -> Path:
+    here = Path(__file__).resolve().parent  # …/mcp/anchor-prompts or …/.anchor/mcp/anchor-prompts
+    if here.parent.name == "mcp" and here.parent.parent.name == ".anchor":
+        return here.parent.parent.parent
+    if here.parent.name == "mcp":
+        return here.parent.parent
+    return here.parents[2]
+
+
+REPO = _project_root()
+for _scripts in (REPO / ".anchor" / "scripts", REPO / "scripts"):
+    if _scripts.is_dir():
+        sys.path.insert(0, str(_scripts))
+        break
 
 mcp = FastMCP("anchor-prompts")
 
 
 def _read(rel: str) -> str:
-    return (REPO / rel).read_text(encoding="utf-8")
+    """Read doctrine from ``anchor/`` (source tree) or ``.anchor/`` (scaffold)."""
+    from anchor_client import resolve_doctrine_path
+    return resolve_doctrine_path(rel, root=REPO).read_text(encoding="utf-8")
 
 
 @mcp.tool()

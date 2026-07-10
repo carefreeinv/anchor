@@ -1,6 +1,6 @@
 # Anchor discipline for local models
 
-Per-model adaptations of `anchor/system-prompts/mythos-core.md` for the models that consistently perform well for local serving. General laws for ALL local models, in descending order of impact:
+Per-model adaptations of `.anchor/system-prompts/mythos-core.md` for the models that consistently perform well for local serving. General laws for ALL local models, in descending order of impact:
 
 1. **One task spec per fresh context.** Small models degrade fast with context length; never run long conversations. `scripts/orchestrate.py` enforces this.
 2. **Force the output format.** The mythos-core `## Result / ## How to verify / ## Deferred` footer matters *more* for small models — it's the hook external tooling checks.

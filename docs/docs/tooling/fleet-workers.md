@@ -5,9 +5,9 @@ sidebar_label: Fleet workers
 
 # Multi-agent fleet workers
 
-Configure several agents—with **different model capabilities**—to watch a project’s **`.plans/`** tree and pull only the plans they are fit to complete (and whose **Depends on** are met). This is the headless companion to interactive [**`/work`**](../skills/work): same selection rules — lane, then **`Priority`** (`P1`>`P2`>`P3`, default `P2`) then `Value`, then model-fit and dependencies; no central assigner; no daemon baked into `/work` itself.
+Configure several agents—with **different model capabilities**—to watch a project’s **`.plans/`** tree and pull only the plans they are fit to complete (and whose **Depends on** are met). This is the headless companion to interactive [**`/work`**](/skills/work): same selection rules — lane, then **`Priority`** (`P1`>`P2`>`P3`, default `P2`) then `Value`, then model-fit and dependencies; no central assigner; no daemon baked into `/work` itself.
 
-**Operator shortcut:** run [**`/fleet-watch`**](../skills/fleet-watch) in your coding agent from the project (or `/fleet-watch my-app` from the Anchor repo) to inspect and install **reboot-persistent** watchers. You should not need to memorize CLI flags—the skill is the entrypoint.
+**Operator shortcut:** run [**`/fleet-watch`**](/skills/fleet-watch) in your coding agent from the project (or `/fleet-watch my-app` from the Anchor repo) to inspect and install **reboot-persistent** watchers. You should not need to memorize CLI flags—the skill is the entrypoint.
 
 ## What you are building
 
@@ -36,7 +36,7 @@ flowchart TB
 ## Prerequisites
 
 1. Project has a **`.plans/`** tree (scaffold creates it): `bugs/`, `features/`, `in-progress/`, `ambiguous/`, `blocked/`, `drafts/`, `completed/`.
-2. Plans that should run live under **`bugs/`** or **`features/`** only (then claim → `in-progress/`). Path is authoritative—see [`.plans/README`](https://github.com/carefreeinv/anchor/blob/main/anchor/scaffold/plans/README.md) and [doctrine](../doctrine).
+2. Plans that should run live under **`bugs/`** or **`features/`** only (then claim → `in-progress/`). Path is authoritative—see [`.plans/README`](https://github.com/carefreeinv/anchor/blob/main/anchor/scaffold/plans/README.md) and [doctrine](/doctrine).
 3. Each plan header includes **Priority**, **Preferred models**, and **Depends on** (slugs or `none`), e.g.:
 
    ```markdown
@@ -225,7 +225,7 @@ Workers do **not** watch `drafts/` or chat. Eligibility is entirely filesystem:
 | Return → `bugs/`\|`features/` | agent | Release claim or unpark when ready again |
 | `git mv` → `completed/` | owning executor when Done when holds | Leaves in-progress |
 
-So “monitor the project folder” means: **poll `.plans/bugs`, `.plans/features`, and your own `.plans/in-progress`**, not the whole monorepo. Prefer promoting drafts only when acceptance criteria and Preferred models are filled in.
+So “monitor the project folder” means: **poll `.plans/bugs`, `.plans/features`, and your own `.plans/in-progress`**, not the whole repository. Prefer promoting drafts only when acceptance criteria and Preferred models are filled in.
 
 ### 4. Isolation (git multi-writer)
 
@@ -290,7 +290,7 @@ flowchart LR
 
 Never “drain entire backlog forever” as the default—bounded polls keep economics and blast radius under control.
 
-*Right-sized fleet pull is a big part of the [Savings](../savings) story — please consider [donating](https://donate.stripe.com/28E6oHeq8fxQ5p7fmBdjO01) to help support this project.*
+*Right-sized fleet pull is a big part of the [Savings](/savings) story — please consider [donating](https://donate.stripe.com/28E6oHeq8fxQ5p7fmBdjO01) to help support this project.*
 
 ## End-to-end checklist
 
@@ -313,10 +313,10 @@ You should see the same paths with different **fit** columns (`good` / `overqual
 
 ## Related
 
-- [**`/work`**](../skills/work) — interactive pick/execute contract
-- [**`/fleet-watch`**](../skills/fleet-watch) — install durable timers for a project
-- [Doctrine — tracked plans](../doctrine)
-- [Playbook — orchestrator pattern](../playbook)
-- [Model fitness](../model-fitness) — who should take which work
-- [Utility scripts](scripts) — `work_once`, `orchestrate`, registry
+- [**`/work`**](/skills/work) — interactive pick/execute contract
+- [**`/fleet-watch`**](/skills/fleet-watch) — install durable timers for a project
+- [Doctrine — tracked plans](/doctrine)
+- [Playbook — orchestrator pattern](/playbook)
+- [Model fitness](/model-fitness) — who should take which work
+- [Utility scripts](/tooling/scripts) — `work_once`, `orchestrate`, registry
 - Source: `scripts/work_once.py`, `scripts/plan_select.py`, `scripts/plan_lease.py`

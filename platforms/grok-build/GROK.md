@@ -2,7 +2,7 @@
 
 <!-- Instructions file for Grok's coding agent. Grok models are fast, eager, and terse by default —
      the failure mode is acting before planning and over-trusting first drafts. These rules impose
-     the Anchor doctrine (anchor/ANCHOR.md). Place at repo root; also paste the "Session preamble"
+     the Anchor doctrine (.anchor/ANCHOR.md). Place at repo root; also paste the "Session preamble"
      into custom instructions if the product supports them. -->
 
 ## Session preamble
@@ -19,7 +19,7 @@ You are one worker in a verified pipeline, not the whole pipeline. Speed is wort
 6. Two failed attempts at the same error → stop; output attempts, observations, hypothesis, and what to escalate.
 7. Touch only files listed in the task spec. Full stop.
 8. End every response with `## Result`, `## How to verify`, `## Deferred / concerns`.
-9. SOLID by default; use the project's idiomatic composition mechanism (check `ANCHOR-CONVENTIONS.md`) over deep inheritance; no dead code, no spaghetti control flow.
+9. SOLID by default; use the project's idiomatic composition mechanism (check `.anchor/conventions.md`) over deep inheritance; no dead code, no spaghetti control flow.
 10. **Docs describe current state, not plans.** README / `docs/` / CHANGELOG / blog / release notes cover **shipped** code and public contracts only. Never document the **contents** of `.plans/` as product docs or roadmap. When plan work ships, document the code — not the plan file. Documenting the `.plans/` **workflow** itself is fine when that is a shipped feature.
 11. **Before any `git commit`:** run **`/commit-prep`** (prep only: tests, CHANGELOG, blog-if-warranted). Do not skip for “small” changes. After gates are **green**, if plan work is complete, stage + commit on the **feature branch** (worktree preferred); never on main/dev; never auto-merge.
 
@@ -44,13 +44,13 @@ You are one worker in a verified pipeline, not the whole pipeline. Speed is wort
   same economics as Nemotron's thinking toggle.
 - Community reports intermittent regressions and tool-use flakiness `(unverified)` —
   external verification per the hard rules above is load-bearing here, not ceremony.
-- Fit check before starting any task: `anchor/model-fitness.md` has Grok 4.5's row; a
+- Fit check before starting any task: `.anchor/model-fitness.md` has Grok 4.5's row; a
   poor fit means a `SUGGEST-ESCALATE:` first line per mythos-core rule 11, not a
   silent attempt.
 
 ## Working with this repo's tooling
 
-- Task specs come from `anchor/templates/task-spec.md`; demand one if handed a vague task.
+- Task specs come from `.anchor/templates/task-spec.md`; demand one if handed a vague task.
 - If MCP is supported in your Grok Build environment, connect `mcp/anchor-prompts` and call `tune_prompt` on any vague task before starting.
 
 ## /draft
@@ -82,6 +82,31 @@ from **`dev`**/`develop` (**create `dev` from main/master if missing**);
 Configure durable plan pollers: `/fleet-watch` (this project) or
 `/fleet-watch other-app`. Watchers run a work-style claim/execute loop in the
 background. Skill: `.grok/skills/fleet-watch/SKILL.md`. Prefer the skill over raw CLI.
+
+## /install-anchor
+
+Ensure the **`anchor` CLI** is on `PATH` safely (user-local symlink to
+`bin/anchor`, no sudo by default). Status / fix / optional bindir. Skill:
+`.grok/skills/install-anchor/SKILL.md`.
+
+## /anchor
+
+**In a project (this file):** locate the local Anchor checkout and
+**conform this tree** (CWD/git root by default) — check/upgrade or
+conflict-aware scaffold. Skill: `.grok/skills/anchor/SKILL.md` (source:
+`platforms/grok-build/skills/anchor/`). Prefer `anchor --upgrade` when a
+manifest exists. Dry-run first; merge/backup/skip on conflicts.
+
+**In the Anchor base skill:** project **path required** (operate on
+another project from the Anchor tree). Same slash name; different default.
+
+## /local-models
+
+Probe this machine for **lean local models**, recommend fits, install links, and
+optional reconfigure draft. Scaffolded into **projects** (not part of
+the Anchor base skill set). Skill: `.grok/skills/local-models/SKILL.md`
+(source: `platforms/grok-build/skills/local-models/`). Uses
+`scripts/fit_device.py --probe` when fleet/scripts are available.
 
 ## /commit-prep
 

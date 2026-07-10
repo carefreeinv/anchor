@@ -38,7 +38,7 @@ The "which tier deserves this task" rule as code: regex heuristics first (free),
 
 ## work_once.py
 
-Headless puller for multi-tier fleets: same priority + Preferred-models fit + **Depends on** checks as interactive `/work`, one claim per invocation (optional `--max-plans N`). Each worker passes `--tier` or `--endpoint` and a unique `--agent-id`; claims **move** plans to `.plans/in-progress/` and write leases under `.plans/.leases/`. Other agents ignore foreign in-progress work. Unmet dependencies are skipped (`--no-dep-check` to override). Park half-baked/stuck work: `--park ambiguous|blocked`. Return to ready: `--return-ready`. Parallel code edits: **`worktree_for_agent.py`** or `work_once.py --ensure-worktree` (one worktree per agent-id under `var/worktrees/`). Exit `1` means idle backlog (normal for cron). Full setup: [Fleet workers](fleet-workers).
+Headless puller for multi-tier fleets: same priority + Preferred-models fit + **Depends on** checks as interactive `/work`, one claim per invocation (optional `--max-plans N`). Each worker passes `--tier` or `--endpoint` and a unique `--agent-id`; claims **move** plans to `.plans/in-progress/` and write leases under `.plans/.leases/`. Other agents ignore foreign in-progress work. Unmet dependencies are skipped (`--no-dep-check` to override). Park half-baked/stuck work: `--park ambiguous|blocked`. Return to ready: `--return-ready`. Parallel code edits: **`worktree_for_agent.py`** or `work_once.py --ensure-worktree` (one worktree per agent-id under `var/worktrees/`). Exit `1` means idle backlog (normal for cron). Full setup: [Fleet workers](/tooling/fleet-workers).
 
 ```bash
 python work_once.py --list --tier mid --agent-id mid-1
@@ -50,7 +50,7 @@ Shared selection: `plan_select.py` (fit + deps). Claims + moves: `plan_lease.cla
 
 ## fleet_watch.py
 
-Implementation behind the [**`/fleet-watch`**](../skills/fleet-watch) skill (prefer the skill in an agent). Direct CLI for automation/CI: `--project`, `--status`, `--list` / `--once`, `--emit systemd|cron`, `--install-user` (systemd **user** timers; reboot-safe with `loginctl enable-linger $USER`). See [Fleet workers](fleet-workers) for the pull model.
+Implementation behind the [**`/fleet-watch`**](/skills/fleet-watch) skill (prefer the skill in an agent). Direct CLI for automation/CI: `--project`, `--status`, `--list` / `--once`, `--emit systemd|cron`, `--install-user` (systemd **user** timers; reboot-safe with `loginctl enable-linger $USER`). See [Fleet workers](/tooling/fleet-workers) for the pull model.
 
 ```bash
 python fleet_watch.py --project /path/to/app --status
@@ -81,4 +81,12 @@ Playbook move #5: your tasks (JSONL with pass regexes) across your endpoints →
 
 ## fit_device.py
 
-The on-ramp for the [personal-devices tier](../hardware/personal-devices): `python fit_device.py --memory <GB> [--backend metal|mlx|cuda]` picks the most capable model that fits a Mac Mini, AI laptop, or single-GPU desktop, then prints a launch command and an `endpoints.yaml` stanza with the right quirks. Memory is a conservative weights+KV+overhead estimate — confirm with `benchmark.py`.
+The on-ramp for the [personal-devices tier](/hardware/personal-devices):
+
+```bash
+python fit_device.py --probe                 # detect OS/RAM/GPU/WSL + install tips + fit
+python fit_device.py --memory 48 --backend metal
+python fit_device.py --list
+```
+
+`--probe` prints machine facts, **markdown-friendly install links** (WSL, CUDA, llama.cpp, Ollama, vLLM, MLX), then the best lean catalog fit with HF weight links and an `endpoints.yaml` stanza. On **WSL**, it also queries the **Windows host** via `powershell.exe` (RAM/CPU/GPUs) so recommendations use bare-metal capacity and prefer a **host** model executor. Manual `--memory` / `--backend` still work. Memory is a conservative weights+KV+overhead estimate — confirm with `benchmark.py`. Agent UX: [**`/local-models`**](/skills/local-models).

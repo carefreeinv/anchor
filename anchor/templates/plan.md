@@ -47,7 +47,7 @@ Optional detail list:
 - <hard constraints: language, versions, style, perf, no-touch zones>
 
 ## Conventions
-<language/framework from ANCHOR-CONVENTIONS.md (or detected/asked directly) + its idiomatic composition mechanism — see anchor/ANCHOR.md "Code quality defaults". SOLID applies regardless.>
+<language/framework from ANCHOR-CONVENTIONS.md (or detected/asked directly) + its idiomatic composition mechanism — see .anchor/ANCHOR.md "Code quality defaults". SOLID applies regardless.>
 
 ## Steps
 | # | Task | Touches | Verify by | Route to |
@@ -72,7 +72,7 @@ Optional detail list:
 
 Fill **Preferred models** from plan complexity so cheap/capable executors find the right work and expensive tiers leave it alone. `/work` skips poor-fit plans unless the user names the plan or passes `--no-fit-check` (still one plan — not the whole backlog).
 
-Use **model names** and/or **tiers** (see `anchor/ANCHOR.md` routing + `anchor/model-fitness.md`):
+Use **model names** and/or **tiers** (see `.anchor/ANCHOR.md` routing + `.anchor/model-fitness.md`):
 
 | Tier | Typical models | Good for |
 |------|----------------|----------|

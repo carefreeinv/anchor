@@ -3,8 +3,8 @@
 #
 # Asks which platform(s), fleet tooling, default language/framework, and preferred
 # model priority you want, saves the answer under ~/.config/anchor/defaults, and
-# prints the exact `anchor <project-dir>` command to scaffold a project with those
-# defaults. Safe to re-run any time to change your mind. The language default is
+# prints the exact `anchor` / `anchor <project-dir>` command to scaffold a project
+# with those defaults. Safe to re-run any time to change your mind. The language default is
 # proposed (not forced) by anchor.py's framework survey when a project's framework
 # can't be detected — e.g. propose node if the project is blank and you've said so.
 # The model priority is your personal order for reaching for / escalating between
@@ -280,11 +280,12 @@ if [ -n "$priority_csv" ]; then
 fi
 if [ -n "$orchestrator" ]; then
   echo "Preferred orchestrator: $orchestrator"
-  echo "  (per-project change later: anchor <project-dir> --set-orchestrator <token>)"
+  echo "  (per-project change later: cd project && anchor --set-orchestrator <token>)"
 fi
 echo
 echo "From now on, this scaffolds a project using those defaults automatically:"
-echo "  $REPO_ROOT/bin/anchor <project-dir>"
+echo "  cd <project-dir> && $REPO_ROOT/bin/anchor"
+echo "  # or: $REPO_ROOT/bin/anchor <project-dir>"
 echo
 
 fleet_suffix=""
@@ -299,6 +300,7 @@ if [ -n "$language" ]; then
   echo " '$language' when it can't — pass --framework $language yourself to force it instead.)"
 fi
 echo
-echo "Tip: symlink bin/anchor onto your PATH (see README) so you can just run 'anchor <project-dir>' from anywhere."
+echo "Tip: symlink bin/anchor onto your PATH (see README) so you can run 'anchor' in a project"
+echo "folder (defaults to cwd) or 'anchor <project-dir>' from anywhere."
 echo
 echo "Need help? $HELP_URL"

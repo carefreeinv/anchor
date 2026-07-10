@@ -67,7 +67,8 @@ def test_status_ok(tmp_path, capsys):
     project = tmp_path / "app"
     for lane in ("bugs", "features", "in-progress", "drafts", "completed"):
         (project / ".plans" / lane).mkdir(parents=True)
-    (project / "ANCHOR-CONVENTIONS.md").write_text(
+    (project / ".anchor").mkdir(parents=True, exist_ok=True)
+    (project / ".anchor" / "conventions.md").write_text(
         "**Preferred orchestrator:** `claude:opus`\n"
     )
     code = fw.cmd_status(project, Path(fw.SCRIPTS_DIR))

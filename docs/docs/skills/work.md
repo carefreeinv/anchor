@@ -1,13 +1,16 @@
 ---
-sidebar_position: 1
-sidebar_label: /work
+sidebar_position: 3
+sidebar_label: /work · execute plans
 ---
 
 # `/work`
 
+**Best used:** interactive **execution** of ready plans under `.plans/bugs/` or
+`.plans/features/` in the current project. See [Skills overview](/skills/overview).
+
 Execute the next (or named) ready plan from **`.plans/`**. Same contract on every platform — only install paths and “no shell” adaptations differ.
 
-To **create** a plan first, use [**`/draft`**](draft) (writes under `.plans/drafts/`; optional `--local`).
+To **create** a plan first, use [**`/draft`**](/skills/draft) (writes under `.plans/drafts/`; optional `--local`).
 
 Plans are git-tracked markdown under the **`.plans/`** dotdir. Do not gitignore the whole tree (scaffold ignores only `*.local.md`). Many UIs hide dotfolders — use the explicit path.
 
@@ -60,7 +63,7 @@ stateDiagram-v2
   end note
 ```
 
-Agents must **never** promote drafts (use [**`/draft --promote`**](draft)), move work into `drafts/`, or touch another agent’s `in-progress/` plan.
+Agents must **never** promote drafts except via [**`/draft --promote`**](/skills/draft), move work into `drafts/`, or touch another agent’s `in-progress/` plan. **Preserve basename** on every lane move (including `.local.md`); only a human may rename for privacy/tracking.
 
 ## Priority (bare `/work`)
 
@@ -73,7 +76,7 @@ Agents must **never** promote drafts (use [**`/draft --promote`**](draft)), move
 
 ## Model fit
 
-Plan headers SHOULD include **Preferred models** (tiers `small | mid | reasoner | frontier` and/or concrete names). Bare `/work` skips plans that are a poor fit for the current model (overqualified or underqualified). Named slug/path or `--no-fit-check` overrides the skip; still state fit in one line when mismatched. See [model fitness](../model-fitness) and the [plan template](https://github.com/carefreeinv/anchor/blob/main/anchor/templates/plan.md).
+Plan headers SHOULD include **Preferred models** (tiers `small | mid | reasoner | frontier` and/or concrete names). Bare `/work` skips plans that are a poor fit for the current model (overqualified or underqualified). Named slug/path or `--no-fit-check` overrides the skip; still state fit in one line when mismatched. See [model fitness](/model-fitness) and the [plan template](https://github.com/carefreeinv/anchor/blob/main/anchor/templates/plan.md).
 
 **Depends on:** comma-separated other plan slugs (or `none`). A dependency is **met** when that slug is under `completed/` (or git history shows it was under `completed/`) and is **not** still open in another lane. Coordinators/planners should inventory existing plans when drafting and fill this field. Executors must not start work with unmet dependencies.
 
@@ -120,7 +123,7 @@ When the user types `/work` without tool access: ask them to `ls .plans/bugs .pl
 
 ### Headless / fleet
 
-Interactive `/work` stays one-plan-per-invocation (not a daemon). For always-on or multi-tier workers that **pull** work, see the full guide: **[Multi-agent fleet workers](../tooling/fleet-workers)** (cron/systemd, capability tiers, leases, git isolation).
+Interactive `/work` stays one-plan-per-invocation (not a daemon). For always-on or multi-tier workers that **pull** work, see the full guide: **[Multi-agent fleet workers](/tooling/fleet-workers)** (cron/systemd, capability tiers, leases, git isolation).
 
 ```bash
 python scripts/work_once.py --list --tier mid --agent-id worker-1
@@ -146,14 +149,14 @@ When the project uses Git and work needs a branch:
    **green**, stage + commit on the feature branch; optional push of that branch
    only — never auto-merge to dev/main.
 
-See [Fleet workers — isolation](../tooling/fleet-workers#4-isolation-git-multi-writer).
+See [Fleet workers — isolation](/tooling/fleet-workers#4-isolation-git-multi-writer).
 
 ## Related
 
-- [Multi-agent fleet workers](../tooling/fleet-workers) — architecture for multi-tier pull
-- [`/fleet-watch`](fleet-watch) — install durable timers for a project
-- [MCP servers](../tooling/mcp-servers) — **project-orchestrator** exposes list/claim/complete for a bound project without shell
-- [Doctrine — tracked plans](../doctrine)
-- [Playbook — orchestrator pattern](../playbook)
-- [Platforms](../platforms/claude-code) — install and model-specific notes
+- [Multi-agent fleet workers](/tooling/fleet-workers) — architecture for multi-tier pull
+- [`/fleet-watch`](/skills/fleet-watch) — install durable timers for a project
+- [MCP servers](/tooling/mcp-servers) — **project-orchestrator** exposes list/claim/complete for a bound project without shell
+- [Doctrine — tracked plans](/doctrine)
+- [Playbook — orchestrator pattern](/playbook)
+- [Platforms](/platforms/claude-code) — install and model-specific notes
 - Source skill: `.grok/skills/work/SKILL.md` / `.claude/commands/work.md` in the [Anchor repo](https://github.com/carefreeinv/anchor)

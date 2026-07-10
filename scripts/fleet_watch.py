@@ -209,8 +209,13 @@ def cmd_status(project: Path, scripts: Path) -> int:
             d = plans / lane
             n = len(list(d.glob("*.md"))) if d.is_dir() else 0
             print(f"  {lane:12s} {n} plan(s)" + ("" if d.is_dir() else " (no dir)"))
-    conv = project / "ANCHOR-CONVENTIONS.md"
-    if conv.is_file():
+    conv = None
+    for rel in (".anchor/conventions.md", "ANCHOR-CONVENTIONS.md"):
+        p = project / rel
+        if p.is_file():
+            conv = p
+            break
+    if conv is not None:
         text = conv.read_text(encoding="utf-8")
         m = re.search(
             r"\*\*Preferred orchestrator:\*\*\s*`?([^`\n]+)`?",
@@ -219,9 +224,9 @@ def cmd_status(project: Path, scripts: Path) -> int:
         if m:
             print(f"orchestrator: {m.group(1).strip()}")
         else:
-            print("orchestrator: (not set in ANCHOR-CONVENTIONS.md)")
+            print(f"orchestrator: (not set in {conv.relative_to(project)})")
     else:
-        print("orchestrator: (no ANCHOR-CONVENTIONS.md)")
+        print("orchestrator: (no .anchor/conventions.md)")
 
     # User systemd units for this project
     user_dir = Path.home() / ".config" / "systemd" / "user"

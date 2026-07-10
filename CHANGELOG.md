@@ -8,6 +8,14 @@ Newest first.
 
 ### Added
 
+- **Project `/anchor` skill** (scaffolded via `claude`/`grok`; source under `platforms/…`) — while in a project, locate the local Anchor checkout and **conform this project** (CWD/git root default): check/upgrade or conflict-aware scaffold; fix source-missing managed files when paths moved under `platforms/`. Anchor base `/anchor` remains path-required for operating on another tree.
+- **`/anchor` skill** (Anchor base — Grok + Claude) — agent-driven scaffold/reconfigure of a **target** project: path required; dry-run first; merge/backup/skip on conflicts; prefer `--upgrade` when a manifest exists.
+- **`/install-anchor` skill** (Claude + Grok; scaffolded) — safely put the `anchor` CLI on `PATH` via a user-local symlink to `bin/anchor` (no sudo by default); status / fix / optional bindir.
+- **`/local-models` skill** (scaffolded via `claude`/`grok` platforms; source under `platforms/…`, **not** Anchor base skills) + **`fit_device.py --probe`** — evaluate this machine for lean local models; install links; optional reconfigure draft; WSL host probe + routing policy.
+- **WSL host probe** — from WSL, `--probe` calls `powershell.exe` for bare-metal RAM/CPU/GPU (no user-run `.ps1`); sizes fits to host budget; recommends running the model server on **Windows bare metal** with Anchor remaining in WSL.
+- **`/local-models` draft offer** — after the probe report, agents ask whether to create a `.plans/drafts/` plan to wire the project to the detected local model(s); install process lives in **`## Prerequisites`** for later `/work` once deps are installed.
+- **`/local-models` routing policy** — reconfigure drafts: user model-priority order is primary; small locals stay on light tiers; when the host can run heavy local inference, prefer fit locals for heavy work within that priority (no promoting tiny locals to frontier roles).
+- **`anchor --upgrade` / `--update`** — refresh an already-scaffolded project to current scaffold patterns: layout migration (`anchor/…` doctrine → `.anchor/…`), take clean upstream updates, restore missing managed files, add newly introduced scaffold files for recorded platforms; keeps locally modified files unless `--force`. **`--diff`** prints unified diffs; **`--check`** remains a short status summary. Non-interactive: `--yes` (required off a tty).
 - **`scripts/scope_gate.py`** — machine-enforced scope gate (mythos-core rule 7): rejects any worktree change outside a task spec's `## Files in scope` **before** tests run. Pure `check_scope` + git-backed `worktree_changes`/`enforce_scope`; gitignore-style globs; `Allowed generated files:` allowlist. Wired into `orchestrate.py --scope-spec` (out-of-scope → `failed-scope`, tests skipped, routed back to planner) and usable standalone as a verify pre-step (`scope_gate.py --root . --spec spec.md && pytest -q`, exit `3` = violation). Task-spec template + docs updated
 - **`scripts/pending_merges.py`** — surfaces finished work committed but **not yet merged** into integration: counts each local branch's commits ahead of its merge target (`feature/*` → `dev`/`develop` → mainline) and flags `feature/<slug>` branches matching a plan under `.plans/completed/` as *completed work awaiting merge*. Advisory table by default; `--json`, `--exit-code` (exit `1` when pending) for coordinators/monitors/CI
 - **Plan `Priority:` header** (`P1` > `P2` > `P3`, default `P2`) — orders ready plans **within a lane** ahead of `Value`; parsed by `scripts/plan_select.py` (`parse_priority` + `plan_sort_key`), shown in `work_once.py --list`; documented in the plan template, `.plans/` README, `/work` (Claude/Grok/Chat), ANCHOR.md, and docs
@@ -35,9 +43,20 @@ Newest first.
 - Model-priority preference via `./config.sh --model-priority`
 - `/commit-prep` command (Claude, Grok, chat)
 
+### Fixed
+
+- **Docs internal links** — rewrite relative cross-page links to absolute `/…` paths so they resolve correctly with Docusaurus `trailingSlash: true` (was producing broken `/anchor/tooling/skills/…`-style URLs)
+- **Wording** — prefer **project** over “consumer app” / “consumer project”, and **Anchor** (or **Anchor base**) over “Anchor monorepo”, in skills, platform docs, README, and CLI docs
+
 ### Changed
 
-- **Fresh drafts are private by default** — `/draft` now creates `<slug>.local.md` (gitignored) instead of a tracked `.md`, since a new draft usually isn't ready to commit; **promotion publishes** (`/draft --promote` drops `.local` → tracked `<slug>.md`). New `/draft --shared` creates a tracked draft directly; `/draft --promote --local` keeps a promoted plan private. Applies to Claude, Grok, and Chat `/draft`
+- **Docs Skills sidebar** — category landing [Skills overview](docs/docs/skills/overview.md) lists every skill with **where it’s best used**, packaging (project vs Anchor), and a quick chooser; sidebar labels include short use-hints (`/anchor · update project`, …)
+- Blog: [Agent skills for scaffold, PATH, and local models](docs/blog/2026-07-09-agent-skills-scaffold-local-models.md)
+- **`.local.md` suffix is sticky** — plans that start as `*.local.md` keep that basename on `/draft --promote` and on later agent lane moves; agents must **never** drop `.local`. Only a **human manual rename** (or create with `/draft --shared`) makes a plan git-tracked. Replaces the old “promotion publishes” rule that stripped `.local` by default.
+- **Scaffold doctrine dest is `.anchor/`** — core doctrine files copy from this repo’s `anchor/` package into the project’s **`.anchor/`** tree (e.g. `.anchor/ANCHOR.md`, `.anchor/templates/…`). Root **`.plans/`** is unchanged. Platform docs and generated `ANCHOR-CONVENTIONS.md` point at `.anchor/…`. Fleet `load_prompt` resolves both `anchor/` (source tree) and `.anchor/` (scaffold). Coexists with `.anchor/mcp.yaml`.
+- **Fleet scaffold dest is `.anchor/scripts/` + `.anchor/mcp/`** — with `--fleet` (or saved FLEET=1), Anchor no longer writes project-root `scripts/` or `mcp/` (avoids colliding with app-owned trees). `anchor --upgrade` can migrate legacy root fleet copies. Script/MCP entrypoints resolve project root for both layouts.
+- **Conventions file is `.anchor/conventions.md`** — scaffold and `--set-orchestrator` no longer write root `ANCHOR-CONVENTIONS.md`; readers dual-read the legacy name; upgrade migrates it.
+- **Fresh drafts are private by default** — `/draft` creates `<slug>.local.md` (gitignored); `/draft --shared` creates a tracked `<slug>.md`. Applies to Claude, Grok, and Chat `/draft`
 - **`/work` selection order now honors `Priority`** — own in-progress → bugs before features → `Priority` (`P1`>`P2`>`P3`, default `P2`) → `Value` → oldest first; applied consistently across `/work`, `scripts/work_once.py`, and fleet pullers
 - **`/work` just-picks on ties by default** — when multiple ready plans share the top priority, `/work` takes the first in sorted order (Priority → Value → oldest → filename) and starts, instead of printing a menu and asking; it names the other tied plans so the user can redirect. Only pauses to ask when the user explicitly asks to choose (Claude + Grok `/work`)
 - **Agents must run `/commit-prep` before any `git commit`** — standing rule on Claude/Grok/Chat platforms, `/work`, `/commit-prep` itself, and `.plans/` README (tests + CHANGELOG + blog-if-warranted gates)

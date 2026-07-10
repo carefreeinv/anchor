@@ -1,1 +1,8 @@
-{ "label": "Skills", "position": 5 }
+{
+  "label": "Skills",
+  "position": 5,
+  "link": {
+    "type": "doc",
+    "id": "skills/overview"
+  }
+}

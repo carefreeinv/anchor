@@ -7,7 +7,7 @@ This repo's purpose: help less-powerful models behave like Mythos-class models v
 - Hardware tiers: `hardware/{personal-devices,h100,space-1-vera-rubin}/`
 - Fleet tooling: `scripts/` (registry: `scripts/endpoints.yaml`), MCP servers: `mcp/`
 - Docs site: `docs/` (Docusaurus; `npm install && npm start`)
-- Work plans: `.plans/` (dotdir; **fully gitignored in this repo only** — consumer projects track `.plans/` and only ignore `*.local.md`). Draft with **`/draft`** → `drafts/`; execute with **`/work`**. Scaffold source: `anchor/scaffold/plans/`
+- Work plans: `.plans/` (dotdir; **fully gitignored in this repo only** — projects track `.plans/` and only ignore `*.local.md`). Draft with **`/draft`** → `drafts/`; execute with **`/work`**. Scaffold source: `anchor/scaffold/plans/`
 
 Conventions: Python 3.10+, OpenAI-compatible endpoints only, model quirks belong in `anchor_client.py` quirks handling (never in callers). Docs pages mirror repo files — update both when changing doctrine.
 

@@ -1,6 +1,6 @@
 # CLAUDE.md — Anchor discipline for Claude Code
 
-<!-- Drop this into any repo (or merge into an existing CLAUDE.md). It implements anchor/ANCHOR.md
+<!-- Drop this into any repo (or merge into an existing CLAUDE.md). It implements .anchor/ANCHOR.md
      for Claude Code, including the post-July-2026 model economics: Fable 5 is credit-metered,
      so it plans and reviews; Sonnet/Opus and local models execute. -->
 
@@ -15,10 +15,10 @@
 
 For any task exceeding one session or one file:
 
-1. **Plan mode first.** Enter plan mode; produce a plan following `anchor/templates/plan.md`: numbered steps, files touched per step, verification per step, model tier per step.
-2. **Delegate execution to subagents.** Each plan step becomes a Task-tool subagent with a self-contained spec per `anchor/templates/task-spec.md`. Subagents get ONLY their spec's context — never the whole conversation.
+1. **Plan mode first.** Enter plan mode; produce a plan following `.anchor/templates/plan.md`: numbered steps, files touched per step, verification per step, model tier per step.
+2. **Delegate execution to subagents.** Each plan step becomes a Task-tool subagent with a self-contained spec per `.anchor/templates/task-spec.md`. Subagents get ONLY their spec's context — never the whole conversation.
 3. **Verify each step with tooling.** Run the step's verification command before starting the next step. A subagent's success claim is not verification.
-4. **Review pass at the end.** Fresh context (new subagent or the frontier model): review the merged diff against the plan using `anchor/templates/review.md`.
+4. **Review pass at the end.** Fresh context (new subagent or the frontier model): review the merged diff against the plan using `.anchor/templates/review.md`.
 
 ## Prompt tuning before expensive runs
 
@@ -26,14 +26,14 @@ Before dispatching any frontier-model run, rewrite the task on a cheap model int
 
 ## Standing rules (apply to every model tier)
 
-- Fit check first: if the pending task lands in the current model's weak column (see `anchor/model-fitness.md` and the model-routing section of `ANCHOR-CONVENTIONS.md`, both scaffolded into the project), open with `SUGGEST-ESCALATE: <model> — <reason>` and stop; proceed only if the user insists.
+- Fit check first: if the pending task lands in the current model's weak column (see `.anchor/model-fitness.md` and the model-routing section of `.anchor/conventions.md`, both scaffolded into the project), open with `SUGGEST-ESCALATE: <model> — <reason>` and stop; proceed only if the user insists.
 - Restate goal + acceptance criteria before acting; ask one clarifying question if ambiguous, then stop.
 - One step at a time; unrelated findings go in a `## Deferred` note, never fixed opportunistically.
 - Never claim success — state how to verify, then run the verification.
 - Two failed fix attempts on the same error → stop, summarize attempts + hypothesis, escalate a tier.
 - Touch only files named in the current task spec.
 - End every task with: `## Result`, `## How to verify`, `## Deferred / concerns`.
-- SOLID by default; use the project's idiomatic composition mechanism (check `ANCHOR-CONVENTIONS.md`) over deep inheritance; no dead code, no spaghetti control flow.
+- SOLID by default; use the project's idiomatic composition mechanism (check `.anchor/conventions.md`) over deep inheritance; no dead code, no spaghetti control flow.
 - **Docs describe current state, not plans:** README / `docs/` / CHANGELOG / blog / release notes cover **shipped** code and public contracts only. Never document the **contents** of `.plans/` (drafts, backlog, unfinished acceptance) as product docs or roadmap. When plan work ships, document the code — not the plan file. Documenting the `.plans/` **workflow** itself is fine when that is a shipped feature.
 - **Before any `git commit`:** run **`/commit-prep`** (prep only: tests, CHANGELOG, blog-if-warranted). Do not skip prep for “small” changes. After gates are **green**, if plan work is complete (or the user asked to land the work), **stage + commit on the feature branch** (worktree preferred); optional feature-branch push; never commit on main/dev; never auto-merge.
 
@@ -75,6 +75,28 @@ from **`dev`**/`develop` (**create `dev` from main/master if missing**);
 Configure durable plan pollers for a project: `/fleet-watch` (CWD) or
 `/fleet-watch other-app`. Watchers run a work-style claim/execute loop in the
 background. Command: `.claude/commands/fleet-watch.md`. Prefer the skill over raw CLI.
+
+## /install-anchor
+
+Ensure the **`anchor` CLI** is on `PATH` safely (user-local symlink to
+`bin/anchor`, no sudo by default). Command: `.claude/commands/install-anchor.md`.
+
+## /anchor
+
+Locate the local Anchor checkout and **conform this project** (CWD/git root by
+default): `anchor --check` / `--upgrade` when a manifest exists, or
+conflict-aware scaffold. Scaffolded scaffolded skill (source:
+`platforms/claude-code/commands/anchor.md`) — different defaults from the
+Anchor base skill (which requires a foreign project path). Command:
+`.claude/commands/anchor.md`.
+
+## /local-models
+
+Probe this machine for **lean local models**, recommend fits, install links, and
+optional reconfigure draft. Scaffolded into **projects** (not part of
+the Anchor base skill set). Command: `.claude/commands/local-models.md`
+(source: `platforms/claude-code/commands/`). Uses `scripts/fit_device.py --probe`
+when available.
 
 ## /commit-prep
 

@@ -3,7 +3,7 @@ sidebar_position: 4
 sidebar_label: Local Models
 ---
 
-<!-- synced-from: platforms/local-models/README.md @ 78a7be4bcc1c42a9057d232b92ec68f6bbc0cee8 -->
+<!-- synced-from: platforms/local-models/README.md @ 98a97c338c8132096d737e8c67a9d6f635a5419c -->
 
 # Local Models
 
@@ -29,8 +29,8 @@ Each model name links to its **official quick start** (download / serve / chat t
 | [**DeepSeek-R1 distills**](https://huggingface.co/collections/deepseek-ai/deepseek-r1) | NO system prompt; temp ~0.6 (greedy breaks it); no few-shot; strip `<think>` downstream | critic + hard single problems; never an executor | [DeepSeek-R1 collection](https://huggingface.co/collections/deepseek-ai/deepseek-r1) |
 | [**Llama 3.3 70B**](https://huggingface.co/meta-llama/Llama-3.3-70B-Instruct) | none — the boring reliable one | generalist executor+critic if you have ~40GB VRAM | [HF model card](https://huggingface.co/meta-llama/Llama-3.3-70B-Instruct) |
 
-The quirks are encoded in `scripts/endpoints.yaml` (`quirks:` block) and applied automatically by `anchor_client.py`, so orchestration code never special-cases models. Hardware-specific serve helpers: [personal devices](../hardware/personal-devices/mac-mini), [H100](../hardware/h100).
+The quirks are encoded in `scripts/endpoints.yaml` (`quirks:` block) and applied automatically by `anchor_client.py`, so orchestration code never special-cases models. Hardware-specific serve helpers: [personal devices](/hardware/personal-devices/mac-mini), [H100](/hardware/h100).
 
 ## Tracked plans and coordination
 
-Local models follow the same **`/work`** contract when the harness has shell: honor **Preferred models** and **Depends on**, claim into `in-progress/`, never promote drafts. They do **not** self-appoint as temporary coordinator when Preferred orchestrator is unset—escalate to a frontier session. See [model fitness](../model-fitness) and Skills → [`/work`](../skills/work).
+Local models follow the same **`/work`** contract when the harness has shell: honor **Preferred models** and **Depends on**, claim into `in-progress/`, never promote drafts. They do **not** self-appoint as temporary coordinator when Preferred orchestrator is unset—escalate to a frontier session. See [model fitness](/model-fitness) and Skills → [`/work`](/skills/work).

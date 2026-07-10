@@ -13,8 +13,21 @@ from pathlib import Path
 
 from mcp.server.fastmcp import FastMCP
 
-REPO = Path(__file__).resolve().parents[2]
-sys.path.insert(0, str(REPO / "scripts"))
+
+def _project_root() -> Path:
+    here = Path(__file__).resolve().parent
+    if here.parent.name == "mcp" and here.parent.parent.name == ".anchor":
+        return here.parent.parent.parent
+    if here.parent.name == "mcp":
+        return here.parent.parent
+    return here.parents[2]
+
+
+REPO = _project_root()
+for _scripts in (REPO / ".anchor" / "scripts", REPO / "scripts"):
+    if _scripts.is_dir():
+        sys.path.insert(0, str(_scripts))
+        break
 
 from anchor_client import Fleet, has_required_footer, load_prompt  # noqa: E402
 

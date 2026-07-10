@@ -64,6 +64,9 @@ in-progress/       →  bugs|features/   (release claim for other agents)
 ambiguous|blocked/ →  bugs|features/   (return when clarified / unblocked)
 ```
 
+**Preserve basename** on every move (including `.local.md`). Agents must **never**
+drop or add the `.local` suffix; only a human may rename for privacy/tracking.
+
 Agents must **never** promote drafts (use **`/draft --promote`** instead), move
 work into `drafts/`, or touch another agent’s `in-progress/` plan.
 
@@ -96,8 +99,8 @@ Plan headers SHOULD include:
 - **Preferred models:** <names and/or tiers>
 ```
 
-Tiers: `small` | `mid` | `reasoner` | `frontier` (see `anchor/templates/plan.md`,
-`anchor/ANCHOR.md` routing, `anchor/model-fitness.md`). Absent field → treat as
+Tiers: `small` | `mid` | `reasoner` | `frontier` (see `.anchor/templates/plan.md`,
+`.anchor/ANCHOR.md` routing, `.anchor/model-fitness.md`). Absent field → treat as
 **mid** (any solid executor; not a free pass for wasteful frontier pickup of
 obviously trivial work after you load the Goal).
 

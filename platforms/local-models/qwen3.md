@@ -26,7 +26,7 @@ quirks:
 
 ## System prompt
 
-Use `anchor/system-prompts/mythos-core.md` as-is (Qwen3 respects system role well). Add for sizes ≤8B:
+Use `.anchor/system-prompts/mythos-core.md` as-is (Qwen3 respects system role well). Add for sizes ≤8B:
 
 > Your context is small and your memory unreliable. Trust only the task spec text above. If the spec doesn't contain something you need, say BLOCKED and name it — do not improvise.
 

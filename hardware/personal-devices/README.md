@@ -19,11 +19,14 @@ Apple Silicon's unified memory is the deciding factor for this tier: it lets a $
 The one question a spec sheet can't answer is *which* model, at *which* quantization, with *how much* context, fits your machine. `scripts/fit_device.py` does that math and prints a ready launch command plus an `endpoints.yaml` stanza (with the right quirks baked in for the model family):
 
 ```bash
+python scripts/fit_device.py --probe                      # detect this machine + install links + fit
 python scripts/fit_device.py --memory 48                 # 64GB Mac Mini (~48GB usable), Metal
 python scripts/fit_device.py --memory 16 --backend mlx   # 24GB MacBook Air
 python scripts/fit_device.py --memory 24 --backend cuda  # single RTX 4090
 python scripts/fit_device.py --list                       # the whole catalog
 ```
+
+In a coding agent, prefer **`/local-models`** (same probe + clickable install procedures for WSL/macOS/CUDA).
 
 Memory is a conservative estimate (weights + KV cache + overhead) — a starting point to confirm with `benchmark.py`, not a guarantee. On unified-memory Macs, budget ~25% of total RAM for the OS (a 64GB Mac → `--memory 48`).
 

@@ -7,7 +7,7 @@ sidebar_label: Savings
 
 **Anchor exists to cut inference spend** — not by making models dumber, but by stopping you from paying frontier prices for keystrokes.
 
-Frontier models are excellent judges and poor economics for bulk edits, boilerplate, renames, and “try again” thrash. The [Playbook](playbook) says ~80% of a typical build never needed the big model. Anchor makes that 80% run on mid-tier APIs or hardware you already own, with the same external discipline that keeps quality checkable.
+Frontier models are excellent judges and poor economics for bulk edits, boilerplate, renames, and “try again” thrash. The [Playbook](/playbook) says ~80% of a typical build never needed the big model. Anchor makes that 80% run on mid-tier APIs or hardware you already own, with the same external discipline that keeps quality checkable.
 
 *If this project is already helping your bill, a quiet [donation](https://donate.stripe.com/28E6oHeq8fxQ5p7fmBdjO01) helps keep the work going — no pressure.*
 
@@ -50,7 +50,7 @@ pie showData
 | Routine edits | Frontier / max plan | Mid or local task specs |
 | Retries on sloppy prompts | 3× spend | Tune cheap first (`prompt_tuner`) |
 | Wrong tier on whole backlog | Expensive agent grabs `small` work | Preferred models + `/work` fit skip |
-| Re-planning in chat | Re-read repo on frontier | [`.plans/`](skills/work); cheap executors pull |
+| Re-planning in chat | Re-read repo on frontier | [`.plans/`](/skills/work); cheap executors pull |
 | “Done” without checks | Silent rework | Tooling verifies |
 
 *Saving something real? Please consider a small [donation to support Anchor](https://donate.stripe.com/28E6oHeq8fxQ5p7fmBdjO01).*
@@ -63,7 +63,7 @@ pie showData
 
 | Month | Ramp | What’s typical |
 |-------|------|----------------|
-| **Jan** | **25%** | Scaffold, `/config`, first [`.plans/`](skills/work) / [`/draft`](skills/draft) |
+| **Jan** | **25%** | Scaffold, `/config`, first [`.plans/`](/skills/work) / [`/draft`](/skills/draft) |
 | **Feb** | **50%** | Preferred models, mid/local endpoints, early `/work` |
 | **Mar** | **75%** | Fleet timers / multi-tier habit |
 | **Apr–Dec** | **100%** | Steady-state mix |
@@ -80,7 +80,7 @@ Steady-state monthly rates (after ramp):
 | **Team of 5** | ~30M | $19,800 | $6,730 | **$13,100** |
 | **Org of 20** | ~100M | $66,000 | $22,400 | **$43,600** |
 
-What changes at steady state: solo → mid + laptop/Mac Mini for execution; team → shared plans + [fleet workers](tooling/fleet-workers); org → H100/large mid for the 80%, frontier for architecture and final review.
+What changes at steady state: solo → mid + laptop/Mac Mini for execution; team → shared plans + [fleet workers](/tooling/fleet-workers); org → H100/large mid for the 80%, frontier for architecture and final review.
 
 ### Solo builder — cumulative spend vs savings
 
@@ -194,7 +194,7 @@ xychart-beta
 
 </div>
 
-Hardware is capex or rent (Mac Mini → H100). Payback is often weeks to a few months once past ramp — run [fit_device](tooling/scripts) and your power bill.
+Hardware is capex or rent (Mac Mini → H100). Payback is often weeks to a few months once past ramp — run [fit_device](/tooling/scripts) and your power bill.
 
 *If those curves look like money you get to keep, [supporting this project](https://donate.stripe.com/28E6oHeq8fxQ5p7fmBdjO01) is genuinely appreciated.*
 
@@ -220,7 +220,7 @@ flowchart LR
 
 | More attractive | Less attractive |
 |-----------------|-----------------|
-| Always-on pullers ([`/fleet-watch`](skills/fleet-watch), multi-box) | Sporadic laptop inference a few hours/week |
+| Always-on pullers ([`/fleet-watch`](/skills/fleet-watch), multi-box) | Sporadic laptop inference a few hours/week |
 | High local utilization (daytime batch + night batch with battery or night grid) | Low duty cycle — panels sit idle with the GPUs |
 | Expensive or rising grid $/kWh, peak demand charges | Very cheap industrial power already |
 | Roof / ground / carport space, incentives, net metering | No siting rights, heavy HOA/landlord constraints |
@@ -301,7 +301,7 @@ xychart-beta
 ### Practical order of operations
 
 1. Measure **actual** wall power for the boxes you will run 24/7 (kill-a-watt / PDU / UPS logs).  
-2. Finish Anchor’s **API → local** move for fit work ([hardware](hardware/personal-devices/mac-mini), [fleet workers](tooling/fleet-workers)) so utilization is real.  
+2. Finish Anchor’s **API → local** move for fit work ([hardware](/hardware/personal-devices/mac-mini), [fleet workers](/tooling/fleet-workers)) so utilization is real.  
 3. Size solar for **site loads** (fleet + office), not a fantasy GPU-only load factor.  
 4. Run installer quotes + incentive calculators in **your** jurisdiction; re-do the cumulative chart with their kWh and net cost.  
 5. Only then add battery if you need night-only local inference or backup — do not assume battery is free “for Anchor.”
@@ -352,15 +352,15 @@ Swap in provider usage exports and real $/1M; the structure is the product, not 
 - That seat licenses (IDE, chat) disappear — this page is about **inference routing and thrash**  
 - That solar is free or always ROI-positive — panels are multi-year infrastructure, not a software toggle  
 
-Measure with [benchmark](tooling/scripts), provider dashboards, and a real power meter; treat this as a **business case sketch**, then validate.
+Measure with [benchmark](/tooling/scripts), provider dashboards, and a real power meter; treat this as a **business case sketch**, then validate.
 
 ## Get the savings in practice
 
-1. [Playbook](playbook) — five moves (orchestrator pattern first)  
-2. [Doctrine](doctrine) — process that makes cheap models checkable  
-3. [`/work` + `.plans/`](skills/work) — path-authoritative backlog, Preferred models  
-4. [`/fleet-watch`](skills/fleet-watch) — durable multi-tier pullers  
-5. [Hardware](hardware/personal-devices/mac-mini) — own the 80% when volume justifies it  
+1. [Playbook](/playbook) — five moves (orchestrator pattern first)  
+2. [Doctrine](/doctrine) — process that makes cheap models checkable  
+3. [`/work` + `.plans/`](/skills/work) — path-authoritative backlog, Preferred models  
+4. [`/fleet-watch`](/skills/fleet-watch) — durable multi-tier pullers  
+5. [Hardware](/hardware/personal-devices/mac-mini) — own the 80% when volume justifies it  
 6. **Solar** (above) — optional; lower kWh for always-on local fleet after utilization is real
 
 ---

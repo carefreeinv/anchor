@@ -2,7 +2,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 import requests
-from anchor_client import MAX_RETRIES, Endpoint, Fleet
+from anchor_client import MAX_RETRIES, Endpoint, Fleet, load_prompt, resolve_doctrine_path
 
 
 def make_response(content="ok"):
@@ -216,3 +216,35 @@ def test_max_context_caps_completion_tokens(mock_post):
     ep.chat([{"role": "user", "content": "hi"}], max_tokens=16384)
 
     assert mock_post.call_args.kwargs["json"]["max_tokens"] == 8192
+
+
+def test_resolve_doctrine_path_prefers_given_then_dot_anchor(tmp_path):
+    # Scaffolded-style: only .anchor/ exists
+    dest = tmp_path / ".anchor" / "templates"
+    dest.mkdir(parents=True)
+    (dest / "plan.md").write_text("PLAN", encoding="utf-8")
+    path = resolve_doctrine_path("anchor/templates/plan.md", root=tmp_path)
+    assert path == dest / "plan.md"
+    assert path.read_text(encoding="utf-8") == "PLAN"
+
+    # Explicit .anchor/ form
+    assert resolve_doctrine_path(".anchor/templates/plan.md", root=tmp_path) == dest / "plan.md"
+
+    # Source-style: only anchor/ exists
+    src_root = tmp_path / "src"
+    src = src_root / "anchor" / "system-prompts"
+    src.mkdir(parents=True)
+    (src / "mythos-core.md").write_text("CORE", encoding="utf-8")
+    assert resolve_doctrine_path(
+        "anchor/system-prompts/mythos-core.md", root=src_root
+    ).read_text(encoding="utf-8") == "CORE"
+
+
+def test_resolve_doctrine_path_missing_raises(tmp_path):
+    with pytest.raises(FileNotFoundError):
+        resolve_doctrine_path("anchor/nope.md", root=tmp_path)
+
+
+def test_load_prompt_reads_source_tree():
+    text = load_prompt("anchor/system-prompts/mythos-core.md")
+    assert "FIT CHECK" in text or "fit check" in text.lower() or "Mythos" in text or len(text) > 100

@@ -74,7 +74,7 @@ Every tier defaults to these regardless of task size — they're cheap to apply 
 - **No spaghetti, no dead code.** Unreachable branches, commented-out blocks, and unused abstractions don't get left "just in case" — delete them or don't add them.
 - **Technical debt is tracked, not silent.** A shortcut taken under time pressure gets named in the task's `## Deferred / concerns`, not buried.
 
-`scripts/anchor.py` detects a scaffolded project's language/framework from marker files (`package.json`, `Cargo.toml`, `go.mod`, etc.) and writes the resolved choice — plus its idiom — to `ANCHOR-CONVENTIONS.md` in the project root. When detection fails (blank or ambiguous project), it asks, proposing the user's saved `config.sh` language default (if any) as the suggested answer. The same file carries the project's **Preferred orchestrator** (set via `./config.sh --orchestrator`, `anchor --orchestrator` / `--set-orchestrator`, or one-line edit). Lesser models must recommend that orchestrator for planning and fleet coordination instead of attempting it themselves. If Preferred orchestrator is **unset** and no project MCP coordinator is running, a **frontier or near-frontier** model in-session may act as **temporary coordinator** (announce `TEMPORARY-COORDINATOR: …`; inventory plans; propose **Depends on**); mid/small/local models still escalate rather than self-appoint.
+`scripts/anchor.py` detects a scaffolded project's language/framework from marker files (`composer.json`, `package.json`, `Cargo.toml`, `go.mod`, etc.) and writes the resolved choice — plus its idiom — to **`.anchor/conventions.md`**. When several markers match, a backend language beats co-located `package.json` (common for PHP/Python apps with frontend or Playwright tooling); use `--framework` to force a choice. When detection fails (blank or ambiguous project), it asks, proposing the user's saved `config.sh` language default (if any) as the suggested answer. The same file carries the project's **Preferred orchestrator** (set via `./config.sh --orchestrator`, `anchor --orchestrator` / `--set-orchestrator`, or one-line edit). Lesser models must recommend that orchestrator for planning and fleet coordination instead of attempting it themselves. If Preferred orchestrator is **unset** and no project MCP coordinator is running, a **frontier or near-frontier** model in-session may act as **temporary coordinator** (announce `TEMPORARY-COORDINATOR: …`; inventory plans; propose **Depends on**); mid/small/local models still escalate rather than self-appoint.
 
 ## Templates
 
@@ -99,15 +99,18 @@ unshipped backlog; citing plan slugs/paths as documentation.
 
 In projects that use them, committed work plans live under **`.plans/`** (dotdir —
 git-tracked; do not gitignore the whole tree). Optional **local-only** plans use the
-`<slug>.local.md` suffix and are ignored via `.plans/.gitignore`. **Path is
+`<slug>.local.md` suffix and are ignored via `.plans/.gitignore`. The **`.local`
+suffix is sticky:** promote and agent lane moves keep the same basename; agents
+must never drop it — only a **human manual rename** (or create with `/draft --shared`)
+makes a local plan tracked. **Path is
 authoritative:** `bugs/` and `features/` are ready; agents move claimed work to
 `in-progress/` (only the claimer continues — others **ignore**); may park to
 `ambiguous/` (half-baked) or `blocked/` (cannot fix), or return in-progress to
 ready; finished plans go to `completed/`; never execute `drafts/` / `ambiguous/`
 / `blocked/`. Do not put `Lane:` or `Status:` inside plan files. **Promotion**
 from `drafts/` → ready is via explicit **`/draft --promote <slug>`**
-(user-authorized; agent infers `bugs/` vs `features/` from the plan) or a human
-filesystem move — never from `/work` or fleet pullers. Selection order: own
+(user-authorized; agent infers `bugs/` vs `features/` from the plan; **keeps**
+`.local.md` if present) or a human filesystem move — never from `/work` or fleet pullers. Selection order: own
 in-progress, then bugs before features; within a lane by **`Priority`**
 (`P1`>`P2`>`P3`, default `P2`) then `Value`, then oldest first. Plan headers
 include **Priority**, **Preferred models** and **Depends on**.

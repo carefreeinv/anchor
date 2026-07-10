@@ -19,7 +19,7 @@ A Mythos-class model's edge is not intelligence-per-token — it's **discipline 
 
 | Path | Purpose |
 |---|---|
-| `anchor/` | Model-agnostic doctrine, system prompts, and templates |
+| `anchor/` | Model-agnostic doctrine, system prompts, and templates (scaffolded into projects as **`.anchor/`**) |
 | `platforms/` | Instructions for Claude Code, Grok Build, NVIDIA NIM/Nemotron, local models, and generic chat UIs |
 | `hardware/personal-devices/` | Mac Mini, AI-optimized laptops, single-GPU desktops |
 | `hardware/h100/` | H100 nodes (vLLM, NIM containers) |
@@ -27,7 +27,7 @@ A Mythos-class model's edge is not intelligence-per-token — it's **discipline 
 | `scripts/` | Python utilities: prompt tuner, orchestrator, `work_once` / `fleet_watch`, router, benchmark, device-fit |
 | `mcp/` | MCP servers: `anchor-prompts` (scaffolding tools), `model-fleet` (delegation/routing) |
 | `docs/` | Docusaurus documentation site (`cd docs && npm install && npm start`) |
-| Scaffold plans | Consumer projects get a tracked `.plans/` tree (`/work`); source: `anchor/scaffold/plans/` |
+| Scaffold plans | Projects get a tracked `.plans/` tree (`/work`); source: `anchor/scaffold/plans/` |
 
 **Docs rule (all Anchor projects):** documentation describes the project’s **current shipped state**, not `.plans/` backlog. See `CLAUDE.md` / `anchor/ANCHOR.md`. This repository’s own `.plans/` (if present) is private working backlog and must not appear in public docs.
 
@@ -35,12 +35,12 @@ A Mythos-class model's edge is not intelligence-per-token — it's **discipline 
 
 1. Read `anchor/ANCHOR.md` — the doctrine everything else implements.
 2. Run `./config.sh` (or type `/config` in Claude Code / Grok Build) to pick your default platform(s), whether you want fleet tooling, model priority, and **preferred orchestrator** (who coordinates multi-step work; e.g. `claude:opus`). It saves your answer and shows you the exact `anchor <project-dir>` command to scaffold a project with it.
-3. Scaffold a project (`anchor <project-dir>`), then use **`/work`** for ready plans under `.plans/`, or **`/fleet-watch`** for reboot-persistent pullers. Set a durable orchestrator anytime: `anchor <dir> --set-orchestrator …`.
+3. Scaffold a project (`cd my-app && anchor`, or `anchor <project-dir>`). From the Anchor repo, **`/anchor <project-path>`** (path required) runs the CLI with conflict-aware help when the project already has agent config. **Inside a scaffolded project**, `/anchor` (no path) locates the local Anchor checkout and conforms **this** project. Then use **`/work`** for ready plans under `.plans/`, or **`/fleet-watch`** for reboot-persistent pullers. Set a durable orchestrator anytime: `anchor --set-orchestrator …`. Refresh an existing install: `anchor --check` / `anchor --diff` / `anchor --upgrade --yes` (or project `/anchor`).
 4. Point `scripts/endpoints.yaml` at your endpoints; use `scripts/orchestrate.py` to run the orchestrator pattern across them — see your `hardware/` folder's README to serve models on your own fleet. Fleet design: docs **Tooling → Fleet workers**.
 
-Skipping step 2 is fine too — `anchor <project-dir> --platform claude,grok` (etc.) or the interactive survey it falls back to both still work without saved defaults.
+Skipping step 2 is fine too — `anchor --platform claude,grok` (etc.) or the interactive survey it falls back to both still work without saved defaults.
 
-`bin/anchor` (symlink onto your PATH) works with no install. `pip install -e .` (or `pipx install .`) from the repo root also works if you'd rather have a real `anchor` command — it only installs the scaffolder itself, not the fleet scripts (those stay copy-paste, by design).
+Register the CLI with **`/install-anchor`** (agent skill: user-local symlink, no sudo), or symlink `bin/anchor` onto your PATH yourself. `pip install -e .` (or `pipx install .`) from the repo root also works if you'd rather have a packaged `anchor` command — it only installs the scaffolder itself, not the fleet scripts (those stay copy-paste, by design).
 
 > **Editable install fails with "build backend is missing the 'build_editable' hook"?** That's an old distro pip/setuptools (e.g. Ubuntu 22.04 ships setuptools 59, which predates PEP 660) leaking into pip's build isolation — not a problem with this repo. Install into a virtualenv (`python3 -m venv .venv && . .venv/bin/activate && pip install -e .`), or use `pip install -e . --no-build-isolation`, or `pipx install .`.
 

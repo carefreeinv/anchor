@@ -40,9 +40,9 @@ flowchart LR
   plan --> exec --> tool --> rev
 ```
 
-**Field-tested choices for running capable models locally**: the [Qwen3](https://qwen.readthedocs.io/en/latest/getting_started/quickstart.html) family (especially 30B-A3B), [Gemma 3](https://ai.google.dev/gemma/docs/core), [Mistral Small](https://huggingface.co/mistralai/Mistral-Small-3.1-24B-Instruct-2503), [DeepSeek-R1 distills](https://huggingface.co/collections/deepseek-ai/deepseek-r1), and [Llama 3.3](https://huggingface.co/meta-llama/Llama-3.3-70B-Instruct) — served via llama.cpp or vLLM, quantized Q4, official chat templates, short contexts. Each name links to that model’s official quick start; Anchor adaptations are under [Local Models](platforms/local-models).
+**Field-tested choices for running capable models locally**: the [Qwen3](https://qwen.readthedocs.io/en/latest/getting_started/quickstart.html) family (especially 30B-A3B), [Gemma 3](https://ai.google.dev/gemma/docs/core), [Mistral Small](https://huggingface.co/mistralai/Mistral-Small-3.1-24B-Instruct-2503), [DeepSeek-R1 distills](https://huggingface.co/collections/deepseek-ai/deepseek-r1), and [Llama 3.3](https://huggingface.co/meta-llama/Llama-3.3-70B-Instruct) — served via llama.cpp or vLLM, quantized Q4, official chat templates, short contexts. Each name links to that model’s official quick start; Anchor adaptations are under [Local Models](/platforms/local-models).
 
-*Those wins add up — see [Savings](savings) for the scale of it, and please consider [donating](https://donate.stripe.com/28E6oHeq8fxQ5p7fmBdjO01) to help support this project.*
+*Those wins add up — see [Savings](/savings) for the scale of it, and please consider [donating](https://donate.stripe.com/28E6oHeq8fxQ5p7fmBdjO01) to help support this project.*
 
 ## The one-paragraph version
 
@@ -60,7 +60,7 @@ flowchart LR
   e --> x
 ```
 
-*Projected inference savings are significant — details on the [Savings](savings) page. Please consider [donating](https://donate.stripe.com/28E6oHeq8fxQ5p7fmBdjO01) to help support this project.*
+*Projected inference savings are significant — details on the [Savings](/savings) page. Please consider [donating](https://donate.stripe.com/28E6oHeq8fxQ5p7fmBdjO01) to help support this project.*
 
 ## Get the repo
 
@@ -73,20 +73,20 @@ cd anchor
 
 ## Quick start
 
-1. Read [the doctrine](doctrine) — everything else implements it.
+1. Read [the doctrine](/doctrine) — everything else implements it.
 2. Run `./config.sh` (or type `/config` in Claude Code / Grok Build) to pick your default platform(s), whether you want fleet tooling, **model priority**, and **preferred orchestrator** (who coordinates multi-step work and cross-plan **Depends on** analysis). It saves your answer and prints the exact `anchor <project-dir>` command to scaffold a project with it.
-3. Scaffold a project: `anchor <project-dir>` (uses your saved defaults) or `anchor <project-dir> --platform claude,grok` (explicit). See the [CLI reference](tooling/cli) for `--fleet`, `--framework`, `--orchestrator` / `--set-orchestrator`, `--dry-run`, and `--check`.
-4. Draft with [`/draft`](skills/draft) (`--list`, load existing, optional `--local`, `--promote <slug>` with inferred bugs/features). Execute ready plans with [`/work`](skills/work). Always-on pullers: [`/fleet-watch`](skills/fleet-watch). Architecture: [Fleet workers](tooling/fleet-workers).
-5. Point `scripts/endpoints.yaml` at your endpoints; use `scripts/orchestrate.py` when you want the full plan→execute→critic loop — see [Hardware](hardware/h100).
+3. Scaffold a project: `cd my-app && anchor` (uses the current directory and your saved defaults), or `anchor <project-dir> --platform claude,grok` (explicit path/platforms). See the [CLI reference](/tooling/cli) for `--fleet`, `--framework`, `--orchestrator` / `--set-orchestrator`, `--dry-run`, and `--check`.
+4. Draft with [`/draft`](/skills/draft) (`--list`, load existing, optional `--local`, `--promote <slug>` with inferred bugs/features). Execute ready plans with [`/work`](/skills/work). Always-on pullers: [`/fleet-watch`](/skills/fleet-watch). Architecture: [Fleet workers](/tooling/fleet-workers).
+5. Point `scripts/endpoints.yaml` at your endpoints; use `scripts/orchestrate.py` when you want the full plan→execute→critic loop — see [Hardware](/hardware/h100).
 
-`bin/anchor` (symlink onto your `PATH`) works with no install — `pip install -e .` from the repo root also works if you'd rather have a real `anchor` command.
+Register the CLI with [**`/install-anchor`**](/skills/install-anchor) (user-local symlink, no sudo), or symlink `bin/anchor` onto your `PATH` yourself. `pip install -e .` from the repo root also works if you'd rather have a packaged `anchor` command.
 
 ## Start here
 
-1. [The Doctrine](doctrine) — the behavioral contract everything implements
-2. [The Playbook](playbook) — the economics that motivate it
-3. [Savings](savings) — projected day/month/year inference savings + donate
-4. [Skills](skills/draft) — `/draft`, `/work`, `/fleet-watch`, and friends
-5. [Platforms](platforms/claude-code) — install instructions per agent/model
-6. [Hardware](hardware/h100) — serve the fleet
-7. [Tooling](tooling/scripts) — scripts, [fleet workers](tooling/fleet-workers), MCP, and the [`anchor` CLI](tooling/cli)
+1. [The Doctrine](/doctrine) — the behavioral contract everything implements
+2. [The Playbook](/playbook) — the economics that motivate it
+3. [Savings](/savings) — projected day/month/year inference savings + donate
+4. [Skills](/skills/overview) — where each skill is best used: [`/anchor`](/skills/anchor), [`/draft`](/skills/draft), [`/work`](/skills/work), [`/fleet-watch`](/skills/fleet-watch), [`/install-anchor`](/skills/install-anchor), [`/local-models`](/skills/local-models)
+5. [Platforms](/platforms/claude-code) — install instructions per agent/model
+6. [Hardware](/hardware/h100) — serve the fleet
+7. [Tooling](/tooling/scripts) — scripts, [fleet workers](/tooling/fleet-workers), MCP, and the [`anchor` CLI](/tooling/cli)

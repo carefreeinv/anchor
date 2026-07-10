@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# Wrapper so `anchor project/bar` works from anywhere. Symlink this file onto your
-# PATH as `anchor` (or `ln -s "$(pwd)/bin/anchor" /usr/local/bin/anchor`).
+# Wrapper so `anchor` / `anchor project/bar` works from anywhere. With no project
+# path, the CLI scaffolds the current working directory. Symlink this file onto
+# your PATH as `anchor` (or `ln -s "$(pwd)/bin/anchor" /usr/local/bin/anchor`).
 set -euo pipefail
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 exec python3 "$DIR/scripts/anchor.py" "$@"

@@ -53,6 +53,7 @@ Agents must **never**:
 - Promote `drafts/` → ready **except** via explicit **`/draft --promote <slug>`**
   (agent infers `bugs/` vs `features/` from the plan; or clear user language
   handled by the `/draft` skill). `/work` and fleet pullers must **never** promote.
+- **Drop or add** the `.local` suffix on any move (basename is sticky; only humans rename)
 - Move ready/in-progress → `drafts/`
 - Swap `bugs/` ↔ `features/` except via explicit return targeting a lane
 - Move anything out of `completed/`
@@ -163,7 +164,7 @@ Logical checks: open-lane presence wins over stale memory; completed file or git
 history of completed/ satisfies. Coordinators (project MCP / planners) should
 propose Depends on when discussing a plan.
 
-Body sections match `anchor/templates/plan.md`. **Preferred models** uses tiers
+Body sections match `.anchor/templates/plan.md`. **Preferred models** uses tiers
 `small | mid | reasoner | frontier` and/or concrete names so `/work` can leave
 work for cheaper or stronger models.
 
@@ -183,11 +184,14 @@ Executors open the file first; do not re-plan unless Done when is impossible.
 - Tracked: `kebab-case-slug.md` — **Slug** is the stem without `.md`
 - Untracked (local-only): `kebab-case-slug.local.md` — same **Slug** without
   the `.local` suffix; gitignored by `.plans/.gitignore` (`**/*.local.md`)
-- **Fresh drafts default to `<slug>.local.md`** (private/uncommitted); `/draft --promote`
-  publishes to a tracked `<slug>.md`, or `/draft --shared` creates one directly
+- **Fresh drafts default to `<slug>.local.md`** (private/uncommitted); `/draft --shared`
+  creates a tracked `<slug>.md` instead
+- **`.local` is sticky:** promote and agent lane moves keep the same basename
+  (`drafts/foo.local.md` → `features/foo.local.md` → …). Agents never drop
+  `.local`; only a **human manual rename** may make a local plan tracked
 - `/work <slug>` matches either `slug.md` or `slug.local.md` under ready lanes
   (or your own `in-progress/`)
-- Optional on completion: `YYYY-MM-DD-<slug>.md` (or `…local.md`) under `completed/`
+- Optional on completion: `YYYY-MM-DD-<slug>.md` (or keep `…local.md`) under `completed/`
 
 ## Checker
 

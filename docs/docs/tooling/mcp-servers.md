@@ -26,7 +26,7 @@ flowchart LR
   po --> plans
 ```
 
-Until a Preferred orchestrator is set for a project, a frontier session may act as temporary coordinator (see [CLI — Preferred orchestrator](cli#preferred-orchestrator-per-project)).
+Until a Preferred orchestrator is set for a project, a frontier session may act as temporary coordinator (see [CLI — Preferred orchestrator](/tooling/cli#preferred-orchestrator-per-project)).
 
 ## anchor-prompts
 
@@ -55,7 +55,7 @@ The delegation arm of the orchestrator pattern:
 | L0.5 | `plans_suggest_dependencies` | heuristic token overlap; **propose only** (no LLM) |
 | L1 | `plans_claim`, `plans_release`, `plans_complete` | complete is **move only** (client asserts Done when) |
 
-Uses the same `plan_select` / `plan_lease` rules as [`/work`](../skills/work) and `work_once`. Use a **distinct** `--agent-id` from fleet_watch timers. Full matrix and registration examples: `mcp/project-orchestrator/README.md`.
+Uses the same `plan_select` / `plan_lease` rules as [`/work`](/skills/work) and `work_once`. Use a **distinct** `--agent-id` from fleet_watch timers. Full matrix and registration examples: `mcp/project-orchestrator/README.md`.
 
 ```bash
 claude mcp add anchor-prompts -- python /abs/path/mcp/anchor-prompts/server.py

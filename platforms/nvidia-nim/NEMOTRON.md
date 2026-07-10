@@ -34,7 +34,7 @@ quirks:
 
 ## Role-mapped system prompts
 
-Prepend the toggle line to `anchor/system-prompts/mythos-core.md`:
+Prepend the toggle line to `.anchor/system-prompts/mythos-core.md`:
 
 | Role | System prompt |
 |---|---|
@@ -52,7 +52,7 @@ This gives you the orchestrator pattern on a single deployed model: expensive de
 
 ## Tracked plans (`./.plans`)
 
-As **planner**, write self-contained plans (template: `anchor/templates/plan.md`)
+As **planner**, write self-contained plans (template: `.anchor/templates/plan.md`)
 into **`.plans/drafts/<slug>.md`**, including **Preferred models** and **Depends on**
 (inventory other `.plans/**` goals first; use `none` only after checking). Do **not**
 promote out of `drafts/` except via **`/draft --promote <slug>`** (infer bugs vs

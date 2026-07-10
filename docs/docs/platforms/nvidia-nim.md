@@ -3,7 +3,7 @@ sidebar_position: 3
 sidebar_label: NVIDIA NIM / Nemotron
 ---
 
-<!-- synced-from: platforms/nvidia-nim/NEMOTRON.md @ e971b4d7db4966aee9eaf92a9c497fc0935702fe -->
+<!-- synced-from: platforms/nvidia-nim/NEMOTRON.md @ 2fdef67121407575424eefd68a27386cb9e35f85 -->
 
 # NVIDIA NIM / Nemotron
 
@@ -41,7 +41,7 @@ flowchart LR
 
 Nemotron Super/Ultra with thinking on is the most credible local stand-in for a frontier planner/critic; Nano works as a spec executor. Don't leave thinking on for bulk execution — deliberate tokens are the local equivalent of credit burn.
 
-*Local judgment and execution are a big part of the [Savings](../savings) story — please consider [donating](https://donate.stripe.com/28E6oHeq8fxQ5p7fmBdjO01) to help support this project.*
+*Local judgment and execution are a big part of the [Savings](/savings) story — please consider [donating](https://donate.stripe.com/28E6oHeq8fxQ5p7fmBdjO01) to help support this project.*
 
 ## Tracked plans
 

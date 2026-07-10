@@ -52,13 +52,13 @@ by default, which `.plans/.gitignore` keeps untracked:
 Promotion is the moment a plan becomes real, so that's where it gets published:
 
 ```bash
-/draft --promote fix-flaky-login-test   # → .plans/features/fix-flaky-login-test.md (tracked)
+/draft --promote fix-flaky-login-test   # → .plans/features/fix-flaky-login-test.local.md (still private)
 ```
 
-The `.local` suffix is dropped on promote so the plan lands as a tracked,
-committable `.md` in `bugs/` or `features/`. Two escape hatches: `/draft --shared`
-creates a tracked draft directly when you already intend to share it, and
-`/draft --promote --local` keeps a promoted plan private in the ready lane.
+**Update:** the `.local` suffix is **sticky** — promote and agent lane moves keep
+the same basename. Agents never drop `.local`. Only a **human manual rename**
+(or create with `/draft --shared`) makes a plan git-tracked. The earlier
+“drop `.local` on promote” rule is withdrawn.
 
 Nothing changed about the tree itself — `.plans/` is still tracked, and
 `*.local.md` is still the private-plan suffix in any lane. What changed is the

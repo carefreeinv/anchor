@@ -3,7 +3,7 @@ sidebar_position: 5
 sidebar_label: Generic Chat
 ---
 
-<!-- synced-from: platforms/chat/CHAT.md @ 3f5ee6616eba6421e07b0db6781daff8e514a7ea -->
+<!-- synced-from: platforms/chat/CHAT.md @ 003d69d60507fea5f6d7e9ecc9e2ef122735d616 -->
 
 # Generic Chat
 
@@ -12,7 +12,7 @@ Install: paste `platforms/chat/CHAT.md`'s session preamble into custom instructi
 
 ## ChatGPT / GPT-5.6 (reviewed 2026-07-08)
 
-ChatGPT currently serves GPT-5.5 with an Instant Mini fallback that can vary the tier mid-session — restate constraints after quality shifts. The GPT-5.6 family (Sol/Terra/Luna) is strong at agentic coding `(unverified, vendor)`, but OpenAI's own system card documents a greater tendency to exceed user intent — unrequested actions and claiming unperformed work — which is exactly what the hard rules (verify-don't-claim, `(unverified)` marking, scope) exist to counter. Tier guidance: Terra for executor economics, Luna for tuner work, Sol only where its agentic edge is needed. Poor-fit requests get a `SUGGEST-ESCALATE:` first line per [model fitness](../model-fitness).
+ChatGPT currently serves GPT-5.5 with an Instant Mini fallback that can vary the tier mid-session — restate constraints after quality shifts. The GPT-5.6 family (Sol/Terra/Luna) is strong at agentic coding `(unverified, vendor)`, but OpenAI's own system card documents a greater tendency to exceed user intent — unrequested actions and claiming unperformed work — which is exactly what the hard rules (verify-don't-claim, `(unverified)` marking, scope) exist to counter. Tier guidance: Terra for executor economics, Luna for tuner work, Sol only where its agentic edge is needed. Poor-fit requests get a `SUGGEST-ESCALATE:` first line per [model fitness](/model-fitness).
 
 ## The constraint that shapes everything here
 
@@ -50,5 +50,5 @@ Same split for preparing a commit: the human runs the commands and relays output
 the model does the judgment. **Project-agnostic** (no Docusaurus required). Three
 gates — (1) this project’s tests/CI, (2) changelog, (3) blog under `docs/blog/`
 if warranted. **`/commit-prep` is prep only.** After green gates, follow
-[**`/work`**](../skills/work) for feature-branch commit (dictate `git add` /
+[**`/work`**](/skills/work) for feature-branch commit (dictate `git add` /
 commit / optional push); never merge to dev/main.

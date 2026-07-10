@@ -33,7 +33,7 @@ Many UIs hide dotfolders — use paths under `.plans/` explicitly.
 | `/draft <slug>` | **If file exists:** load it for discussion (see Load). **If not:** create (`.local.md`) |
 | `/draft --load <slug>` | Load existing draft for discussion (error if missing) |
 | `/draft --list` | List all drafts (tracked + `.local.md`); do not implement |
-| `/draft --promote <slug>` | Move draft → `bugs/` or `features/` (agent **infers** lane); publishes as tracked `<slug>.md` |
+| `/draft --promote <slug>` | Move draft → `bugs/` or `features/` (agent **infers** lane); **keep basename** (incl. `.local.md`) |
 | `/draft promote <slug>` | Same as `--promote` |
 | `/draft --shared …` | New/refine path uses a **tracked** `<slug>.md` (committable draft) |
 | `/draft --local …` | Explicitly private `<slug>.local.md` (already the default) |
@@ -47,10 +47,12 @@ Flags may appear anywhere. Remaining non-flag tokens are topic/slug.
 | **default** | `<slug>.local.md` | Ignored via `.plans/.gitignore` — a fresh draft usually isn't ready to commit |
 | `--shared` / `--tracked` | `<slug>.md` | Tracked (committable draft) |
 
-**Promotion publishes:** a `.local.md` draft is promoted to a **tracked**
-`<slug>.md` in the ready lane by default (drop the `.local` suffix — promotion is
-the commit-ready moment); pass `--local` to keep it private in the ready lane.
-Refining an existing draft keeps its current suffix.
+**`.local` suffix is sticky:** a plan that starts as `*.local.md` **keeps** that
+suffix on promote and all later agent lane moves (`in-progress/`, `completed/`,
+etc.). Agents must **never** drop or add `.local` on their own. Only a **human
+manual rename** may change privacy (e.g. `foo.local.md` → `foo.md` to track it).
+Refining an existing draft keeps its current suffix. `--shared` only affects
+**new** creates, not promote.
 
 ## Resolve draft path
 
@@ -90,7 +92,7 @@ only when no matching draft file exists.
 
 1. Ensure `.plans/drafts/` exists.
 2. Inventory `.plans/**` for **Depends on** / duplicates; read conventions + enough code.
-3. Write `anchor/templates/plan.md` shape: Value, Priority, Slug, Preferred models,
+3. Write `.anchor/templates/plan.md` shape: Value, Priority, Slug, Preferred models,
    Depends on, Goal, Context, Constraints, Steps, Risks, Done when. No `Lane:` / `Status:`.
 4. Path only under `drafts/`. **Default filename `<slug>.local.md`** (private,
    gitignored); `--shared`/`--tracked` writes a committable `<slug>.md`. Report
@@ -116,13 +118,14 @@ from the plan body** (and optional user wording).
 3. Target dir: only `.plans/bugs/` or `.plans/features/` — never `in-progress/`,
    `completed/`, `ambiguous/`, `blocked/`.
 4. Refuse if target basename already exists (report both paths; stop).
-5. **Publish on promote:** default target is a **tracked** `<slug>.md` — drop any
-   `.local` suffix as you move it (`mv` the untracked `.local.md` to `<slug>.md`).
-   Pass `--local` to keep it private (`<slug>.local.md`). Prefer `git mv` when the
-   source is already tracked; else `mv`. Create the target dir if needed.
+5. **Preserve basename:** move with the **same filename** (e.g.
+   `drafts/foo.local.md` → `features/foo.local.md`; `drafts/foo.md` →
+   `features/foo.md`). Do **not** drop `.local`. Prefer `git mv` when the source
+   is already tracked; else `mv`. Create the target dir if needed.
 6. Do **not** start `/work` unless the user immediately asks.
 7. Report old path → new path **and** the inferred lane + one-line reason
-   (e.g. `features/ — Value: high + “add fleet-watch skill” Goal`).
+   (e.g. `features/ — Value: high + “add fleet-watch skill” Goal`; note if still
+   `.local.md` / private).
 
 Pre-promote sanity (warn, don’t block unless catastrophic):
 

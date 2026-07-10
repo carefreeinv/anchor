@@ -46,14 +46,16 @@ No shell here, so the human runs file commands. When the user types `/draft`:
    Goal / Preferred models / Depends on / Steps / Done when; discuss; dictate
    edits only when they ask.
 3. **`--promote <slug>`** (or `promote <slug>`): read the pasted draft (or ask
-   for it); **infer** bug vs feature from Goal/Value/wording; **publish** — dictate
-   `mv .plans/drafts/<slug>.local.md .plans/bugs|features/<slug>.md` (drop the
-   `.local` suffix so the promoted plan is tracked; keep `.local.md` only if they
-   want it private) and state why that lane. Confirm target free first (`ls` that lane).
+   for it); **infer** bug vs feature from Goal/Value/wording; dictate
+   `mv` with the **same basename** (e.g.
+   `.plans/drafts/<slug>.local.md` → `.plans/bugs|features/<slug>.local.md` —
+   **keep** `.local`; agents/humans-in-chat must not drop it). Only a manual
+   rename by the operator makes a local plan tracked. State why that lane.
+   Confirm target free first (`ls` that lane).
 4. **Create/refine:** dictate full plan markdown. **Default path is
    `.plans/drafts/<slug>.local.md`** (private/uncommitted — a fresh draft usually
    isn't ready to commit); use `.plans/drafts/<slug>.md` when they pass `--shared`.
-   Template: `anchor/templates/plan.md`.
+   Template: `.anchor/templates/plan.md`.
 5. **Planning only** — no product implementation. Execution is `/work` after the
    plan is in a ready lane.
 
@@ -172,6 +174,6 @@ optional `git push -u origin HEAD`. Never merge to integration.
   about half the cost (the executor pick); Luna for tuner/light-executor work; Sol
   only where its agentic-coding edge is actually needed.
 - Fit check applies here too: if the pending request lands in the current model's
-  weak column (`anchor/model-fitness.md`), say
+  weak column (`.anchor/model-fitness.md`), say
   `SUGGEST-ESCALATE: <model> — <reason>` as the first line and let the human decide;
   proceed only if they insist.

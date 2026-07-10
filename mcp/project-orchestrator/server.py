@@ -12,7 +12,7 @@ Claude Code:
     --project /path/to/myapp --agent-id cursor-mid-1 --tier mid
 
 Requires: pip install "mcp[cli]" PyYAML
-Scripts import via Anchor monorepo ``scripts/`` on sys.path (do not copy plan_select).
+Scripts import via Anchor ``scripts/`` on sys.path (do not copy plan_select).
 """
 from __future__ import annotations
 
@@ -21,8 +21,21 @@ import json
 import sys
 from pathlib import Path
 
-REPO = Path(__file__).resolve().parents[2]
-sys.path.insert(0, str(REPO / "scripts"))
+
+def _project_root() -> Path:
+    here = Path(__file__).resolve().parent
+    if here.parent.name == "mcp" and here.parent.parent.name == ".anchor":
+        return here.parent.parent.parent
+    if here.parent.name == "mcp":
+        return here.parent.parent
+    return here.parents[2]
+
+
+REPO = _project_root()
+for _scripts in (REPO / ".anchor" / "scripts", REPO / "scripts"):
+    if _scripts.is_dir():
+        sys.path.insert(0, str(_scripts))
+        break
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import coordinator as coord  # noqa: E402

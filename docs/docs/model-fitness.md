@@ -54,7 +54,7 @@ Poor fit â†’ the entire first line is `SUGGEST-ESCALATE: <better-suited model> â
 
 ## Local models
 
-Model names link to the **official quick start**. See also [Local Models](platforms/local-models) for Anchor quirks and serve notes.
+Model names link to the **official quick start**. See also [Local Models](/platforms/local-models) for Anchor quirks and serve notes.
 
 | Model | Excels at | Weak at / quirks |
 |---|---|---|
@@ -64,4 +64,4 @@ Model names link to the **official quick start**. See also [Local Models](platfo
 | [DeepSeek-R1 distills](https://huggingface.co/collections/deepseek-ai/deepseek-r1) | Best local critic per GB; hard single problems | Never an executor; no system prompt; greedy breaks it |
 | [Llama 3.3 70B](https://huggingface.co/meta-llama/Llama-3.3-70B-Instruct) | Generalist executor+critic | Confident fabrication; verbose without caps |
 
-The full matrix with pricing, dates, and per-entry sourcing lives in `anchor/model-fitness.md`, which is scaffolded into every project.
+The full matrix with pricing, dates, and per-entry sourcing lives in `anchor/model-fitness.md` in this repo, and is scaffolded into projects as `.anchor/model-fitness.md`.

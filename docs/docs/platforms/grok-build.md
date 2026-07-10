@@ -3,7 +3,7 @@ sidebar_position: 2
 sidebar_label: Grok Build
 ---
 
-<!-- synced-from: platforms/grok-build/GROK.md @ c228d3db940437fa1fcf951d7814fa4adb250368 -->
+<!-- synced-from: platforms/grok-build/GROK.md @ eedbb938c9491b9e2e6aa6b54b41cb507fd9407f -->
 
 # Grok Build
 
@@ -36,14 +36,14 @@ The hard rules (restate → plan → one-step-per-turn → verify-don't-claim �
 
 ## Grok 4.5 (reviewed 2026-07-08)
 
-Play to the strength: terminal/CLI-driven steps are Grok 4.5's best fit (GPT-5.5-class on terminal benchmarks, unusually token-efficient). Compensate for the weakness: it measurably trails Fable/GPT tiers on repo-scale issue resolution, so decompose to file-scoped task specs before handing work over. API `reasoning_effort` defaults to *high* — set low for mechanical steps or pay a token multiple for nothing. Community-reported tool-use flakiness `(unverified)` makes external verification load-bearing. A poor-fit task gets a `SUGGEST-ESCALATE:` first line per the fit check in `anchor/model-fitness.md`, not a silent attempt.
+Play to the strength: terminal/CLI-driven steps are Grok 4.5's best fit (GPT-5.5-class on terminal benchmarks, unusually token-efficient). Compensate for the weakness: it measurably trails Fable/GPT tiers on repo-scale issue resolution, so decompose to file-scoped task specs before handing work over. API `reasoning_effort` defaults to *high* — set low for mechanical steps or pay a token multiple for nothing. Community-reported tool-use flakiness `(unverified)` makes external verification load-bearing. A poor-fit task gets a `SUGGEST-ESCALATE:` first line per the fit check in `.anchor/model-fitness.md`, not a silent attempt.
 
 If MCP is available, connect `anchor-prompts` and call `tune_prompt` on any vague task before starting, and `preflight_check` before executing any spec.
 
 ## Tracked plans
 
-Scaffold installs [**`/draft`**](../skills/draft), [**`/work`**](../skills/work), and [**`/fleet-watch`**](../skills/fleet-watch). Draft: create/list/load/`--promote <slug>` (infer bugs vs features); optional `--local`. Git: **worktree per agent** (`worktree_for_agent.py`), feature branches from `dev`/`develop` (**create `dev` from main/master if missing**). Grok 4.5 may act as temporary coordinator when Preferred orchestrator is unset. Full contract: source `platforms/grok-build/GROK.md`.
+Scaffold installs [**`/draft`**](/skills/draft), [**`/work`**](/skills/work), [**`/fleet-watch`**](/skills/fleet-watch), [**`/install-anchor`**](/skills/install-anchor), [**`/anchor`**](/skills/anchor) (conform **this** project; CWD default), and [**`/local-models`**](/skills/local-models). Draft: create/list/load/`--promote <slug>` (infer bugs vs features); optional `--local`. Git: **worktree per agent** (`worktree_for_agent.py`), feature branches from `dev`/`develop` (**create `dev` from main/master if missing**). Grok 4.5 may act as temporary coordinator when Preferred orchestrator is unset. `/install-anchor` registers the CLI on PATH (user-local symlink, no sudo). Full contract: source `platforms/grok-build/GROK.md`.
 
 ## /commit-prep
 
-**Required before any `git commit`.** Agents run `/commit-prep` (discover this project’s tests/CI; CHANGELOG; blog-if-warranted — no Docusaurus required). **Prep only** — does not commit. After a green prep, [**`/work`**](../skills/work) / standing rules cover feature-branch commit (worktree preferred; never merge to dev/main).
+**Required before any `git commit`.** Agents run `/commit-prep` (discover this project’s tests/CI; CHANGELOG; blog-if-warranted — no Docusaurus required). **Prep only** — does not commit. After a green prep, [**`/work`**](/skills/work) / standing rules cover feature-branch commit (worktree preferred; never merge to dev/main).

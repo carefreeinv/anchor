@@ -40,7 +40,7 @@ flowchart LR
   big1 --> small --> tools --> big2
 ```
 
-Commit ready plans under **`.plans/`** and start executors with [**`/work`**](skills/work) (or `orchestrate.py --plan-file`) so handoff is file-based, not chat archaeology. Set a project **Preferred orchestrator** (`anchor --set-orchestrator …`); if unset, a frontier/near-frontier session may act as **temporary coordinator** (inventory plans, propose **Depends on**). For always-on hardware at several skill levels, use [**`/fleet-watch`**](skills/fleet-watch) so each tier only claims fit-appropriate, **dependency-ready** plans—see [Fleet workers](tooling/fleet-workers).
+Commit ready plans under **`.plans/`** and start executors with [**`/work`**](/skills/work) (or `orchestrate.py --plan-file`) so handoff is file-based, not chat archaeology. Set a project **Preferred orchestrator** (`anchor --set-orchestrator …`); if unset, a frontier/near-frontier session may act as **temporary coordinator** (inventory plans, propose **Depends on**). For always-on hardware at several skill levels, use [**`/fleet-watch`**](/skills/fleet-watch) so each tier only claims fit-appropriate, **dependency-ready** plans—see [Fleet workers](/tooling/fleet-workers).
 
 **3. Tune prompts on a cheap model first.** A sloppy prompt costs the same as a great one. Have a cheap model rewrite every task into a spec with acceptance criteria, files in scope, and a definition of done. Three attempts at a task is the silent budget killer; one tuned attempt is the fix. (`scripts/prompt_tuner.py`)
 
@@ -48,7 +48,7 @@ Commit ready plans under **`.plans/`** and start executors with [**`/work`**](sk
 
 **5. Benchmark your real workload.** Don't take routing tables on faith — run your own tasks across your own tiers and let pass-rate and latency decide. (`scripts/benchmark.py`)
 
-*The [Savings](savings) sketches show how large that gap can get — please consider [donating](https://donate.stripe.com/28E6oHeq8fxQ5p7fmBdjO01) to help support this project.*
+*The [Savings](/savings) sketches show how large that gap can get — please consider [donating](https://donate.stripe.com/28E6oHeq8fxQ5p7fmBdjO01) to help support this project.*
 
 ## Why this matters double for Anchor
 
@@ -68,4 +68,4 @@ flowchart TB
   split -->|yes| frontier
 ```
 
-Turn that mix into **day / month / year dollar sketches** (solo → team → org) on the **[Savings](savings)** page — with the unit model spelled out so you can plug in your own token rates. If those numbers look familiar, please consider [donating](https://donate.stripe.com/28E6oHeq8fxQ5p7fmBdjO01) to help support this project.
+Turn that mix into **day / month / year dollar sketches** (solo → team → org) on the **[Savings](/savings)** page — with the unit model spelled out so you can plug in your own token rates. If those numbers look familiar, please consider [donating](https://donate.stripe.com/28E6oHeq8fxQ5p7fmBdjO01) to help support this project.

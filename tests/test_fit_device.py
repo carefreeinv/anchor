@@ -77,3 +77,42 @@ def test_endpoint_stanza_with_guardrail_is_valid_yaml():
     assert parsed["quirks"]["system_role"] == "fold_into_user"
     assert "BLOCKED" in parsed["quirks"]["system_suffix"]
     assert parsed["quirks"]["max_context"] == 8192
+
+
+def test_probe_device_returns_expected_keys():
+    probe = fit_device.probe_device()
+    for key in (
+        "system", "machine", "wsl", "apple_silicon", "total_ram_gb",
+        "cuda_vram_gb", "usable_memory_gb", "backend", "profile", "tools",
+        "recommend_bare_metal", "executor_placement",
+    ):
+        assert key in probe
+    assert probe["backend"] in {"metal", "mlx", "cuda"}
+    assert isinstance(probe["tools"], dict)
+
+
+def test_official_links_include_https():
+    m = next(x for x in fit_device.CATALOG if x.name == "qwen3-8b")
+    links = fit_device.official_links(m)
+    assert links
+    assert all(url.startswith("https://") for _, url in links)
+
+
+def test_print_install_guidance_wsl_prefers_windows_host(capsys):
+    fit_device.print_install_guidance({
+        "profile": "wsl-host-cpu",
+        "recommend_bare_metal": True,
+        "tools": {"ollama": False, "llama-server": False, "host_ollama_windows": False},
+    })
+    out = capsys.readouterr().out
+    assert "bare metal" in out.lower() or "Windows bare-metal" in out or "Windows host" in out
+    assert "ollama.com/download" in out
+    assert "Fallback" in out or "fallback" in out
+
+
+def test_probe_windows_host_returns_dict_or_none():
+    # On non-WSL CI this is None; on WSL with powershell it should be a dict.
+    result = fit_device.probe_windows_host()
+    assert result is None or isinstance(result, dict)
+    if isinstance(result, dict):
+        assert "total_ram_gb" in result or result.get("source") == "powershell.exe"

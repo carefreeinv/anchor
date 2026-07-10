@@ -30,7 +30,43 @@ from pathlib import Path
 import requests
 import yaml
 
-REPO_ROOT = Path(__file__).resolve().parent.parent
+
+def project_root_from(start: Path | None = None) -> Path:
+    """Resolve the project (or Anchor) root from a scripts/MCP file path.
+
+    Supports:
+    - source tree: ``<root>/scripts/*.py``, ``<root>/mcp/<name>/server.py``
+    - scaffold: ``<root>/.anchor/scripts/*.py``, ``<root>/.anchor/mcp/<name>/server.py``
+    """
+    p = (start or Path(__file__)).resolve()
+    if p.is_file():
+        p = p.parent
+    # .anchor/scripts → project root
+    if p.name == "scripts" and p.parent.name == ".anchor":
+        return p.parent.parent
+    # .anchor/mcp/<server> → project root
+    if p.parent.name == "mcp" and p.parent.parent.name == ".anchor":
+        return p.parent.parent.parent
+    # source / legacy: scripts/ → root
+    if p.name == "scripts":
+        return p.parent
+    # source / legacy: mcp/<server> → root
+    if p.parent.name == "mcp":
+        return p.parent.parent
+    # walk for markers
+    for cur in [p, *p.parents]:
+        if cur.name == ".anchor":
+            return cur.parent
+        if (cur / ".plans").is_dir() or (cur / ".anchor-manifest.json").is_file():
+            return cur
+        if (cur / "anchor" / "ANCHOR.md").is_file() or (cur / ".anchor" / "ANCHOR.md").is_file():
+            return cur
+        if (cur / "scripts" / "anchor_client.py").is_file() and (cur / "mcp").is_dir():
+            return cur  # Anchor source tree
+    return p
+
+
+REPO_ROOT = project_root_from()
 DEFAULT_REGISTRY = Path(__file__).resolve().parent / "endpoints.yaml"
 THINK_RE = re.compile(r"<think>.*?</think>\s*", re.DOTALL)
 
@@ -167,9 +203,30 @@ class Fleet:
                           f"(tiers tried: {self.roles.get(role)})")
 
 
+def resolve_doctrine_path(rel: str, root: Path | None = None) -> Path:
+    """Resolve a doctrine/template path under *root* (default: REPO_ROOT).
+
+    Accepts ``anchor/...`` or ``.anchor/...``. Tries the given form first, then
+    the alternate prefix so both the Anchor source tree (``anchor/``) and
+    scaffolded projects (``.anchor/``) work.
+    """
+    base = root if root is not None else REPO_ROOT
+    rel_n = rel.replace("\\", "/").lstrip("./")
+    candidates = [base / rel_n]
+    if rel_n.startswith("anchor/"):
+        candidates.append(base / (".anchor/" + rel_n[len("anchor/") :]))
+    elif rel_n.startswith(".anchor/"):
+        candidates.append(base / ("anchor/" + rel_n[len(".anchor/") :]))
+    for path in candidates:
+        if path.is_file():
+            return path
+    tried = ", ".join(str(c) for c in candidates)
+    raise FileNotFoundError(f"Doctrine file not found (tried: {tried})")
+
+
 def load_prompt(rel: str) -> str:
-    """Load a prompt/template from the repo, e.g. 'anchor/system-prompts/mythos-core.md'."""
-    return (REPO_ROOT / rel).read_text(encoding="utf-8")
+    """Load a prompt/template, e.g. 'anchor/system-prompts/mythos-core.md'."""
+    return resolve_doctrine_path(rel).read_text(encoding="utf-8")
 
 
 REQUIRED_FOOTER = ("## Result", "## How to verify")

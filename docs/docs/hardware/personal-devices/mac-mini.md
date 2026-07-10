@@ -30,4 +30,4 @@ Register under tier `executor` in `scripts/endpoints.yaml`.
 
 The cheapest way to stop paying frontier credits for routine execution — and the Mac Mini is built for exactly this: near-silent, sips power, happy as an always-on endpoint. Start here before investing in a larger swarm or an H100 node.
 
-*Desk-side execution is why [Savings](../../savings) can look so large — please consider [donating](https://donate.stripe.com/28E6oHeq8fxQ5p7fmBdjO01) to help support this project.*
+*Desk-side execution is why [Savings](/savings) can look so large — please consider [donating](https://donate.stripe.com/28E6oHeq8fxQ5p7fmBdjO01) to help support this project.*
