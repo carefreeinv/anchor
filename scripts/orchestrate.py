@@ -29,6 +29,7 @@ import time
 from pathlib import Path
 
 from anchor_client import Fleet, has_required_footer, load_prompt
+from fleet_metrics import record_task_outcome
 from roles import CRITIC, EXECUTOR, PLANNER, RoleCapabilities, check_role_writes
 from scope_gate import (
     ScopeConfig,
@@ -145,19 +146,55 @@ def split_tasks(plan: str) -> list[str]:
     )
 
 
+def _ledger_outcome(
+    *,
+    task: str,
+    out: str | None,
+    ep,
+    verify_exit: int | None,
+    scope_verdict: str | None,
+    metrics_ledger: Path | None,
+    task_slug: str | None,
+) -> None:
+    """Append claimed-vs-actual row; never raise into the orchestrator loop."""
+    if metrics_ledger is None:
+        return
+    try:
+        record_task_outcome(
+            output=out,
+            verify_exit=verify_exit,
+            model=getattr(ep, "model", None) or getattr(ep, "name", "unknown"),
+            tier=getattr(ep, "tier", None) or "unknown",
+            task=task,
+            ledger_path=metrics_ledger,
+            scope_verdict=scope_verdict,
+            endpoint=getattr(ep, "name", None),
+            task_slug=task_slug,
+        )
+    except OSError as exc:
+        print(f"[metrics] failed to write outcome ledger: {exc}", file=sys.stderr)
+
+
 def execute_task(task: str, plan: str, fleet: Fleet, verify_cmd: str | None,
                  hold_on_fail: bool, insist: bool = False,
-                 scope: ScopeConfig | None = None) -> dict:
+                 scope: ScopeConfig | None = None,
+                 metrics_ledger: Path | None = None,
+                 task_slug: str | None = None) -> dict:
     system = load_prompt("anchor/system-prompts/mythos-core.md")
     history: list[str] = []
+    last_ep = None
+    last_out: str | None = None
+    recorded = False
     for attempt in range(1, MAX_ATTEMPTS + 1):
         ep = fleet.pick("executor")
+        last_ep = ep
         print(f"[exec {attempt}/{MAX_ATTEMPTS}] {ep.name}: {task[:70]}", file=sys.stderr)
         prompt = f"PLAN (context only):\n{plan}\n\nYOUR SINGLE TASK:\n{task}"
         if history:
             prompt += f"\n\nPREVIOUS ATTEMPT FAILED. Verbatim failure output:\n{history[-1]}"
         out = ep.chat([{"role": "system", "content": system},
                        {"role": "user", "content": prompt}], max_tokens=8192)
+        last_out = out
 
         # Fit check (mythos-core rule 11): a worker that judges the task a poor fit
         # for its tier says so up front — honor it immediately instead of burning
@@ -167,6 +204,12 @@ def execute_task(task: str, plan: str, fleet: Fleet, verify_cmd: str | None,
             if not insist:
                 print(f"[fit] {ep.name} suggests escalation: {suggestion}", file=sys.stderr)
                 status = "hold" if hold_on_fail else "escalate"
+                _ledger_outcome(
+                    task=task, out=out, ep=ep, verify_exit=None,
+                    scope_verdict=None, metrics_ledger=metrics_ledger,
+                    task_slug=task_slug,
+                )
+                recorded = True
                 return {"task": task, "status": status, "attempts": attempt,
                         "suggestion": suggestion, "history": history}
             history.append("Your previous output was SUGGEST-ESCALATE. The operator insists "
@@ -182,6 +225,7 @@ def execute_task(task: str, plan: str, fleet: Fleet, verify_cmd: str | None,
         # outside the task spec's ## Files in scope BEFORE running tests. A scope
         # violation is not a retryable failure — widening scope is the planner's
         # call, so route it straight back rather than burning another attempt.
+        scope_label: str | None = None
         if scope is not None:
             try:
                 verdict = enforce_config(scope)
@@ -189,22 +233,66 @@ def execute_task(task: str, plan: str, fleet: Fleet, verify_cmd: str | None,
                 print(f"[scope] could not check scope: {exc}", file=sys.stderr)
                 status = "hold" if hold_on_fail else "escalate"
                 history.append(f"SCOPE: could not determine worktree changes: {exc}")
+                _ledger_outcome(
+                    task=task, out=out, ep=ep, verify_exit=None,
+                    scope_verdict="error", metrics_ledger=metrics_ledger,
+                    task_slug=task_slug,
+                )
+                recorded = True
                 return {"task": task, "status": status, "attempts": attempt,
                         "history": history}
             if not verdict.ok:
                 print(f"[scope] rejected: {', '.join(verdict.offending)}", file=sys.stderr)
+                _ledger_outcome(
+                    task=task, out=out, ep=ep, verify_exit=None,
+                    scope_verdict="fail", metrics_ledger=metrics_ledger,
+                    task_slug=task_slug,
+                )
+                recorded = True
                 return {"task": task, "status": "failed-scope", "attempts": attempt,
                         "offending": list(verdict.offending), "message": verdict.message,
                         "output": out}
+            scope_label = "pass"
 
         if verify_cmd:
             ok, log = run_cmd(verify_cmd)
             if not ok:
                 history.append(log)
+                # Final attempt records the failed verify; intermediate retries
+                # keep trying so we do not double-count one task as many outcomes.
+                if attempt >= MAX_ATTEMPTS:
+                    _ledger_outcome(
+                        task=task, out=out, ep=ep, verify_exit=1,
+                        scope_verdict=scope_label, metrics_ledger=metrics_ledger,
+                        task_slug=task_slug,
+                    )
+                    recorded = True
                 continue
+            _ledger_outcome(
+                task=task, out=out, ep=ep, verify_exit=0,
+                scope_verdict=scope_label, metrics_ledger=metrics_ledger,
+                task_slug=task_slug,
+            )
+            recorded = True
+            return {"task": task, "status": "ok", "attempts": attempt, "output": out}
+
+        # No verify command: still record claim vs unknown actual (exit None).
+        _ledger_outcome(
+            task=task, out=out, ep=ep, verify_exit=None,
+            scope_verdict=scope_label, metrics_ledger=metrics_ledger,
+            task_slug=task_slug,
+        )
+        recorded = True
         return {"task": task, "status": "ok", "attempts": attempt, "output": out}
 
     status = "hold" if hold_on_fail else "escalate"
+    # Exhausted retries (format failures, etc.) — record once if not already.
+    if not recorded and last_ep is not None:
+        _ledger_outcome(
+            task=task, out=last_out, ep=last_ep, verify_exit=None,
+            scope_verdict=None, metrics_ledger=metrics_ledger,
+            task_slug=task_slug,
+        )
     return {"task": task, "status": status, "attempts": MAX_ATTEMPTS, "history": history}
 
 
@@ -241,6 +329,18 @@ def main() -> None:
                     help="worktree root for scope checks (default: cwd)")
     ap.add_argument("--out", default="orchestration_run.json")
     ap.add_argument("--registry", default=None)
+    ap.add_argument(
+        "--metrics-ledger",
+        default=None,
+        help="JSONL path for claimed-vs-actual outcomes "
+             "(default: <worktree>/var/fleet-metrics/outcomes.jsonl; "
+             "pass empty string to disable)",
+    )
+    ap.add_argument(
+        "--task-slug",
+        default=None,
+        help="optional slug prefix for outcome task_id (defaults from --plan-file stem)",
+    )
     args = ap.parse_args()
     if not args.goal and not args.plan_file:
         ap.error("--goal or --plan-file required")
@@ -258,6 +358,23 @@ def main() -> None:
                                "offending": list(verdict.offending),
                                "message": verdict.message})
         return verdict
+
+    if args.metrics_ledger == "":
+        metrics_ledger: Path | None = None
+    elif args.metrics_ledger:
+        metrics_ledger = Path(args.metrics_ledger)
+    else:
+        metrics_ledger = root / "var" / "fleet-metrics" / "outcomes.jsonl"
+
+    task_slug = args.task_slug
+    if task_slug is None and args.plan_file:
+        stem = Path(args.plan_file).name
+        if stem.endswith(".local.md"):
+            task_slug = stem[: -len(".local.md")]
+        elif stem.endswith(".md"):
+            task_slug = stem[:-3]
+        else:
+            task_slug = Path(args.plan_file).stem
 
     if args.plan_file:
         plan_path = Path(args.plan_file)
@@ -292,7 +409,10 @@ def main() -> None:
     results = []
     for t in tasks:
         before = snapshot_changes(root)
-        r = execute_task(t, plan, fleet, args.verify, args.hold_on_fail, args.insist, scope)
+        r = execute_task(
+            t, plan, fleet, args.verify, args.hold_on_fail, args.insist, scope,
+            metrics_ledger=metrics_ledger, task_slug=task_slug,
+        )
         role_verdict = guard(EXECUTOR, before, spec_deny)
         if role_verdict is not None and not role_verdict.ok:
             r["status"] = "failed-role"

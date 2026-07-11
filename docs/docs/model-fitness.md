@@ -65,3 +65,13 @@ Model names link to the **official quick start**. See also [Local Models](/platf
 | [Llama 3.3 70B](https://huggingface.co/meta-llama/Llama-3.3-70B-Instruct) | Generalist executor+critic | Confident fabrication; verbose without caps |
 
 The full matrix with pricing, dates, and per-entry sourcing lives in `anchor/model-fitness.md` in this repo, and is scaffolded into projects as `.anchor/model-fitness.md`.
+
+## Observed data (preferred over vendor claims)
+
+After fleet runs, prefer **local** claim-vs-actual rates over vendor scorecards:
+
+1. **Ledger** — `var/fleet-metrics/outcomes.jsonl` (metadata only), written by `orchestrate.py` via `scripts/fleet_metrics.py`.
+2. **Report** — `python scripts/fitness_report.py` or `--json`. Rates with **n < 5** are withheld.
+3. **Humans** edit `model-fitness.md` from the report; nothing auto-rewrites doctrine.
+
+Rotate the JSONL manually if it grows large.
