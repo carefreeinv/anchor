@@ -30,7 +30,7 @@ The fleet registry: endpoints with `tier` (swarm / executor / executor-heavy / r
 
 ## prompt_tuner.py
 
-Playbook move #3 as a command: `python prompt_tuner.py "fix the login bug"` → a filled task-spec from a cheap model, with honest `TODO(owner):` markers where the rough description was silent. Never invents details — an honest TODO is a success, a plausible invention is a failure.
+Playbook move #3 as a command: `python prompt_tuner.py "fix the login bug"` → a filled task-spec from a cheap model, with honest `TODO(owner):` markers where the rough description was silent. Never invents details — an honest TODO is a success, a plausible invention is a failure. Pass `--target <endpoint-name>` (a name from `endpoints.yaml`) to have it fill the spec's `## Budget` section with that endpoint's `max_context` and a computed output ceiling; without `--target`, or if the endpoint has no `max_context`, both fields read `unspecified`. The tuning model never fills these numbers in itself — tooling overwrites whatever it wrote.
 
 ## router.py
 
@@ -69,7 +69,7 @@ python pending_merges.py --json --exit-code
 
 ## orchestrate.py
 
-The whole loop: plan (planner role or `--plan-file`) → split into tasks → execute each in a fresh context → verify with your `--verify` command → two-strike escalate or `--hold-on-fail` (detached mode) → fresh-context critic review → JSON run report. Format-gates every executor output (missing footer = failed attempt). Pass `--scope-spec <task-spec.md>` (with `--worktree <root>`) to run the **scope gate** before `--verify`: a change outside the spec's `## Files in scope` marks the task `failed-scope` and tests never run. Roles are also harness-enforced per phase via the `roles.py` capability map: writes made during the planner phase outside `.plans/**`, executor writes into `.plans/**` (or its own spec), or any critic write are **role violations** — logged as events, marked `failed-role` on the task, and the run exits `4` after still emitting its outputs. Role transitions (plan approved → executors spawned → review) are explicit logged events. Often invoked by `work_once.py --run` after a claim.
+The whole loop: plan (planner role or `--plan-file`) → split into tasks → execute each in a fresh context → verify with your `--verify` command → two-strike escalate or `--hold-on-fail` (detached mode) → fresh-context critic review → JSON run report. Format-gates every executor output (missing footer = failed attempt). Pass `--scope-spec <task-spec.md>` (with `--worktree <root>`) to run the **scope gate** before `--verify`: a change outside the spec's `## Files in scope` marks the task `failed-scope` and tests never run. Before every dispatch attempt it also runs a **budget gate**: if the prompt already exceeds the picked endpoint's `max_context`, the task is marked `failed-budget` and rejected outright — never truncated — because an oversized prompt means the task was decomposed wrong, not that it needs a retry. Roles are also harness-enforced per phase via the `roles.py` capability map: writes made during the planner phase outside `.plans/**`, executor writes into `.plans/**` (or its own spec), or any critic write are **role violations** — logged as events, marked `failed-role` on the task, and the run exits `4` after still emitting its outputs. Role transitions (plan approved → executors spawned → review) are explicit logged events. Often invoked by `work_once.py --run` after a claim.
 
 ## roles.py
 

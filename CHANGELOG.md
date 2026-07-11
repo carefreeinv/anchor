@@ -8,6 +8,7 @@ Newest first.
 
 ### Added
 
+- **Token-budget declaration + PRE-FLIGHT checklist** — task specs carry a `## Budget` section (context window, output ceiling), computed by `scripts/prompt_tuner.py --target <endpoint>` from the endpoint's registered `max_context` (or `unspecified` when unset — never guessed by the model). Mythos-core gains **rule 13 PRE-FLIGHT**: every executor prints a fixed 6-item pass/fail block (goal, acceptance criteria, files-in-scope, budget, tier fit, task size) before doing any work; any FAIL routes to that item's existing response and stops. `scripts/orchestrate.py` runs a matching **budget gate** before each dispatch attempt — an oversized prompt is rejected as `failed-budget` rather than truncated
 - **Claimed-vs-actual fleet metrics** — `scripts/fleet_metrics.py` parses executor `## Result` claims (`success` / `should-work` / `blocked` / `unparseable`) and appends metadata-only JSONL at `var/fleet-metrics/outcomes.jsonl`; `orchestrate.py` records one row per finished task (pair claim with verify exit + optional scope verdict); `scripts/fitness_report.py` prints per-model claim accuracy / verify pass-rate / unparseable rate (rates withheld when n < 5; `--json` available). Doctrine + model-fitness point at the report as preferred evidence over vendor claims; docs tooling page updated
 
 ## [0.1.0] - 2026-07-19
