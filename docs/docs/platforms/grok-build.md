@@ -3,7 +3,7 @@ sidebar_position: 2
 sidebar_label: Grok Build
 ---
 
-<!-- synced-from: platforms/grok-build/GROK.md @ 6bbc4477de6568a2f7c4b26dce00377e19d78dbd -->
+<!-- synced-from: platforms/grok-build/GROK.md @ 1eccd795ab7ebced62a9ba0808b90a3ef7dd12c1 -->
 
 # Grok Build
 
@@ -36,7 +36,7 @@ The hard rules (restate → plan → one-step-per-turn → verify-don't-claim �
 
 ## Grok 4.5 (reviewed 2026-07-08)
 
-Play to the strength: terminal/CLI-driven steps are Grok 4.5's best fit (GPT-5.5-class on terminal benchmarks, unusually token-efficient). Compensate for the weakness: it measurably trails Fable/GPT tiers on repo-scale issue resolution, so decompose to file-scoped task specs before handing work over. API `reasoning_effort` defaults to *high* — set low for mechanical steps or pay a token multiple for nothing. Community-reported tool-use flakiness `(unverified)` makes external verification load-bearing. A poor-fit task gets a `SUGGEST-ESCALATE:` first line per the fit check in `.anchor/model-fitness.md`, not a silent attempt.
+Play to the strength: terminal/CLI-driven steps are Grok 4.5's best fit (GPT-5.5-class on terminal benchmarks, unusually token-efficient). Compensate for the weakness: it measurably trails Fable/GPT tiers on repo-scale issue resolution, so decompose to file-scoped task specs before handing work over. API `reasoning_effort` defaults to *high* — set low for mechanical steps or pay a token multiple for nothing. In the TUI use **`/effort low`** (or `/model <id> low`); CLI/headless: **`--effort low`**. Catalog tier for Preferred matching is **mid** — high effort is a cost dial, not a frontier promotion. Before [**`/work`**](/skills/work) burns high effort on mid plans, probe for a cheaper local/fleet executor (`scripts/endpoints.yaml`); if none are reachable, emit the effort command rather than a dead stop. Community-reported tool-use flakiness `(unverified)` makes external verification load-bearing. A poor-fit task gets a `SUGGEST-ESCALATE:` first line per the fit check in `.anchor/model-fitness.md`, not a silent attempt.
 
 If MCP is available, connect `anchor-prompts` and call `tune_prompt` on any vague task before starting, and `preflight_check` before executing any spec.
 

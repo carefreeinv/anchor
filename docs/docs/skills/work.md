@@ -78,6 +78,12 @@ Agents must **never** promote drafts except via [**`/draft --promote`**](/skills
 
 Plan headers SHOULD include **Preferred models** (tiers `small | mid | reasoner | frontier` and/or concrete names). Bare `/work` skips plans that are a poor fit for the current model (overqualified or underqualified). Named slug/path or `--no-fit-check` overrides the skip; still state fit in one line when mismatched. See [model fitness](/model-fitness) and the [plan template](https://github.com/carefreeinv/anchor/blob/main/anchor/templates/plan.md).
 
+**Know yourself:** model name + catalog tier (name/table win — e.g. Grok 4.5 is **mid**), cost posture (reasoning effort / thinking toggle), and cheaper capacity on this host.
+
+**Cheaper capacity probe:** before hard-skipping overqualified work or burning a high-cost session on `small`/`mid` Preferred, check `scripts/endpoints.yaml` (and product-local / conventions models) for a lesser **reachable** executor. Registry map: `swarm`→`small`, `executor`|`executor-heavy`|`detached`→`mid`. If one fits, leave the plan unclaimed and print a dispatch line (`work_once.py --once --endpoint …`). If none are up, you are the available executor — do not permanent-refuse mid work.
+
+**Same-model effort right-size:** when no cheaper worker exists, emit a pasteable command for the plan’s Preferred tier (`small`/`mid` → low/medium effort; `reasoner`+ → high). Examples: Grok Build **`/effort low`** or CLI **`--effort low`**; Nemotron/Qwen3 thinking off for bulk execute. High effort on a mid-class model is a **cost dial**, not a tier promotion — good-fit mid plans stay eligible. True overqualified + no cheaper worker → suggest `/work --no-fit-check` and the effort command; underqualified still skips.
+
 **Depends on:** comma-separated other plan slugs (or `none`). A dependency is **met** when that slug is under `completed/` (or git history shows it was under `completed/`) and is **not** still open in another lane. Coordinators/planners should inventory existing plans when drafting and fill this field. Executors must not start work with unmet dependencies.
 
 ## Lifecycle

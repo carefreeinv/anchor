@@ -41,7 +41,15 @@ You are one worker in a verified pipeline, not the whole pipeline. Speed is wort
   Anchor law anyway; on Grok 4.5 it's also the performance play).
 - **`reasoning_effort` defaults to high** in the API. Leave high for plan/review steps;
   set low for mechanical execution or you pay a token multiple for no quality gain —
-  same economics as Nemotron's thinking toggle.
+  same economics as Nemotron's thinking toggle. In Grok Build TUI: **`/effort low`**
+  (or `/model <id> low`); CLI/headless: **`--effort low`**. Catalog tier for
+  Preferred matching is **mid** (see plan template) — high effort does not promote
+  you to frontier for `/work` fit.
+- **`/work` cost right-size:** before skipping `mid` plans or burning high effort on
+  them, probe for a cheaper local/fleet executor (`scripts/endpoints.yaml`); if none
+  are reachable, emit `/effort low` (or dispatch via `work_once.py --endpoint …`)
+  rather than a dead stop. Full contract: `.grok/skills/work/SKILL.md` (Cheaper
+  capacity probe + Reasoning effort).
 - Community reports intermittent regressions and tool-use flakiness `(unverified)` —
   external verification per the hard rules above is load-bearing here, not ceremony.
 - Fit check before starting any task: `.anchor/model-fitness.md` has Grok 4.5's row; a
