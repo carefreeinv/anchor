@@ -106,44 +106,138 @@ obviously trivial work after you load the Goal).
 
 ### Know yourself
 
-Before selecting a plan, identify **your** model name and tier (product name if
-known; otherwise the closest tier). Use that for matching.
+Before selecting a plan, identify **all three**:
+
+1. **Model name + fit tier** (product name if known; else closest tier). Use
+   `.anchor/model-fitness.md` and the plan-template table. **Name and catalog
+   tier win over vibes** — e.g. **Grok 4.5 is mid-class** for Preferred matching
+   (listed under `mid`; named “Grok 4.5” is a good hit). Temporary-coordinator
+   eligibility is not the same as “treat every `mid` plan as overqualified.”
+2. **Cost posture** when the product supports it: current **reasoning effort** /
+   thinking mode if known (`low` | `medium` | `high` | …). **High effort on a
+   mid-class model is a cost dial, not a tier promotion** — it does not by
+   itself make you overqualified for `mid` Preferred plans.
+3. **Cheaper capacity** on this host/fleet (next subsection) — required whenever
+   fit is poor **or** the top ready work is `small`/`mid` while this session is
+   expensive (true higher tier, or mid model stuck on high effort).
+
+### Cheaper capacity probe
+
+Before hard-skipping overqualified work, and when about to burn a high-cost
+session on `small`/`mid` Preferred, probe for a **lesser configured executor**:
+
+1. **Fleet registry:** `scripts/endpoints.yaml` (or project registry). Map
+   registry tiers → fit tiers: `swarm`→`small`,
+   `executor`|`executor-heavy`|`detached`→`mid`, `reasoner`→`reasoner`,
+   `frontier`→`frontier`. Keep endpoints whose mapped tier is **≤** the plan’s
+   highest Preferred tier (or named models that match Preferred).
+2. **Reachability:** listed ≠ live. A cheap connect/list (or prior known-down
+   note) is enough; unreachable workers do not count as delegation targets.
+3. **Product-local models:** smaller models registered in this harness (custom
+   OpenAI-compatible endpoints, local NIM, etc.).
+4. **Project conventions:** model-priority / Preferred orchestrator in
+   `.anchor/conventions.md` or `ANCHOR-CONVENTIONS.md` when present.
+
+**If a cheaper reachable worker fits the plan:** do **not** claim it on bare
+`/work` in this expensive session. Print one line with the dispatch path, e.g.:
+
+```text
+python scripts/work_once.py --once --endpoint <name> --registry scripts/endpoints.yaml
+```
+
+(or “open a session on \<model\>”). Leave the plan unclaimed for that worker.
+
+**If none are configured or reachable:** you are the available executor — do
+**not** permanent-refuse mid work. Apply **same-model cost right-size** (next)
+and/or wait for the operator to paste the suggested command.
+
+### Reasoning effort / same-model cost right-size
+
+When no cheaper worker is available (or the operator already chose this model
+to clear the backlog), map the plan’s Preferred tier → a suggested effort and
+**emit a pasteable platform command**. Never silently change product settings
+yourself if only the human/UI can.
+
+| Preferred (use highest listed tier) | Suggested effort on reasoning models |
+|-------------------------------------|--------------------------------------|
+| `small` | `low` (or `minimal` / `none` if the product offers them) |
+| `mid` | `low` or `medium` |
+| `reasoner` | `high` |
+| `frontier` | `high` or `xhigh` as needed |
+
+**Pasteable commands (use what this product documents):**
+
+| Product | Lower cost for `small`/`mid` work | Raise for `reasoner`+ work |
+|---------|-----------------------------------|----------------------------|
+| **Grok Build (TUI)** | `/effort low` — or `/model <id> low` | `/effort high` |
+| **Grok CLI / headless** | `--effort low` / `--reasoning-effort low` | `--effort high` |
+| **API (Grok-class)** | `reasoning_effort: "low"` | `"high"` |
+| **Nemotron / Qwen3 hybrid** | thinking **off** for bulk execute | thinking **on** for plan/critic |
+| **No effort dial (e.g. some Claude sessions)** | switch session to Haiku / local executor | switch up a tier |
+
+Effort vs fit:
+
+- **Good fit + high effort on `small`/`mid` Preferred:** print the lower-effort
+  command in one line, then **execute** (or pause one turn only if the operator
+  must apply a slash command first — say which). Do **not** reclassify as
+  overqualified solely because effort is high.
+- **True overqualified** (clearly higher *tier* than all Preferred, e.g. Fable
+  on `small`/`mid` only) **+ no cheaper worker + operator needs progress:**
+  suggest `/work --no-fit-check` **and** the effort/model command above; stop
+  unless they insist or already authorized “do it on this model.”
+- **Underqualified:** still skip. Suggest a stronger session/model — cranking
+  effort up is not a substitute when Preferred needs reasoner/frontier you are
+  not.
 
 ### Matching
 
 A plan is a **good fit** if you match any listed name (fuzzy: "Sonnet",
-"Sonnet-class", "Claude Sonnet 5") or your tier is among the listed tiers /
-clearly in the same class.
+"Sonnet-class", "Claude Sonnet 5", "Grok 4.5") or your tier is among the listed
+tiers / clearly in the same class.
 
 | Fit | Meaning | Bare `/work` |
 |-----|---------|--------------|
-| **good** | You are in Preferred models / same class | Eligible |
-| **overqualified** | You are a clearly higher tier than all preferred (e.g. Fable/frontier on `small`/`mid` only) | **Skip** — leave for cheaper models |
+| **good** | You are in Preferred models / same class | Eligible (apply effort right-size if needed) |
+| **overqualified** | You are a clearly higher **tier** than all preferred (e.g. Fable/frontier on `small`/`mid` only) | **Skip** if cheaper capacity exists; else probe + effort/`--no-fit-check` suggestions (see above) |
 | **underqualified** | Preferred needs reasoner/frontier (or named stronger models) and you are below that | **Skip** — leave for stronger models |
 | **unknown** | No useful Preferred models signal and Goal is ambiguous | Eligible only after a one-line fit note; prefer plans with an explicit list |
 
 ### Rules
 
 1. **Bare `/work`:** never start a plan that is overqualified or underqualified
-   for you. Pick the highest-priority **good** fit instead.
-2. **All ready plans are poor fit:** print a short table (path, Preferred models,
-   fit reason) and **stop**. Do not silently burn the wrong tier. Suggest
-   `/work --no-fit-check` (or a named slug), or a session with a listed model.
+   for you. Pick the highest-priority **good** fit instead. On good-fit
+   `small`/`mid` work, still run the effort right-size note when the session is
+   on high reasoning cost.
+2. **All ready plans are poor fit:** print a short table (path, Preferred
+   models, fit reason), the **cheaper-capacity probe** result (what you checked,
+   what is/isn't reachable), and **pasteable** effort/model or
+   `work_once.py --endpoint …` commands aimed at the highest-priority pending
+   plan. Then **stop**. Do not silently burn the wrong tier. Also mention
+   `/work --no-fit-check` (or a named slug) and a stronger/cheaper session when
+   relevant.
 3. **`--no-fit-check`:** disable Preferred-models / tier filtering for this
    invocation only. Still pick **one** plan by normal lane/Value priority (or
    the named slug/path). Still **state fit in one line** before executing so the
-   mismatch is visible — do not pretend the recommendation matched. Does **not**
-   mean “run every plan in `.plans/`.”
+   mismatch is visible — do not pretend the recommendation matched. Still
+   suggest effort right-size when applicable. Does **not** mean “run every plan
+   in `.plans/`.”
 4. **User names slug/path** (without `--no-fit-check`): explicit target overrides
    the skip — but **state the fit mismatch in one line first**, then proceed.
+   Include effort/delegate suggestions when the mismatch is cost, not capability.
 5. **`--list`:** for each ready plan show path, lane (from directory), Priority,
    Value, Preferred models, and your fit (`good` / `overqualified` / `underqualified` /
-   `unknown`). Do not implement. Fit is still computed under `--list` even if
+   `unknown`). Optionally note suggested effort and any cheaper endpoint that
+   would fit. Do not implement. Fit is still computed under `--list` even if
    `--no-fit-check` is also passed (list is informational).
 6. Per-step **Route to** still applies after load for mixed-difficulty steps.
+7. **Operator already said use this model efficiently / no local yet:** treat
+   as authorization to execute **good-fit** (and explicit-target) work here after
+   stating the effort command; still probe so you can recommend local setup
+   later (`/local-models`, registry entries) without blocking progress now.
 
-Right-size works both ways: expensive models leave cheap work on the table;
-small models do not grab architecture plans to "try hard."
+Right-size works both ways: expensive models leave cheap work for cheaper
+workers when those exist; when they do not, same-model effort downshift keeps
+the queue moving. Small models do not grab architecture plans to "try hard."
 
 ## Steps
 
