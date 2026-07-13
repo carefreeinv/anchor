@@ -2,10 +2,12 @@
 """Headless one-shot (optionally bounded-loop) consumer of the /work contract.
 
 Pull-per-endpoint: each worker knows its own model/tier, picks one fit-appropriate
-ready plan (or resumes its own in-progress work), moves it to .plans/in-progress/,
-claims a lease, then either prints the path or hands off to orchestrate.py
---plan-file. Other agents ignore foreign in-progress plans. Not a daemon; not a
-central assigner.
+**ready** plan (bugs/features only), moves it to .plans/in-progress/ and writes a
+lease atomically (the move IS the claim), then prints the path or hands off to
+orchestrate.py --plan-file. Bare pick never scans in-progress — resuming your own
+work is an explicit --slug/--path claim you own; a stalled foreign lease is taken
+over only with --recover. Live workers extend their lease with --heartbeat. Other
+agents ignore foreign in-progress plans. Not a daemon; not a central assigner.
 
 Usage:
   python work_once.py --list
@@ -35,6 +37,7 @@ from plan_lease import (
     claimed_rels,
     park,
     release,
+    renew,
     return_to_ready,
 )
 from plan_select import (
@@ -121,6 +124,35 @@ def run_orchestrate(plan_path: Path, extra: list[str]) -> int:
     return subprocess.call(cmd)
 
 
+def _in_progress_rel(
+    plans_root: Path, root: Path, path: str | None, slug: str | None
+) -> str | None:
+    """Resolve --path/--slug to an ``in-progress/<name>`` rel, or None.
+
+    Bypasses lease-ownership checks on purpose — used only by --recover, which
+    then goes through claim_and_move(recover=True).
+    """
+    if path:
+        p = Path(path)
+        if not p.is_absolute():
+            for c in (Path.cwd() / p, root / p, plans_root / p):
+                if c.is_file():
+                    p = c
+                    break
+        if not p.is_file():
+            return None
+        try:
+            rel = str(p.resolve().relative_to(plans_root.resolve())).replace("\\", "/")
+        except ValueError:
+            return None
+        return rel if rel.startswith("in-progress/") else None
+    if slug:
+        for name in (f"{slug}.md", f"{slug}.local.md"):
+            if (plans_root / "in-progress" / name).is_file():
+                return f"in-progress/{name}"
+    return None
+
+
 def cmd_list(plans_root: Path, worker: Worker, agent_id: str) -> int:
     records = inventory(plans_root, worker, agent_id=agent_id)
     print(format_list_table(records))
@@ -145,8 +177,10 @@ def pick_claim_one(
     worker: Worker,
     args: argparse.Namespace,
 ) -> Path | None:
-    """Select one plan, move to in-progress/, claim lease. Returns absolute path."""
-    # Do not skip our own in-progress leases — those are resume candidates.
+    """Select one ready plan, move to in-progress/, claim lease. Returns path."""
+    # Guard against racing a ready plan another worker is mid-claim on (a lease
+    # exists transiently on the ready path before the move). In-progress is never
+    # bare-picked, so no resume candidates to preserve here.
     skip = {r for r in claimed_rels(plans_root) if not r.startswith("in-progress/")}
     named = bool(args.slug or args.path)
 
@@ -225,24 +259,7 @@ def pick_claim_one(
             )
             skip_now.add(rec.rel)
             continue
-        # Already own in-progress — refresh claim without re-fitting
-        if rec.lane == "in-progress":
-            try:
-                lease, dest = claim_and_move(
-                    plans_root,
-                    rec.rel,
-                    args.agent_id,
-                    ttl_seconds=args.lease_ttl,
-                )
-            except ClaimError as exc:
-                print(f"[work_once] resume failed: {exc}", file=sys.stderr)
-                skip_now.add(rec.rel)
-                continue
-            print(
-                f"[work_once] resuming {lease.plan_rel} as {args.agent_id}",
-                file=sys.stderr,
-            )
-            return dest
+        # Bare pick only yields ready-lane plans (in-progress is never scanned).
         if not args.no_fit_check and rec.fit not in (Fit.GOOD, Fit.UNKNOWN):
             skip_now.add(rec.rel)
             continue
@@ -345,6 +362,20 @@ def main(argv: list[str] | None = None) -> int:
         help="release lease for plan rel (e.g. in-progress/foo.md) and exit",
     )
     ap.add_argument(
+        "--heartbeat",
+        metavar="PLAN_REL",
+        help="extend your lease on an in-progress plan (e.g. in-progress/foo.md) and exit",
+    )
+    ap.add_argument(
+        "--recover",
+        action="store_true",
+        help=(
+            "take over an in-progress plan whose lease has expired past the long "
+            "TTL (crashed agent); requires --path or --slug. Never reclaims an "
+            "active foreign lease."
+        ),
+    )
+    ap.add_argument(
         "--park",
         choices=("ambiguous", "blocked"),
         help="move PLAN into ambiguous/ or blocked/ (use with --path or --slug)",
@@ -391,6 +422,51 @@ def main(argv: list[str] | None = None) -> int:
             print(f"[work_once] {exc}", file=sys.stderr)
             return 2
         print("released" if ok else "no lease", args.release)
+        return 0
+
+    if args.heartbeat:
+        try:
+            lease = renew(
+                plans_root, args.heartbeat, args.agent_id, ttl_seconds=args.lease_ttl
+            )
+        except ClaimError as exc:
+            print(f"[work_once] {exc}", file=sys.stderr)
+            return 2
+        print(
+            f"[work_once] heartbeat {lease.plan_rel} as {lease.agent_id}; "
+            f"expires_at={lease.expires_at}",
+            file=sys.stderr,
+        )
+        print(lease.plan_rel)
+        return 0
+
+    if args.recover:
+        if not args.path and not args.slug:
+            print("[work_once] --recover requires --path or --slug", file=sys.stderr)
+            return 2
+        rel = _in_progress_rel(plans_root, root, args.path, args.slug)
+        if rel is None:
+            print(
+                "[work_once] --recover needs an existing in-progress plan path/slug",
+                file=sys.stderr,
+            )
+            return 1
+        try:
+            lease, dest = claim_and_move(
+                plans_root,
+                rel,
+                args.agent_id,
+                ttl_seconds=args.lease_ttl,
+                recover=True,
+            )
+        except ClaimError as exc:
+            print(f"[work_once] recover failed: {exc}", file=sys.stderr)
+            return 2
+        print(
+            f"[work_once] recovered {lease.plan_rel} as {args.agent_id}",
+            file=sys.stderr,
+        )
+        print(dest)
         return 0
 
     if args.park or args.return_ready:

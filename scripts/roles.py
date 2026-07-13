@@ -38,7 +38,12 @@ MCP_READ_TOOLS = (
     "plans_stale_report",
     "conventions_get",
 )
-MCP_LIFECYCLE_TOOLS = ("plans_claim", "plans_release", "plans_complete")
+MCP_LIFECYCLE_TOOLS = (
+    "plans_claim",
+    "plans_heartbeat",
+    "plans_release",
+    "plans_complete",
+)
 
 
 @dataclass(frozen=True)

@@ -72,10 +72,11 @@ Agents must **never** promote drafts except via [**`/draft --promote`**](/skills
 
 ## Priority (bare `/work`)
 
-1. **Your** plans under `.plans/in-progress/` (resume)
-2. All of `.plans/bugs/*.md` before any feature
-3. Then `.plans/features/*.md` by header `Value: high | medium | low` (default medium)
-4. Among ready plans, keep only **model-fit** plans — unless `--no-fit-check` or the user names a plan
+Ready lanes only — bare `/work` never scans `in-progress/` (resume is an explicit named target you own).
+
+1. All of `.plans/bugs/*.md` before any feature
+2. Then `.plans/features/*.md` by header `Value: high | medium | low` (default medium)
+3. Among ready plans, keep only **model-fit** plans — unless `--no-fit-check` or the user names a plan
 5. **Skip plans with unmet `Depends on`** (dependency still open / not completed). Report blockers; do not start them.
 6. Skip `drafts/`, `completed/`, `ambiguous/`, `blocked/`, `review-needed/`, foreign `in-progress/`, and `README.md`
 
@@ -146,7 +147,7 @@ python scripts/work_once.py --once --tier mid --agent-id worker-1   # moves → 
 python scripts/work_once.py --once --endpoint h100-executor --run
 ```
 
-Shared rules with `/work`: resume own in-progress, bugs before features, Value order, Preferred models fit, refuse `drafts/`/`completed/`, never promote, **ignore foreign in-progress**. Selection logic: `scripts/plan_select.py` + `plan_lease.py`.
+Shared rules with `/work`: ready lanes only (never bare-pick in-progress), bugs before features, Value order, Preferred models fit, refuse `drafts/`/`completed/`, never promote, **ignore foreign in-progress** (owned via a required lease; no silent reclaim). Selection logic: `scripts/plan_select.py` + `plan_lease.py`. Small models: `plan_select.py --next [--claim]`.
 
 ### Git branches + commits + worktrees
 

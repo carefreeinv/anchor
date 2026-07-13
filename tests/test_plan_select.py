@@ -2,7 +2,7 @@ from pathlib import Path
 
 import plan_select as ps
 from plan_lease import claim_and_move
-from plan_select import Fit, Worker, classify_fit, inventory, inventory_ready, select_one
+from plan_select import Fit, Worker, classify_fit, inventory_ready, select_one
 
 
 def _plan(
@@ -140,27 +140,47 @@ def test_inventory_ignores_drafts(tmp_path):
     assert recs[0].rel == "features/ready.md"
 
 
-def test_select_prefers_own_in_progress_and_ignores_others(tmp_path):
+def test_bare_pick_is_ready_only_never_resumes(tmp_path):
     plans = _tree(tmp_path)
     _plan(plans / "features" / "ready.md", preferred="mid")
     _plan(plans / "features" / "taken.md", preferred="mid")
     claim_and_move(plans, "features/taken.md", "agent-a", ttl_seconds=600)
     worker = Worker("test", "mid")
 
-    # agent-b must not see agent-a's in-progress as pickable
-    pick_b = select_one(plans, worker, agent_id="agent-b")
-    assert pick_b is not None
-    assert pick_b.rel == "features/ready.md"
+    # Neither agent bare-picks in-progress. Both get the remaining ready plan —
+    # even agent-a, the owner: resume is an explicit named claim, not a bare pick.
+    for aid in ("agent-b", "agent-a"):
+        pick = select_one(plans, worker, agent_id=aid)
+        assert pick is not None and pick.rel == "features/ready.md"
 
-    # agent-a resumes own in-progress first (even if ready work exists)
-    pick_a = select_one(plans, worker, agent_id="agent-a")
-    assert pick_a is not None
-    assert pick_a.rel == "in-progress/taken.md"
+    # With every ready plan now claimed, bare pick returns nothing — the owner
+    # does NOT fall back to resuming its own in-progress plan.
+    claim_and_move(plans, "features/ready.md", "agent-b", ttl_seconds=600)
+    assert select_one(plans, worker, agent_id="agent-a") is None
 
-    # inventory with agent_id includes own in-progress + ready
-    listed = inventory(plans, worker, agent_id="agent-b")
-    assert all(r.lane != "in-progress" or r.owner == "agent-b" for r in listed)
-    assert not any(r.rel == "in-progress/taken.md" for r in listed)
+
+def test_resolve_own_in_progress_ok_and_unleased_refuses(tmp_path):
+    import pytest
+
+    plans = _tree(tmp_path)
+    _plan(plans / "features" / "y.md", preferred="mid")
+    claim_and_move(plans, "features/y.md", "agent-a", ttl_seconds=600)
+
+    # Owner may resume its own in-progress plan by explicit named path.
+    rec = ps.resolve_target(
+        plans, path=plans / "in-progress" / "y.md", agent_id="agent-a"
+    )
+    assert rec is not None and rec.rel == "in-progress/y.md"
+
+    # Drop the lease → in-progress with no active lease must NOT be silently
+    # reclaimed, even by the same agent id (recovery is explicit).
+    from plan_lease import release
+
+    release(plans, "in-progress/y.md", force=True)
+    with pytest.raises(ValueError, match="no active lease"):
+        ps.resolve_target(
+            plans, path=plans / "in-progress" / "y.md", agent_id="agent-a"
+        )
 
 
 def test_resolve_foreign_in_progress_refuses(tmp_path):
