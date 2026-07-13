@@ -35,7 +35,7 @@ flowchart TB
 
 ## Prerequisites
 
-1. Project has a **`.plans/`** tree (scaffold creates it): `bugs/`, `features/`, `in-progress/`, `ambiguous/`, `blocked/`, `drafts/`, `completed/`.
+1. Project has a **`.plans/`** tree (scaffold creates it): `bugs/`, `features/`, `in-progress/`, `ambiguous/`, `blocked/`, `review-needed/`, `drafts/`, `completed/`.
 2. Plans that should run live under **`bugs/`** or **`features/`** only (then claim → `in-progress/`). Path is authoritative—see [`.plans/README`](https://github.com/carefreeinv/anchor/blob/main/anchor/scaffold/plans/README.md) and [doctrine](/doctrine).
 3. Each plan header includes **Priority**, **Preferred models**, and **Depends on** (slugs or `none`), e.g.:
 
@@ -224,6 +224,7 @@ Workers do **not** watch `drafts/` or chat. Eligibility is entirely filesystem:
 | Park → `ambiguous/` or `blocked/` | agent | Half-baked or cannot-fix; **not** auto-picked |
 | Return → `bugs/`\|`features/` | agent | Release claim or unpark when ready again |
 | `git mv` → `completed/` | owning executor when Done when holds | Leaves in-progress |
+| `git mv` → `review-needed/` | owning executor, when Done when holds but sign-off is wanted | Leaves in-progress; **not** auto-picked; only a human moves it to `completed/` (or back to `in-progress/`/`bugs/`/`features/`) |
 
 So “monitor the project folder” means: **poll `.plans/bugs`, `.plans/features`, and your own `.plans/in-progress`**, not the whole repository. Prefer promoting drafts only when acceptance criteria and Preferred models are filled in.
 

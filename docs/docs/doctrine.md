@@ -79,18 +79,22 @@ flowchart LR
   drafts["drafts/"]
   ready["bugs/ · features/"]
   prog["in-progress/"]
+  review["review-needed/"]
   done["completed/"]
   park["ambiguous/ · blocked/"]
 
   drafts -->|"/draft --promote slug<br/>infer bugs|features"| ready
   ready -->|"claim"| prog
   prog -->|"Done when"| done
+  prog -->|"Done when,<br/>wants sign-off"| review
+  review -->|"human only"| done
+  review -.->|"human: changes requested"| prog
   ready --> park
   prog --> park
   park -->|"return"| ready
 ```
 
-Ready lanes are `bugs/` then `features/` (within a lane by `Priority` P1→P2→P3, default P2, then Value, then oldest first); agents move claimed work to `in-progress/` (only the claimer may continue — others ignore); may park half-baked or stuck work in `ambiguous/` or `blocked/`; finished work goes to `completed/`; never execute `drafts/`, `ambiguous/`, or `blocked/`. Do not put `Lane:` or `Status:` inside plan files. **Promotion** from drafts: [**`/draft --promote <slug>`**](/skills/draft) (user-authorized; agent infers bugs vs features from the plan) or a human move — never from `/work` or fleet pullers. Prefer [**`/draft`**](/skills/draft) to create/list/load drafts and [**`/work`**](/skills/work) to execute ready plans. Headless: `scripts/work_once.py --once --tier mid --agent-id …`. Multi-tier pollers: [Fleet workers](/tooling/fleet-workers). Preferred orchestrator: `anchor <dir> --set-orchestrator …` (if unset, frontier/near-frontier may act as temporary coordinator; lesser models escalate).
+Ready lanes are `bugs/` then `features/` (within a lane by `Priority` P1→P2→P3, default P2, then Value, then oldest first); agents move claimed work to `in-progress/` (only the claimer may continue — others ignore); may park half-baked or stuck work in `ambiguous/` or `blocked/`; may move work an agent believes is done to `review-needed/` for human sign-off before it's final (only a **human** may move `review-needed/` → `completed/`); finished work goes to `completed/`; never execute `drafts/`, `ambiguous/`, `blocked/`, or `review-needed/`. Do not put `Lane:` or `Status:` inside plan files. **Promotion** from drafts: [**`/draft --promote <slug>`**](/skills/draft) (user-authorized; agent infers bugs vs features from the plan) or a human move — never from `/work` or fleet pullers. Prefer [**`/draft`**](/skills/draft) to create/list/load drafts and [**`/work`**](/skills/work) to execute ready plans. Headless: `scripts/work_once.py --once --tier mid --agent-id …`. Multi-tier pollers: [Fleet workers](/tooling/fleet-workers). Preferred orchestrator: `anchor <dir> --set-orchestrator …` (if unset, frontier/near-frontier may act as temporary coordinator; lesser models escalate).
 
 ## Right-size before you start
 

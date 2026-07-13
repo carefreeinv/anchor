@@ -24,6 +24,7 @@ KNOWN_LANES = (
     "in-progress",
     "ambiguous",
     "blocked",
+    "review-needed",
     "drafts",
     "completed",
 )

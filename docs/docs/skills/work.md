@@ -36,10 +36,11 @@ Plans are git-tracked markdown under the **`.plans/`** dotdir. Do not gitignore 
 | `.plans/in-progress/` | claimed / being worked | **only if you moved it there** — others **ignore** |
 | `.plans/ambiguous/` | half-baked / needs clarification | **no** (agent may park here) |
 | `.plans/blocked/` | cannot proceed | **no** (agent may park here) |
+| `.plans/review-needed/` | agent believes `Done when` holds, awaiting human sign-off | **no** (only a human moves it to `completed/`) |
 | `.plans/drafts/` | not ready | **no** (edit only) |
 | `.plans/completed/` | finished archive | **no** |
 
-**Never** implement from `drafts/`, `completed/`, `ambiguous/`, or `blocked/`. **Ignore** every `in-progress/` plan you did not claim.
+**Never** implement from `drafts/`, `completed/`, `ambiguous/`, `blocked/`, or `review-needed/`. **Ignore** every `in-progress/` plan you did not claim.
 
 ### Agent move rule (hard)
 
@@ -49,6 +50,10 @@ stateDiagram-v2
   drafts --> ready: human promote only
   ready --> in_progress: start work + lease
   in_progress --> completed: Done when holds
+  in_progress --> review_needed: Done when holds, wants sign-off
+  review_needed --> completed: human only
+  review_needed --> in_progress: human requested changes
+  review_needed --> ready: release/return
   ready --> ambiguous: half-baked
   ready --> blocked: cannot fix now
   in_progress --> ambiguous: half-baked
@@ -63,7 +68,7 @@ stateDiagram-v2
   end note
 ```
 
-Agents must **never** promote drafts except via [**`/draft --promote`**](/skills/draft), move work into `drafts/`, or touch another agent’s `in-progress/` plan. **Preserve basename** on every lane move (including `.local.md`); only a human may rename for privacy/tracking.
+Agents must **never** promote drafts except via [**`/draft --promote`**](/skills/draft), move work into `drafts/`, move `review-needed/` → `completed/` (human-only — the entire point of that lane), or touch another agent’s `in-progress/` plan. **Preserve basename** on every lane move (including `.local.md`); only a human may rename for privacy/tracking.
 
 ## Priority (bare `/work`)
 
@@ -72,7 +77,7 @@ Agents must **never** promote drafts except via [**`/draft --promote`**](/skills
 3. Then `.plans/features/*.md` by header `Value: high | medium | low` (default medium)
 4. Among ready plans, keep only **model-fit** plans — unless `--no-fit-check` or the user names a plan
 5. **Skip plans with unmet `Depends on`** (dependency still open / not completed). Report blockers; do not start them.
-6. Skip `drafts/`, `completed/`, `ambiguous/`, `blocked/`, foreign `in-progress/`, and `README.md`
+6. Skip `drafts/`, `completed/`, `ambiguous/`, `blocked/`, `review-needed/`, foreign `in-progress/`, and `README.md`
 
 ## Model fit
 
@@ -96,19 +101,23 @@ flowchart LR
   exec["Execute<br/>/work steps"]
   park["Park<br/>ambiguous/ or blocked/"]
   release["Release<br/>back to bugs|features"]
-  finish["Finish<br/>completed/"]
+  review["Review<br/>review-needed/ (agent)"]
+  finish["Finish<br/>completed/ (agent, or human from review-needed/)"]
 
   write --> promote
   promote --> claim
   claim --> exec
   exec --> finish
+  exec --> review
   exec --> park
   exec --> release
+  review --> finish
+  review -.->|"human: changes requested"| claim
   park -.->|"when unblocked"| claim
   release -.->|"another agent"| claim
 ```
 
-Mid-session stop: leave the file in **`in-progress/`** with a short `## Progress` note. Other agents must ignore it. Half-baked → `ambiguous/`; stuck → `blocked/` or return to ready.
+Mid-session stop: leave the file in **`in-progress/`** with a short `## Progress` note. Other agents must ignore it. Half-baked → `ambiguous/`; stuck → `blocked/` or return to ready. Want human sign-off before final? → `review-needed/`; only a human moves that on to `completed/`.
 
 ## Install (platform wiring)
 
@@ -125,7 +134,7 @@ Scaffold always creates the empty `.plans/` tree + README. Process contract also
 
 ### Chat / no shell
 
-When the user types `/work` without tool access: ask them to `ls .plans/bugs .plans/features .plans/in-progress` and paste output; pick by the same priority and model-fit rules; dictate `git mv` into `in-progress/` when starting and into `completed/` when Done when holds. Never dictate a promote move. Never work a foreign in-progress path.
+When the user types `/work` without tool access: ask them to `ls .plans/bugs .plans/features .plans/in-progress` and paste output; pick by the same priority and model-fit rules; dictate `git mv` into `in-progress/` when starting and into `completed/` (or `review-needed/` for human sign-off) when Done when holds. Never dictate a promote move, or a `review-needed/` → `completed/` move. Never work a foreign in-progress path.
 
 ### Headless / fleet
 

@@ -44,11 +44,13 @@ file. Ignore those fields if present; do not write them.
 | `.plans/in-progress/` | yes | **only if you moved it there** | claimed; others **ignore** |
 | `.plans/ambiguous/` | yes | **no** | half-baked; agent may park here |
 | `.plans/blocked/` | yes | **no** | cannot fix now; agent may park here |
+| `.plans/review-needed/` | yes | **no** | agent believes `Done when` holds, awaiting human sign-off; only a human moves it to `completed/` |
 | `.plans/drafts/` | yes (edit plan only) | **no** | |
 | `.plans/completed/` | yes (history) | **no** | |
 
-**Never** implement from `drafts/`, `completed/`, `ambiguous/`, or `blocked/`.
-**Ignore** every plan under `in-progress/` that **you** did not move there.
+**Never** implement from `drafts/`, `completed/`, `ambiguous/`, `blocked/`, or
+`review-needed/`. **Ignore** every plan under `in-progress/` that **you** did
+not move there.
 If the user names a draft: refuse execution; offer **edit-only**. Do **not** promote it.
 
 ### Agent move rule (hard)
@@ -58,6 +60,10 @@ Agents may relocate plan files **only** as:
 ```text
 bugs|features/     →  in-progress/     (start work + lease)
 in-progress/       →  completed/       (Done when holds)
+in-progress/       →  review-needed/   (Done when holds; wants human sign-off)
+review-needed/     →  completed/       (HUMAN ONLY — agents must never do this move)
+review-needed/     →  in-progress/     (human requested changes; agent resumes)
+review-needed/     →  bugs|features/   (release/return)
 bugs|features|in-progress/  →  ambiguous/   (half-baked / underspecified)
 bugs|features|in-progress/  →  blocked/     (cannot fix now)
 in-progress/       →  bugs|features/   (release claim for other agents)
@@ -68,7 +74,8 @@ ambiguous|blocked/ →  bugs|features/   (return when clarified / unblocked)
 drop or add the `.local` suffix; only a human may rename for privacy/tracking.
 
 Agents must **never** promote drafts (use **`/draft --promote`** instead), move
-work into `drafts/`, or touch another agent’s `in-progress/` plan.
+work into `drafts/`, move `review-needed/` → `completed/` (human-only — the
+entire point of that lane), or touch another agent’s `in-progress/` plan.
 
 ## Priority (when no target is given)
 
@@ -82,8 +89,8 @@ work into `drafts/`, or touch another agent’s `in-progress/` plan.
 5. **Skip plans with unmet `Depends on`** (dependency still open / not completed).
    Do not start them; pick another plan or stop and report unmet slugs. Override
    only if the user explicitly insists (and state the risk).
-6. Skip `drafts/`, `completed/`, `ambiguous/`, `blocked/`, foreign `in-progress/`,
-   and `README.md`.
+6. Skip `drafts/`, `completed/`, `ambiguous/`, `blocked/`, `review-needed/`,
+   foreign `in-progress/`, and `README.md`.
 
 If multiple plans share the top priority, **just pick the first in sorted order**
 (Priority → Value → oldest → filename) and start — this is the default; do **not**
@@ -299,8 +306,12 @@ the queue moving. Small models do not grab architecture plans to "try hard."
 1. `git mv` the file from `in-progress/` to `.plans/completed/` (create the dir
    if needed). Optional rename: `YYYY-MM-DD-<slug>.md`. That move **is** the
    done marker — do not set a Status field. Drop any lease for the plan.
+   If the plan or the operator wants human sign-off before this is final,
+   `git mv` to `.plans/review-needed/` instead — a **human** then moves it on
+   to `completed/` (or back to `in-progress/`/`bugs/`/`features/`). Never
+   perform the `review-needed/` → `completed/` move yourself.
 2. Session footer: `## Result`, `## How to verify`, `## Deferred / concerns`,
-   including the new path under `completed/`.
+   including the new path under `completed/` (or `review-needed/`).
 
 **If the user stops mid-plan:** leave the file in **`in-progress/`** with a
 brief `## Progress` note. Do **not** move to `completed/`. Other agents must
@@ -375,5 +386,6 @@ missing). Optional `--slug` checks out `feature/<slug>` inside the worktree.
 ```bash
 ls -la .plans
 ls .plans/bugs .plans/features .plans/in-progress \
-   .plans/ambiguous .plans/blocked .plans/drafts .plans/completed 2>/dev/null
+   .plans/ambiguous .plans/blocked .plans/review-needed \
+   .plans/drafts .plans/completed 2>/dev/null
 ```

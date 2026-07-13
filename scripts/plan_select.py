@@ -8,6 +8,9 @@ Path is authoritative:
   - in-progress/ — claimed; **only the agent that moved it there** may work it
   - ambiguous/ — half-baked (never auto-execute; agent may park here)
   - blocked/ — cannot proceed (never auto-execute; agent may park here)
+  - review-needed/ — agent believes Done when holds, awaiting human sign-off
+    (never auto-execute; agent may move in-progress/ here, but only a
+    **human** may move review-needed/ → completed/)
   - completed/ — archive (never execute)
 
 Priority for bare pick:
@@ -38,9 +41,14 @@ from pathlib import Path
 READY_LANES = ("bugs", "features")
 IN_PROGRESS_LANE = "in-progress"
 PARK_LANES = frozenset({"ambiguous", "blocked"})
+# Agent-flagged-done, awaiting human sign-off. Distinct from PARK_LANES: park
+# lanes return to bugs|features when unblocked; review-needed instead moves on
+# to completed/ (human-only) or back to in-progress/bugs/features. Never
+# auto-picked/executed either way.
+REVIEW_LANE = "review-needed"
 EXECUTABLE_LANES = (*READY_LANES, IN_PROGRESS_LANE)
-# Never pick/execute these (parked + draft + archive)
-NON_EXECUTABLE_LANES = frozenset({"drafts", "completed", "ambiguous", "blocked"})
+# Never pick/execute these (parked + awaiting-review + draft + archive)
+NON_EXECUTABLE_LANES = frozenset({"drafts", "completed", "ambiguous", "blocked", REVIEW_LANE})
 # Back-compat alias used by assert helpers
 BLOCKED_LANES = NON_EXECUTABLE_LANES
 VALUE_RANK = {"high": 0, "medium": 1, "low": 2}
@@ -86,6 +94,7 @@ OPEN_LANES = (
     "in-progress",
     "ambiguous",
     "blocked",
+    REVIEW_LANE,
 )
 
 

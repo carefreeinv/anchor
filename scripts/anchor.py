@@ -178,6 +178,7 @@ PLANS_TREE_FILES: list[tuple[str, str]] = [
     ("anchor/scaffold/plans/in-progress/.gitkeep", ".plans/in-progress/.gitkeep"),
     ("anchor/scaffold/plans/ambiguous/.gitkeep", ".plans/ambiguous/.gitkeep"),
     ("anchor/scaffold/plans/blocked/.gitkeep", ".plans/blocked/.gitkeep"),
+    ("anchor/scaffold/plans/review-needed/.gitkeep", ".plans/review-needed/.gitkeep"),
     ("anchor/scaffold/plans/drafts/.gitkeep", ".plans/drafts/.gitkeep"),
     ("anchor/scaffold/plans/completed/.gitkeep", ".plans/completed/.gitkeep"),
 ]
