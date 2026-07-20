@@ -6,6 +6,12 @@ Newest first.
 
 ## [Unreleased]
 
+### Fixed
+
+- **A role-violating task was scored as an accurate claim** — the claimed-vs-actual ledger row was written inside `execute_task` at the verify step, but a task's **role verdict** is only known after it returns. An executor that wrote outside its role boundary (e.g. into `.plans/**`) and still passed verify was recorded as a clean, accurate `success` — in the very tool whose job is measuring claim accuracy. `orchestrate.py` now holds the row until the role check has run and stamps it with `role_verdict` (`pass`/`fail`, `None` when the run had no role enforcement); `OutcomeRecord` gains the field, `load_outcomes` reads it back, and `fitness_report.py` excludes `role_verdict == "fail"` rows from positive claim accuracy. Scope failures need no equivalent guard — they short-circuit before verify and already arrive with no exit code. Covered by four tests across `test_orchestrate.py` and `test_fitness_report.py`
+- **Removed the abandoned `platforms/grok-build/commands/` tree** — five stale duplicates left behind when Grok moved to `.grok/skills/*/SKILL.md`, badly out of date (its `work.md` was 58 lines against the canonical 403) and still linked from `docs/docs/skills/work.md` as a usable alternative. The one current file, `config.md`, is preserved as **`.grok/skills/config/SKILL.md`**; `GROK.md` points there instead of at the deleted folder
+- **`docs/package-lock.json` no longer drifts from `package.json`** — the lock's root dependency block still recorded `@docusaurus/core` / `preset-classic` at `^3.7.0` while `package.json` had moved to `^3.10.1`, so any `npm install` regenerated the same two-line diff and left contributors with phantom lockfile churn in every worktree. Regenerated. (`npm ci` was never broken by this — the resolved versions already satisfied the newer range.)
+
 ### Added
 
 - **Token-budget declaration + PRE-FLIGHT checklist** — task specs carry a `## Budget` section (context window, output ceiling), computed by `scripts/prompt_tuner.py --target <endpoint>` from the endpoint's registered `max_context` (or `unspecified` when unset — never guessed by the model). Mythos-core gains **rule 13 PRE-FLIGHT**: every executor prints a fixed 6-item pass/fail block (goal, acceptance criteria, files-in-scope, budget, tier fit, task size) before doing any work; any FAIL routes to that item's existing response and stops. `scripts/orchestrate.py` runs a matching **budget gate** before each dispatch attempt — an oversized prompt is rejected as `failed-budget` rather than truncated
