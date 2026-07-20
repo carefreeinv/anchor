@@ -69,6 +69,10 @@ class OutcomeRecord:
     actual_verify_exit: int | None
     scope_verdict: str | None
     timestamp: float
+    # "pass" / "fail" / None when the run had no role enforcement. A task can pass
+    # verify while still writing outside its role's allowed paths — without this the
+    # ledger would score that run as an accurate claim.
+    role_verdict: str | None = None
     tokens: int | None = None
     endpoint: str | None = None
     task_slug: str | None = None
@@ -144,6 +148,7 @@ def record_task_outcome(
     ledger_path: Path | None = None,
     project_root: Path | None = None,
     scope_verdict: str | None = None,
+    role_verdict: str | None = None,
     tokens: int | None = None,
     endpoint: str | None = None,
     task_slug: str | None = None,
@@ -157,6 +162,7 @@ def record_task_outcome(
         claimed=parse_claimed_status(output or ""),
         actual_verify_exit=verify_exit,
         scope_verdict=scope_verdict,
+        role_verdict=role_verdict,
         timestamp=float(timestamp if timestamp is not None else time.time()),
         tokens=tokens,
         endpoint=endpoint,
@@ -190,6 +196,7 @@ def load_outcomes(ledger_path: Path) -> list[OutcomeRecord]:
                     claimed=raw.get("claimed", "unparseable"),  # type: ignore[arg-type]
                     actual_verify_exit=raw.get("actual_verify_exit"),
                     scope_verdict=raw.get("scope_verdict"),
+                    role_verdict=raw.get("role_verdict"),
                     timestamp=float(raw.get("timestamp", 0.0)),
                     tokens=raw.get("tokens"),
                     endpoint=raw.get("endpoint"),

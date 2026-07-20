@@ -75,15 +75,15 @@ The whole loop: plan (planner role or `--plan-file`) → split into tasks → ex
 
 The role→capability map behind ANCHOR.md's role-separation bullet — planner / executor / critic as **harness-enforced capability sets**, not prompt framing, in one module so nothing re-declares role powers elsewhere. Each `RoleCapabilities` carries writable-path allow/deny globs (reusing `scope_gate.path_matches` — one glob implementation), a `can_dispatch` flag (orchestrator only), and the MCP toolset the role may see. `check_role_writes(caps, paths)` classifies a phase's writes; unlike the scope gate it is always active (an empty allowlist means read-only). Consumed by `orchestrate.py` (per-phase enforcement) and the project-orchestrator MCP server (`--role` toolsets). Reads stay unrestricted for every role — only writes and dispatch are gated.
 
-At each task's verify step, `orchestrate.py` appends a **claimed-vs-actual** row to `var/fleet-metrics/outcomes.jsonl` (override with `--metrics-ledger PATH`, disable with `--metrics-ledger ''`). See `fleet_metrics.py` / `fitness_report.py`.
+`orchestrate.py` appends a **claimed-vs-actual** row to `var/fleet-metrics/outcomes.jsonl` per task (override with `--metrics-ledger PATH`, disable with `--metrics-ledger ''`). The row is written **after** the executor's role check, not at the verify step, so it can carry that task's `role_verdict` — a task can pass verify and still have written outside its role boundary, and a row written earlier would score that run as an accurate claim. See `fleet_metrics.py` / `fitness_report.py`.
 
 ## fleet_metrics.py
 
-Parse an executor `## Result` footer claim (`success` / `should-work` / `blocked` / `unparseable`), pair it with the actual verify exit (and optional scope verdict), and append metadata-only JSONL under `var/fleet-metrics/outcomes.jsonl`. No prompts or task bodies — safe even when `var/` is untracked.
+Parse an executor `## Result` footer claim (`success` / `should-work` / `blocked` / `unparseable`), pair it with the actual verify exit (plus optional `scope_verdict` and `role_verdict`), and append metadata-only JSONL under `var/fleet-metrics/outcomes.jsonl`. No prompts or task bodies — safe even when `var/` is untracked.
 
 ## fitness_report.py
 
-Read-only aggregate of the outcomes ledger: per-model claim accuracy, verify pass-rate, unparseable rate. Rates with **n < 5** are withheld. Does **not** rewrite `model-fitness.md` — humans update prose from the report.
+Read-only aggregate of the outcomes ledger: per-model claim accuracy, verify pass-rate, unparseable rate. Rates with **n < 5** are withheld. A row whose `role_verdict` is `fail` never counts toward positive claim accuracy — the executor reached that green by writing outside its boundary, so "it worked" is not a claim worth scoring as accurate. Does **not** rewrite `model-fitness.md` — humans update prose from the report.
 
 ```bash
 python fitness_report.py
