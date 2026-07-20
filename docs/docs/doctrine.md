@@ -3,7 +3,7 @@ sidebar_position: 3
 sidebar_label: Doctrine
 ---
 
-<!-- synced-from: anchor/ANCHOR.md @ 5c1990b9cd5cd0ffb7ed4b46ab8eb2e2090741c6 -->
+<!-- synced-from: anchor/ANCHOR.md @ 351117cab4c0a6d729db80e16f04674663d85969 -->
 
 # The Doctrine
 
@@ -79,18 +79,22 @@ flowchart LR
   drafts["drafts/"]
   ready["bugs/ · features/"]
   prog["in-progress/"]
+  review["review-needed/"]
   done["completed/"]
   park["ambiguous/ · blocked/"]
 
   drafts -->|"/draft --promote slug<br/>infer bugs|features"| ready
   ready -->|"claim"| prog
   prog -->|"Done when"| done
+  prog -->|"Done when,<br/>wants sign-off"| review
+  review -->|"human only"| done
+  review -.->|"human: changes requested"| prog
   ready --> park
   prog --> park
   park -->|"return"| ready
 ```
 
-Ready lanes are `bugs/` then `features/` (within a lane by `Priority` P1→P2→P3, default P2, then Value, then oldest first); agents move claimed work to `in-progress/` (only the claimer may continue — others ignore); may park half-baked or stuck work in `ambiguous/` or `blocked/`; finished work goes to `completed/`; never execute `drafts/`, `ambiguous/`, or `blocked/`. Do not put `Lane:` or `Status:` inside plan files. **Promotion** from drafts: [**`/draft --promote <slug>`**](/skills/draft) (user-authorized; agent infers bugs vs features from the plan) or a human move — never from `/work` or fleet pullers. Prefer [**`/draft`**](/skills/draft) to create/list/load drafts and [**`/work`**](/skills/work) to execute ready plans. Headless: `scripts/work_once.py --once --tier mid --agent-id …`. Multi-tier pollers: [Fleet workers](/tooling/fleet-workers). Preferred orchestrator: `anchor <dir> --set-orchestrator …` (if unset, frontier/near-frontier may act as temporary coordinator; lesser models escalate).
+Ready lanes are `bugs/` then `features/` (within a lane by `Priority` P1→P2→P3, default P2, then Value, then oldest first); agents move claimed work to `in-progress/` (only the claimer may continue — others ignore); may park half-baked or stuck work in `ambiguous/` or `blocked/`; may move work an agent believes is done to `review-needed/` for human sign-off before it's final (only a **human** may move `review-needed/` → `completed/`); finished work goes to `completed/`; never execute `drafts/`, `ambiguous/`, `blocked/`, or `review-needed/`. Do not put `Lane:` or `Status:` inside plan files. **Promotion** from drafts: [**`/draft --promote <slug>`**](/skills/draft) (user-authorized; agent infers bugs vs features from the plan) or a human move — never from `/work` or fleet pullers. Prefer [**`/draft`**](/skills/draft) to create/list/load drafts and [**`/work`**](/skills/work) to execute ready plans. Headless: `scripts/work_once.py --once --tier mid --agent-id …`. Multi-tier pollers: [Fleet workers](/tooling/fleet-workers). Preferred orchestrator: `anchor <dir> --set-orchestrator …` (if unset, frontier/near-frontier may act as temporary coordinator; lesser models escalate).
 
 ## Right-size before you start
 
@@ -113,6 +117,10 @@ flowchart LR
 Boilerplate, formatting, a rename, or one well-specified function gets flagged, with a question about handing off to a smaller model or one already registered in `scripts/endpoints.yaml`, instead of silently burning frontier capacity. `scripts/router.py` implements the lookup.
 
 *Right-sizing is one of the reasons [Savings](/savings) can be so large — please consider [donating](https://donate.stripe.com/28E6oHeq8fxQ5p7fmBdjO01) to help support this project.*
+
+## When the tier you want is rationed
+
+Subscription caps — session, rolling-window, weekly — are a scheduling problem, not a failure. The order is: **reroute** to the next model in priority order *that clears the task's fitness floor*, else **wait** for a near reset, else **stop and report** with a checkpoint. The trap is the middle column of [model fitness](/model-fitness): rerouting boilerplate down a tier is free, rerouting architecture or security work down a tier buys confident wrong answers. Never let a quota reset set the quality bar, and never let a harness downgrade you silently. Full doctrine: [capacity routing](/capacity-routing).
 
 ## Code quality defaults
 

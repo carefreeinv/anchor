@@ -44,11 +44,16 @@ file. Ignore those fields if present; do not write them.
 | `.plans/in-progress/` | yes | **only if you moved it there** | claimed; others **ignore** |
 | `.plans/ambiguous/` | yes | **no** | half-baked; agent may park here |
 | `.plans/blocked/` | yes | **no** | cannot fix now; agent may park here |
+| `.plans/review-needed/` | yes | **no** | agent believes `Done when` holds, awaiting human sign-off; only a human moves it to `completed/` |
 | `.plans/drafts/` | yes (edit plan only) | **no** | |
 | `.plans/completed/` | yes (history) | **no** | |
 
-**Never** implement from `drafts/`, `completed/`, `ambiguous/`, or `blocked/`.
-**Ignore** every plan under `in-progress/` that **you** did not move there.
+**Never** implement from `drafts/`, `completed/`, `ambiguous/`, `blocked/`, or
+`review-needed/`. **Bare `/work` never scans `in-progress/`** — it picks only
+ready lanes. Every in-progress plan is **owned** via a **required lease** under
+`.plans/.leases/`; **ignore** every in-progress plan you do not own, and never
+silently reclaim a foreign, unleased, or expired-lease one. Resume your own work
+by explicit named target (or `work_once.py --recover` for an expired lease).
 If the user names a draft: refuse execution; offer **edit-only**. Do **not** promote it.
 
 ### Agent move rule (hard)
@@ -58,6 +63,10 @@ Agents may relocate plan files **only** as:
 ```text
 bugs|features/     →  in-progress/     (start work + lease)
 in-progress/       →  completed/       (Done when holds)
+in-progress/       →  review-needed/   (Done when holds; wants human sign-off)
+review-needed/     →  completed/       (HUMAN ONLY — agents must never do this move)
+review-needed/     →  in-progress/     (human requested changes; agent resumes)
+review-needed/     →  bugs|features/   (release/return)
 bugs|features|in-progress/  →  ambiguous/   (half-baked / underspecified)
 bugs|features|in-progress/  →  blocked/     (cannot fix now)
 in-progress/       →  bugs|features/   (release claim for other agents)
@@ -68,22 +77,29 @@ ambiguous|blocked/ →  bugs|features/   (return when clarified / unblocked)
 drop or add the `.local` suffix; only a human may rename for privacy/tracking.
 
 Agents must **never** promote drafts (use **`/draft --promote`** instead), move
-work into `drafts/`, or touch another agent’s `in-progress/` plan.
+work into `drafts/`, move `review-needed/` → `completed/` (human-only — the
+entire point of that lane), or touch another agent’s `in-progress/` plan.
 
 ## Priority (when no target is given)
 
-1. **Your** plans under `.plans/in-progress/` first (resume).
-2. All of `.plans/bugs/*.md` before any feature.
-3. Within each lane, order by header `Priority: P1 | P2 | P3` (default **P2** if
+Bare `/work` picks from **ready lanes only** (`bugs/`, `features/`) — it never
+scans `in-progress/` to resume or reclaim. Resume is an explicit named target.
+
+1. All of `.plans/bugs/*.md` before any feature.
+2. Within each lane, order by header `Priority: P1 | P2 | P3` (default **P2** if
    absent): P1 → P2 → P3; then `Value: high | medium | low` (default **medium**):
    high → medium → low; then oldest first (mtime), ties by filename.
-4. Among ready plans, keep only **model-fit** plans (next section) — unless
+3. Among ready plans, keep only **model-fit** plans (next section) — unless
    `--no-fit-check` is set.
-5. **Skip plans with unmet `Depends on`** (dependency still open / not completed).
+4. **Skip plans with unmet `Depends on`** (dependency still open / not completed).
    Do not start them; pick another plan or stop and report unmet slugs. Override
    only if the user explicitly insists (and state the risk).
-6. Skip `drafts/`, `completed/`, `ambiguous/`, `blocked/`, foreign `in-progress/`,
-   and `README.md`.
+5. Skip `drafts/`, `completed/`, `ambiguous/`, `blocked/`, `review-needed/`,
+   **all** `in-progress/`, and `README.md`.
+
+**Less-reliable / small models:** run the deterministic picker instead of
+reasoning about lanes — it only ever returns ready work and claims it atomically
+(move + lease): `python scripts/plan_select.py --next [--claim --agent-id <id>]`.
 
 If multiple plans share the top priority, **just pick the first in sorted order**
 (Priority → Value → oldest → filename) and start — this is the default; do **not**
@@ -276,10 +292,13 @@ the queue moving. Small models do not grab architecture plans to "try hard."
 
 ### 4. Mark in progress
 
-- If the plan is still under `bugs/` or `features/`, **move it** to
-  `.plans/in-progress/` (same filename) before substantive work. Prefer
-  `git mv` when the file is tracked. Optionally record a lease via
-  `work_once.py` / `.plans/.leases/` with a stable agent id.
+- If the plan is still under `bugs/` or `features/`, **claim it** — move it to
+  `.plans/in-progress/` (same filename) **and record a lease** with your stable
+  agent id, together (required, not optional — the lease is what marks the plan
+  yours). Do it atomically with `plan_select.py --next --claim --agent-id <id>`
+  or `work_once.py --once --agent-id <id>`; a bare `git mv` with no lease leaves
+  the plan looking unowned. Long jobs: refresh with `work_once.py --heartbeat
+  in-progress/<slug>.md --agent-id <id>` (24h TTL; expired → explicit `--recover`).
 - Optionally add or update a brief `## Progress` note. Do **not** write
   `Status:` or `Lane:` fields.
 
@@ -299,8 +318,12 @@ the queue moving. Small models do not grab architecture plans to "try hard."
 1. `git mv` the file from `in-progress/` to `.plans/completed/` (create the dir
    if needed). Optional rename: `YYYY-MM-DD-<slug>.md`. That move **is** the
    done marker — do not set a Status field. Drop any lease for the plan.
+   If the plan or the operator wants human sign-off before this is final,
+   `git mv` to `.plans/review-needed/` instead — a **human** then moves it on
+   to `completed/` (or back to `in-progress/`/`bugs/`/`features/`). Never
+   perform the `review-needed/` → `completed/` move yourself.
 2. Session footer: `## Result`, `## How to verify`, `## Deferred / concerns`,
-   including the new path under `completed/`.
+   including the new path under `completed/` (or `review-needed/`).
 
 **If the user stops mid-plan:** leave the file in **`in-progress/`** with a
 brief `## Progress` note. Do **not** move to `completed/`. Other agents must
@@ -375,5 +398,6 @@ missing). Optional `--slug` checks out `feature/<slug>` inside the worktree.
 ```bash
 ls -la .plans
 ls .plans/bugs .plans/features .plans/in-progress \
-   .plans/ambiguous .plans/blocked .plans/drafts .plans/completed 2>/dev/null
+   .plans/ambiguous .plans/blocked .plans/review-needed \
+   .plans/drafts .plans/completed 2>/dev/null
 ```

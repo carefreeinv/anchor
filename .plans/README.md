@@ -20,6 +20,7 @@ files freely; do **not** put `Lane:` or `Status:` inside plan markdown.
 | `in-progress/` | claimed / being worked | **only the agent that moved it there** |
 | `ambiguous/` | half-baked / needs clarification | **no** (parked; not auto-picked) |
 | `blocked/` | cannot proceed with current means | **no** (parked; not auto-picked) |
+| `review-needed/` | agent believes `Done when` holds; awaiting human sign-off | **no** (human moves to `completed/` or back to `in-progress/`/`bugs/`/`features/`) |
 | `drafts/` | not ready (edit / design) | no one (edit only) |
 | `completed/` | finished archive | no one |
 
@@ -30,14 +31,23 @@ Agents may relocate plan files **only** as follows:
 ```text
 bugs|features/<slug>.md     ──mv──►  in-progress/     (starting work + lease)
 in-progress/<slug>.md       ──mv──►  completed/       (Done when holds)
+in-progress/<slug>.md       ──mv──►  review-needed/   (agent believes Done when holds; wants human sign-off)
+review-needed/<slug>.md     ──mv──►  completed/       (HUMAN ONLY — agents must never perform this move)
+review-needed/<slug>.md     ──mv──►  in-progress/     (human requested changes; agent resumes)
+review-needed/<slug>.md     ──mv──►  bugs|features/   (release/return)
 bugs|features|in-progress/  ──mv──►  ambiguous/       (half-baked / underspecified)
 bugs|features|in-progress/  ──mv──►  blocked/         (cannot fix now)
 in-progress/<slug>.md       ──mv──►  bugs|features/   (release claim for others)
 ambiguous|blocked/<slug>.md ──mv──►  bugs|features/   (return when unblocked/clarified)
 ```
 
-Also record ownership under `.plans/.leases/` (agent id + expiry) while in
-`in-progress/`. Headless: `work_once.py` claim/park/return helpers.
+Claiming a ready plan is **required to record a lease** under `.plans/.leases/`
+(agent id + long-TTL expiry) as it moves the file into `in-progress/` — the two
+happen together so the plan is never left looking unowned. A live agent refreshes
+its lease (heartbeat); only a lease untouched past the long TTL is reclaimable,
+and only via an explicit recover. There is **no silent reclaim**. Headless:
+`work_once.py` claim/heartbeat/recover/park/return helpers, or
+`plan_select.py --next --claim`.
 
 Agents must **never**:
 
@@ -45,6 +55,8 @@ Agents must **never**:
 - Move ready/in-progress → `drafts/`
 - Swap `bugs/` ↔ `features/` except via explicit return targeting a lane
 - Move anything out of `completed/`
+- **Move `review-needed/` → `completed/`** — that move is **human-only**;
+  it is the entire point of the lane
 - **Touch another agent’s `in-progress/` plan** (ignore it)
 
 If a draft is named for execution: refuse; offer edit-only; tell the human to
@@ -52,10 +64,11 @@ move it into `bugs/` or `features/` when ready.
 
 ## How to start
 
-1. `/work` — resume **your** `in-progress/` work if any, else next ready plan by
-   priority + **model fit**
+1. `/work` — next **ready** plan by priority + **model fit** (bugs/features
+   only; never scans `in-progress/`)
 2. `/work --list` — inventory ready plans (+ your in-progress); **ignore others’**
-3. `/work <slug>` or `/work .plans/features/foo.md` — named plan
+3. `/work <slug>` or `/work .plans/features/foo.md` — named plan (a named
+   `in-progress/` path resumes only work **you** own)
 4. `/work --no-fit-check` — same priority pick, ignore model-fit filter (still
    **one** plan, not the whole backlog)
 
@@ -80,14 +93,15 @@ one writer per clone/worktree.
 
 ## Priority (bare `/work`)
 
-1. **Your** plans already under `in-progress/` (resume first)
-2. All `bugs/*.md` before any feature
-3. Within each lane by header `Priority: P1 | P2 | P3` (default **P2**), then
+Ready lanes only — bare `/work` never scans `in-progress/`.
+
+1. All `bugs/*.md` before any feature
+2. Within each lane by header `Priority: P1 | P2 | P3` (default **P2**), then
    `Value: high | medium | low` (default medium), then oldest first (mtime):
    P1 → P2 → P3, then high → medium → low
-4. Keep only **model-fit** plans unless `--no-fit-check` or user names a plan
-5. Never `drafts/`, `completed/`, `ambiguous/`, `blocked/`, foreign `in-progress/`,
-   or this README
+3. Keep only **model-fit** plans unless `--no-fit-check` or user names a plan
+4. Never `drafts/`, `completed/`, `ambiguous/`, `blocked/`, `review-needed/`,
+   **any** `in-progress/`, or this README
 
 ## Write / promote / finish
 
@@ -98,7 +112,11 @@ Claim:    agent → move into in-progress/ + lease (path = working)
 Execute:  /work → follow Steps; verify each step
 Park:     agent → ambiguous/ (half-baked) or blocked/ (cannot fix)
 Release:  agent → bugs|features/ (give up claim; still ready for others)
-Finish:   agent: git mv in-progress/ → completed/ (optional YYYY-MM-DD-<slug>.md)
+Review:   agent → git mv in-progress/ → review-needed/ (Done when holds, wants
+          human sign-off) — human then moves to completed/ or back to
+          in-progress/bugs/features; agents must never do the → completed/ move
+Finish:   agent: git mv in-progress/ → completed/ (optional YYYY-MM-DD-<slug>.md),
+          or human: git mv review-needed/ → completed/
 Worktree: parallel agents use scripts/worktree_for_agent.py ensure
           --agent-id … [--slug …] (var/worktrees/<id>/); or work_once --ensure-worktree
 Branch:   from **dev** (else **develop**); if neither exists, **create dev**
@@ -155,7 +173,7 @@ work for cheaper or stronger models.
 | Role | Writes / reads |
 |------|----------------|
 | Planner (NIM, local, human) | Write under `drafts/` only; **human** moves when ready |
-| Executor (`/work`, Fable, Sonnet, Grok, …) | Ready → own `in-progress/` → `completed/`; ignore others’ in-progress |
+| Executor (`/work`, Fable, Sonnet, Grok, …) | Ready → own `in-progress/` → `completed/` (or → `review-needed/` if sign-off is wanted, then human moves to `completed/`); ignore others’ in-progress |
 | Critic | Plan **Done when** + diff |
 
 Plans must be **self-contained** (Goal, Steps with verify commands, Done when).

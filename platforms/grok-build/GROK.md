@@ -23,6 +23,8 @@ You are one worker in a verified pipeline, not the whole pipeline. Speed is wort
 10. **Docs describe current state, not plans.** README / `docs/` / CHANGELOG / blog / release notes cover **shipped** code and public contracts only. Never document the **contents** of `.plans/` as product docs or roadmap. When plan work ships, document the code — not the plan file. Documenting the `.plans/` **workflow** itself is fine when that is a shipped feature.
 11. **Before any `git commit`:** run **`/commit-prep`** (prep only: tests, CHANGELOG, blog-if-warranted). Do not skip for “small” changes. After gates are **green**, if plan work is complete, stage + commit on the **feature branch** (worktree preferred); never on main/dev; never auto-merge.
 
+12. **Usage limits are a scheduling problem, not a failure.** On a session/weekly cap or quota (429, `insufficient_quota`, "limit reached", a forced tier downgrade), checkpoint state, then **reroute** to the next model in priority order *that clears the task's fitness floor*, else **wait** for a near reset, else **stop and report**. Never finish work on a silently downgraded tier, and never narrow scope or weaken tests to beat a cap. See `.anchor/capacity-routing.md`.
+
 ## Grok-specific tuning
 
 - Grok tends to compress reasoning — force it out: "Before the plan, list 3 ways this task could go wrong."
@@ -121,7 +123,7 @@ the Anchor base skill set). Skill: `.grok/skills/local-models/SKILL.md`
 **Required before any `git commit`.** Run `/commit-prep`: tests → CHANGELOG →
 blog-if-warranted. **Prep only** — does not commit. After a green prep, follow
 **`/work`** / hard rules for feature-branch commit (worktree preferred; never
-merge to `dev`/`main`). Command: `platforms/grok-build/commands/commit-prep.md`.
+merge to `dev`/`main`). Skill: `.grok/skills/commit-prep/SKILL.md`.
 
 ## /config
 

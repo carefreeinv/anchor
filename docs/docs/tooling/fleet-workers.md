@@ -35,7 +35,7 @@ flowchart TB
 
 ## Prerequisites
 
-1. Project has a **`.plans/`** tree (scaffold creates it): `bugs/`, `features/`, `in-progress/`, `ambiguous/`, `blocked/`, `drafts/`, `completed/`.
+1. Project has a **`.plans/`** tree (scaffold creates it): `bugs/`, `features/`, `in-progress/`, `ambiguous/`, `blocked/`, `review-needed/`, `drafts/`, `completed/`.
 2. Plans that should run live under **`bugs/`** or **`features/`** only (then claim → `in-progress/`). Path is authoritative—see [`.plans/README`](https://github.com/carefreeinv/anchor/blob/main/anchor/scaffold/plans/README.md) and [doctrine](/doctrine).
 3. Each plan header includes **Priority**, **Preferred models**, and **Depends on** (slugs or `none`), e.g.:
 
@@ -224,6 +224,7 @@ Workers do **not** watch `drafts/` or chat. Eligibility is entirely filesystem:
 | Park → `ambiguous/` or `blocked/` | agent | Half-baked or cannot-fix; **not** auto-picked |
 | Return → `bugs/`\|`features/` | agent | Release claim or unpark when ready again |
 | `git mv` → `completed/` | owning executor when Done when holds | Leaves in-progress |
+| `git mv` → `review-needed/` | owning executor, when Done when holds but sign-off is wanted | Leaves in-progress; **not** auto-picked; only a human moves it to `completed/` (or back to `in-progress/`/`bugs/`/`features/`) |
 
 So “monitor the project folder” means: **poll `.plans/bugs`, `.plans/features`, and your own `.plans/in-progress`**, not the whole repository. Prefer promoting drafts only when acceptance criteria and Preferred models are filled in.
 
@@ -271,14 +272,17 @@ flowchart LR
   ip --- lease
 ```
 
-(Leases are gitignored via scaffold `.plans/.gitignore`.) Fields: `agent_id`, `origin` (prior path), `claimed_at`, `expires_at` (default TTL 3600s; override with `--lease-ttl`).
+(Leases are gitignored via scaffold `.plans/.gitignore`.) Fields: `agent_id`, `origin` (prior path), `claimed_at`, `expires_at` (long **TTL 86400s / 24h**; override with `--lease-ttl`).
 
-- **Ownership** → only that `agent_id` may resume/execute the in-progress file; everyone else ignores it.
+- **Ownership** → only that `agent_id` may resume/execute the in-progress file; everyone else ignores it. Bare `/work` and `work_once` never scan in-progress.
 - **Double claim** → second worker sees the plan gone from ready lanes; exit 1 if nothing else fits.
-- **Stale lease** → expired leases can be reclaimed (orphan in-progress reclaimable carefully).
+- **Heartbeat** → a live worker extends its lease so long jobs never look orphaned:  
+  `python scripts/work_once.py --heartbeat in-progress/foo.md --agent-id mid-h100-a`
+- **Stale lease** → there is **no silent reclaim**. A lease left untouched past the 24h TTL (crashed worker) is taken over only by an **explicit** recover:  
+  `python scripts/work_once.py --recover --path in-progress/foo.md --agent-id mid-h100-b`
 - **Release early**:  
   `python scripts/work_once.py --release in-progress/foo.md --agent-id mid-h100-a`
-- Failed `--run` (orchestrate) **leaves the plan in `in-progress/` with the lease**—fix the failure or wait for TTL.
+- Failed `--run` (orchestrate) **leaves the plan in `in-progress/` with the lease**—fix the failure, heartbeat to hold it, or `--release` it.
 
 ## Bounded loop vs one-shot
 

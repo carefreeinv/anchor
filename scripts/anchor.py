@@ -81,6 +81,7 @@ CONVENTIONS_LEGACY_REL = "ANCHOR-CONVENTIONS.md"
 CORE_FILES: list[str] = [
     "anchor/ANCHOR.md",
     "anchor/model-fitness.md",
+    "anchor/capacity-routing.md",
     "anchor/system-prompts/mythos-core.md",
     "anchor/templates/plan.md",
     "anchor/templates/task-spec.md",
@@ -178,6 +179,7 @@ PLANS_TREE_FILES: list[tuple[str, str]] = [
     ("anchor/scaffold/plans/in-progress/.gitkeep", ".plans/in-progress/.gitkeep"),
     ("anchor/scaffold/plans/ambiguous/.gitkeep", ".plans/ambiguous/.gitkeep"),
     ("anchor/scaffold/plans/blocked/.gitkeep", ".plans/blocked/.gitkeep"),
+    ("anchor/scaffold/plans/review-needed/.gitkeep", ".plans/review-needed/.gitkeep"),
     ("anchor/scaffold/plans/drafts/.gitkeep", ".plans/drafts/.gitkeep"),
     ("anchor/scaffold/plans/completed/.gitkeep", ".plans/completed/.gitkeep"),
 ]
@@ -190,6 +192,7 @@ PLATFORMS: dict[str, dict] = {
             (".claude/commands/config.md", ".claude/commands/config.md"),
             (".claude/commands/work.md", ".claude/commands/work.md"),
             (".claude/commands/draft.md", ".claude/commands/draft.md"),
+            (".claude/commands/commit-prep.md", ".claude/commands/commit-prep.md"),
             (".claude/commands/fleet-watch.md", ".claude/commands/fleet-watch.md"),
             (".claude/commands/install-anchor.md", ".claude/commands/install-anchor.md"),
             # Scaffolded skills (source under platforms/; Anchor /anchor is path-required base)
@@ -203,6 +206,7 @@ PLATFORMS: dict[str, dict] = {
             ("platforms/grok-build/GROK.md", "GROK.md"),
             (".grok/skills/work/SKILL.md", ".grok/skills/work/SKILL.md"),
             (".grok/skills/draft/SKILL.md", ".grok/skills/draft/SKILL.md"),
+            (".grok/skills/commit-prep/SKILL.md", ".grok/skills/commit-prep/SKILL.md"),
             (".grok/skills/fleet-watch/SKILL.md", ".grok/skills/fleet-watch/SKILL.md"),
             (".grok/skills/install-anchor/SKILL.md", ".grok/skills/install-anchor/SKILL.md"),
             # Scaffolded skills (source under platforms/; Anchor /anchor is path-required base)

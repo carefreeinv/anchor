@@ -74,23 +74,81 @@ def test_once_moves_to_in_progress_and_blocks_others(tmp_path, capsys):
     assert code2 == 1
 
 
-def test_resume_own_in_progress(tmp_path, capsys):
+def test_bare_pick_never_resumes_takes_next_ready(tmp_path, capsys):
     root = _root(tmp_path)
     _plan(root / ".plans" / "features" / "a.md", preferred="mid")
     _plan(root / ".plans" / "features" / "b.md", preferred="mid")
     work_once.main(
         ["--root", str(root), "--once", "--tier", "mid", "--agent-id", "w1"]
     )
-    capsys.readouterr()  # clear first claim
-    # Next pick for same agent resumes in-progress, not b
+    capsys.readouterr()  # clear first claim (a.md → in-progress)
+    # A second bare pick for the same agent does NOT resume in-progress/a.md;
+    # it claims the next ready plan (b.md). Resume is an explicit --path claim.
     code = work_once.main(
         ["--root", str(root), "--once", "--tier", "mid", "--agent-id", "w1"]
     )
     assert code == 0
     out = capsys.readouterr().out.strip()
-    assert out.endswith("in-progress/a.md")
-    assert "in-progress/b.md" not in out
-    assert (root / ".plans" / "features" / "b.md").is_file()
+    assert out.endswith("in-progress/b.md")
+    assert "in-progress/a.md" not in out
+
+
+def test_heartbeat_extends_lease(tmp_path, capsys):
+    import plan_lease
+
+    root = _root(tmp_path)
+    _plan(root / ".plans" / "features" / "a.md", preferred="mid")
+    work_once.main(
+        ["--root", str(root), "--once", "--tier", "mid", "--agent-id", "w1"]
+    )
+    capsys.readouterr()
+    plans = root / ".plans"
+    before = plan_lease.read_lease(plans, "in-progress/a.md").expires_at
+    code = work_once.main(
+        ["--root", str(root), "--heartbeat", "in-progress/a.md", "--agent-id", "w1"]
+    )
+    assert code == 0
+    after = plan_lease.read_lease(plans, "in-progress/a.md").expires_at
+    assert after >= before
+
+
+def test_recover_only_takes_over_expired_lease(tmp_path):
+    import plan_lease
+
+    root = _root(tmp_path)
+    _plan(root / ".plans" / "features" / "a.md", preferred="mid")
+    work_once.main(
+        ["--root", str(root), "--once", "--tier", "mid", "--agent-id", "w1"]
+    )
+    plans = root / ".plans"
+    # Active foreign lease → recover refused.
+    code = work_once.main(
+        ["--root", str(root), "--recover", "--path", "in-progress/a.md",
+         "--agent-id", "w2"]
+    )
+    assert code == 2
+    assert plan_lease.owner_of(plans, "in-progress/a.md") == "w1"
+
+    # Expire w1's lease → recover by w2 succeeds and transfers ownership.
+    import time
+
+    from plan_lease import Lease, _write_lease_force, lease_path
+
+    _write_lease_force(
+        lease_path(plans, "in-progress/a.md"),
+        Lease(
+            plan_rel="in-progress/a.md",
+            agent_id="w1",
+            claimed_at=time.time() - 100,
+            expires_at=time.time() - 10,
+        ),
+    )
+    code = work_once.main(
+        ["--root", str(root), "--recover", "--path", "in-progress/a.md",
+         "--agent-id", "w2"]
+    )
+    assert code == 0
+    assert plan_lease.owner_of(plans, "in-progress/a.md") == "w2"
 
 
 def test_refuse_draft_path(tmp_path):

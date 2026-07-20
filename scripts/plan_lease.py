@@ -10,7 +10,11 @@ Agents may also **park** plans in ``ambiguous/`` (half-baked) or ``blocked/``
 (cannot fix now), or **return** an in-progress plan to ``bugs/``|``features/``
 for another worker. Those park lanes are never auto-executed by pickers.
 
-Stale leases (expires_at in the past) may be reclaimed.
+Leases are **minimal but required**: claiming a ready plan writes one atomically
+with the move, so ownership is never skipped. The TTL is long (24h) and a live
+agent refreshes it via :func:`renew` (heartbeat); only a lease left untouched
+past the TTL is reclaimable, and only via an **explicit** recover (``recover=True``)
+— never a silent side effect. An unleased in-progress plan is *not* auto-claimed.
 """
 from __future__ import annotations
 
@@ -20,7 +24,9 @@ import time
 from dataclasses import dataclass
 from pathlib import Path
 
-DEFAULT_TTL_SECONDS = 3600
+DEFAULT_TTL_SECONDS = 86400  # 24h: long enough that a live agent never looks
+# orphaned; refreshed by renew() heartbeat. Only leases untouched past this are
+# reclaimable, and only via explicit recover.
 IN_PROGRESS = "in-progress"
 READY_LANES = ("bugs", "features")
 READY_PREFIXES = ("bugs/", "features/")
@@ -170,11 +176,15 @@ def claim_and_move(
     agent_id: str,
     *,
     ttl_seconds: int = DEFAULT_TTL_SECONDS,
+    recover: bool = False,
 ) -> tuple[Lease, Path]:
     """Claim a ready plan and move it to ``in-progress/``.
 
     ``plan_rel`` must be ``bugs/…`` or ``features/…``. If the plan is already under
-    ``in-progress/`` and this agent holds the lease, refreshes TTL and returns it.
+    ``in-progress/`` and this agent holds the (active) lease, refreshes TTL and
+    returns it. An in-progress plan with **no active lease** (never claimed, or a
+    lease expired past the long TTL) is refused unless ``recover=True`` — there is
+    no silent reclaim of possibly-live work.
 
     Returns ``(lease, absolute_path_after_move)``.
     """
@@ -198,7 +208,16 @@ def claim_and_move(
             raise ClaimError(
                 f"in-progress plan owned by {existing.agent_id!r} — ignore unless you are that agent"
             )
-        # Orphan in-progress (no active lease): allow reclaim by this agent
+        # No active lease: never claimed, or expired past the long TTL. Never
+        # silently reclaim — it may be another agent's live work with a missed
+        # heartbeat. Recovery is explicit (crashed-agent takeover).
+        if not recover:
+            stale = read_lease(plans_root, plan_rel)
+            who = f" (expired lease last held by {stale.agent_id!r})" if stale else ""
+            raise ClaimError(
+                f"in-progress plan {plan_rel} has no active lease{who}; pass "
+                "recover=True to take over abandoned/expired work, or leave it"
+            )
         lease = claim(
             plans_root,
             plan_rel,
@@ -258,6 +277,39 @@ def claim_and_move(
         lp.unlink(missing_ok=True)
     _write_lease_force(lp, lease)
     return lease, dest.resolve()
+
+
+def renew(
+    plans_root: Path,
+    plan_rel: str,
+    agent_id: str,
+    *,
+    ttl_seconds: int = DEFAULT_TTL_SECONDS,
+) -> Lease:
+    """Heartbeat: extend a lease you own, pushing ``expires_at`` to now + TTL.
+
+    A live agent calls this periodically so its in-progress plan never looks
+    orphaned. Also lets an agent refresh its *own* just-expired lease (resume
+    after a pause). Raises :class:`ClaimError` if a **different** agent currently
+    holds an *active* lease on the plan.
+    """
+    plan_rel = plan_rel.replace("\\", "/")
+    existing = read_lease(plans_root, plan_rel)
+    if existing and not existing.expired and existing.agent_id != agent_id:
+        raise ClaimError(
+            f"cannot renew lease held by {existing.agent_id!r} as {agent_id!r} ({plan_rel})"
+        )
+    now = time.time()
+    same_owner = bool(existing and existing.agent_id == agent_id)
+    lease = Lease(
+        plan_rel=plan_rel,
+        agent_id=agent_id,
+        claimed_at=existing.claimed_at if same_owner else now,
+        expires_at=now + max(1, int(ttl_seconds)),
+        origin_rel=existing.origin_rel if existing else None,
+    )
+    _write_lease_force(lease_path(plans_root, plan_rel), lease)
+    return lease
 
 
 def release(

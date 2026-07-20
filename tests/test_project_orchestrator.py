@@ -18,6 +18,7 @@ from coordinator import (  # noqa: E402
     plan_read,
     plans_claim,
     plans_complete,
+    plans_heartbeat,
     plans_list,
     plans_stale_report,
     plans_suggest_dependencies,
@@ -93,15 +94,59 @@ def test_claim_double_and_foreign_in_progress(tmp_path: Path):
         plans_claim(cfg_b, "in-progress/foo.md")
 
 
-def test_complete_move_only(tmp_path: Path):
+def test_complete_moves_to_review_needed(tmp_path: Path):
     plans = _plans_tree(tmp_path)
     _write(plans / "features" / "foo.md")
     cfg = build_config(tmp_path, agent_id="agent-a", tier="mid")
     plans_claim(cfg, "features/foo.md")
     done = plans_complete(cfg, "in-progress/foo.md")
-    assert done["action"] == "move_only_complete"
-    assert (plans / "completed" / "foo.md").is_file()
+    # Agent-complete lands in review-needed/ for human sign-off, not completed/.
+    assert done["action"] == "move_to_review_needed"
+    assert (plans / "review-needed" / "foo.md").is_file()
+    assert not (plans / "completed" / "foo.md").exists()
     assert not (plans / "in-progress" / "foo.md").exists()
+
+
+def test_heartbeat_extends_and_foreign_refused(tmp_path: Path):
+    import plan_lease
+
+    plans = _plans_tree(tmp_path)
+    _write(plans / "features" / "foo.md")
+    cfg_a = build_config(tmp_path, agent_id="agent-a", tier="mid")
+    plans_claim(cfg_a, "features/foo.md")
+    before = plan_lease.read_lease(plans, "in-progress/foo.md").expires_at
+    hb = plans_heartbeat(cfg_a, "in-progress/foo.md")
+    assert hb["ok"] and hb["expires_at"] >= before
+
+    # A different agent can neither heartbeat nor claim the active in-progress plan.
+    cfg_b = build_config(tmp_path, agent_id="agent-b", tier="mid")
+    with pytest.raises(CoordinatorError, match="agent-a"):
+        plans_heartbeat(cfg_b, "in-progress/foo.md")
+    with pytest.raises(CoordinatorError, match="agent-a"):
+        plans_claim(cfg_b, "in-progress/foo.md")
+
+
+def test_claim_no_silent_reclaim_then_recover(tmp_path: Path):
+    import plan_lease
+    from plan_lease import Lease, _write_lease_force, lease_path
+
+    plans = _plans_tree(tmp_path)
+    _write(plans / "features" / "foo.md")
+    cfg_a = build_config(tmp_path, agent_id="agent-a", tier="mid")
+    plans_claim(cfg_a, "features/foo.md")
+    # Expire agent-a's lease (simulate crashed agent past the long TTL).
+    _write_lease_force(
+        lease_path(plans, "in-progress/foo.md"),
+        Lease("in-progress/foo.md", "agent-a", time.time() - 100, time.time() - 10),
+    )
+    cfg_b = build_config(tmp_path, agent_id="agent-b", tier="mid")
+    # No active lease → refuse without recover (no silent reclaim).
+    with pytest.raises(CoordinatorError, match="no active lease"):
+        plans_claim(cfg_b, "in-progress/foo.md")
+    # recover=True takes over the abandoned plan.
+    res = plans_claim(cfg_b, "in-progress/foo.md", recover=True)
+    assert res["ok"] and res["agent_id"] == "agent-b"
+    assert plan_lease.owner_of(plans, "in-progress/foo.md") == "agent-b"
 
 
 def test_complete_refuses_ready_without_claim(tmp_path: Path):

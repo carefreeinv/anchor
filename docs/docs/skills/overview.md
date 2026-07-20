@@ -43,14 +43,14 @@ flowchart TD
 
 | Command | Best used | Notes |
 |---------|-----------|--------|
-| **`/commit-prep`** | Before **any** `git commit` in Anchor-using projects | Prep only (tests, CHANGELOG, blog-if-warranted); does not commit. See platform docs. |
+| **`/commit-prep`** | Before **any** `git commit` in Anchor-using projects | Scaffolded into every project. Prep only (tests, CHANGELOG, blog-if-warranted); does not commit. Project-agnostic — discovers this repo's CI, changelog, and blog conventions. See platform docs. |
 | **`/config`** | From the **Anchor** checkout (or with Anchor checkout available) | Saves global platform/fleet/model-priority defaults via `config.sh`. |
 
 ## Packaging reminder
 
 | Kind | Examples | Lives in |
 |------|----------|----------|
-| **Dual-use** (Anchor base **and** scaffolded into projects) | `/draft`, `/work`, `/fleet-watch`, `/install-anchor` | Anchor `.grok/skills` / `.claude/commands` (and scaffolded copies) |
+| **Dual-use** (Anchor base **and** scaffolded into projects) | `/draft`, `/work`, `/commit-prep`, `/fleet-watch`, `/install-anchor` | Anchor `.grok/skills` / `.claude/commands` (and scaffolded copies) |
 | **Scaffolded into projects** (source under `platforms/`) | `/local-models`, project `/anchor` | `platforms/claude-code/…`, `platforms/grok-build/…` |
 | **Anchor base only** (path-required `/anchor`) | Anchor `/anchor` | Anchor checkout base skills — not the project CWD-default variant |
 

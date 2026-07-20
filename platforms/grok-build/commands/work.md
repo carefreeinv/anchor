@@ -22,10 +22,14 @@ slug, or a path under `.plans/`):
      `--effort low`) for this session. Full skill: “Cheaper capacity probe” +
      “Reasoning effort / same-model cost right-size”.
    - **`--no-fit-check` / dep override:** only when user insists; still one plan; state mismatch.
-   - **Never execute** `drafts/` / `completed/` / `ambiguous/` / `blocked/`.
-   - **Agent moves:** claim → `in-progress/`; finish → `completed/`; park →
-     `ambiguous/`|`blocked/`; release → ready. Never promote drafts; never steal
-     foreign in-progress (promote drafts via `/draft --promote` only).
+   - **Never execute** `drafts/` / `completed/` / `ambiguous/` / `blocked/` /
+     `review-needed/`.
+   - **Agent moves:** claim → `in-progress/`; finish → `completed/` (or, for
+     human sign-off first, `review-needed/` — only a **human** may then move
+     `review-needed/` → `completed/`); park → `ambiguous/`|`blocked/`; release
+     → ready. Never promote drafts; never steal foreign in-progress; never
+     perform the `review-needed/` → `completed/` move yourself (promote drafts
+     via `/draft --promote` only).
 2. **`--list`:** ready plans (+ your in-progress) with Preferred models, fit, deps;
    optional suggested effort / cheaper endpoint; stop.
 3. **No args:** pick highest-priority **good-fit** plan (menu if several and
@@ -41,9 +45,11 @@ slug, or a path under `.plans/`):
 5. If still under bugs/features, **move to `in-progress/`** first; optionally
    note `## Progress`; **execute Steps** in order with verification commands;
    two failures on the same error → stop and escalate. Honor per-step **Route to**.
-6. When **Done when** holds: `git mv` from `in-progress/` → `.plans/completed/`,
-   then the usual footer. Mid-session stop → leave in **`in-progress/`** with
-   `## Progress` (others ignore it).
+6. When **Done when** holds: `git mv` from `in-progress/` → `.plans/completed/`
+   (or, if human sign-off is wanted first, → `.plans/review-needed/` — never
+   move `review-needed/` → `completed/` yourself), then the usual footer.
+   Mid-session stop → leave in **`in-progress/`** with `## Progress` (others
+   ignore it).
 7. **Docs rule:** product docs describe **current shipped state**, not plan
    backlog. Do not write README/docs/CHANGELOG from `.plans/` contents; when work
    ships, document the code — not the plan file.

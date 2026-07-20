@@ -9,6 +9,7 @@ from plan_lease import (
     claimed_rels,
     in_progress_owned_by,
     release,
+    renew,
 )
 
 
@@ -140,3 +141,29 @@ def test_return_to_ready_from_blocked(tmp_path):
     park(plans, "features/x.md", "blocked")
     dest = return_to_ready(plans, "blocked/x.md", target_lane="features")
     assert dest.parent.name == "features"
+
+
+def test_renew_extends_and_blocks_foreign(tmp_path):
+    plans = _plans(tmp_path)
+    _write_plan(plans / "features" / "foo.md")
+    _lease, _dest = claim_and_move(plans, "features/foo.md", "agent-a", ttl_seconds=60)
+    before = active_lease(plans, "in-progress/foo.md").expires_at
+    lease = renew(plans, "in-progress/foo.md", "agent-a", ttl_seconds=120)
+    assert lease.expires_at >= before
+    with pytest.raises(ClaimError, match="agent-a"):
+        renew(plans, "in-progress/foo.md", "agent-b")
+
+
+def test_no_silent_reclaim_of_unleased_in_progress(tmp_path):
+    plans = _plans(tmp_path)
+    _write_plan(plans / "features" / "foo.md")
+    claim_and_move(plans, "features/foo.md", "agent-a", ttl_seconds=60)
+    # Drop the lease → an unleased in-progress plan must not be silently reclaimed.
+    release(plans, "in-progress/foo.md", force=True)
+    with pytest.raises(ClaimError, match="no active lease"):
+        claim_and_move(plans, "in-progress/foo.md", "agent-b")
+    # recover=True is the explicit takeover path.
+    lease, _dest = claim_and_move(
+        plans, "in-progress/foo.md", "agent-b", recover=True
+    )
+    assert lease.agent_id == "agent-b"
