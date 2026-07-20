@@ -6,6 +6,10 @@ Newest first.
 
 ## [Unreleased]
 
+### Added
+
+- **Claimed-vs-actual fleet metrics** — `scripts/fleet_metrics.py` parses executor `## Result` claims (`success` / `should-work` / `blocked` / `unparseable`) and appends metadata-only JSONL at `var/fleet-metrics/outcomes.jsonl`; `orchestrate.py` records one row per finished task (pair claim with verify exit + optional scope verdict); `scripts/fitness_report.py` prints per-model claim accuracy / verify pass-rate / unparseable rate (rates withheld when n < 5; `--json` available). Doctrine + model-fitness point at the report as preferred evidence over vendor claims; docs tooling page updated
+
 ## [0.1.0] - 2026-07-19
 
 First tagged release. Anchor's doctrine, `.plans/` workflow, scaffold CLI, fleet

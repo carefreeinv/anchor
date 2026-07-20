@@ -61,6 +61,26 @@ Model names link to the **official quick start** (download / serve / templates).
 | [DeepSeek-R1 distills](https://huggingface.co/collections/deepseek-ai/deepseek-r1) | Best local critic per GB; hard single problems (race conditions, algorithm choice) | NOT an executor — slow, token-hungry, over-refactors; no system prompt; no few-shot; greedy decoding breaks it |
 | [Llama 3.3 70B](https://huggingface.co/meta-llama/Llama-3.3-70B-Instruct) | Generalist executor+critic in one box; conservative planner | Confident fabrication — polished answers with an invented function in the middle; verbose without token caps |
 
+## Observed data (preferred over vendor claims)
+
+Vendor scorecards and the rows above are **starting priors**. After you run
+`orchestrate.py` (or any path that records task outcomes), prefer **locally
+observed** claim-vs-actual rates:
+
+1. Ledger: append-only JSONL at `var/fleet-metrics/outcomes.jsonl` (metadata only —
+   model, tier, task id hash, claimed status, verify exit, optional scope verdict;
+   no prompts or task bodies). Written by `orchestrate.py` at each task's verify
+   step via `scripts/fleet_metrics.py`.
+2. Report: `python scripts/fitness_report.py` (table) or `--json` — per-model
+   claim accuracy, verify pass-rate, unparseable rate. Rates with **n < 5** are
+   withheld so small samples do not look like truth.
+3. **Humans** update this file's prose from the report. Nothing rewrites
+   `model-fitness.md` automatically.
+
+The model's claim of success is an input to verification, never a substitute —
+this ledger instruments that sentence. Rotate or truncate the JSONL manually if
+it grows large; automated rotation is out of scope here.
+
 ## How this file is used
 
 - Scaffolded into every project (core doctrine file); `ANCHOR-CONVENTIONS.md` adds the
@@ -69,4 +89,5 @@ Model names link to the **official quick start** (download / serve / templates).
   `orchestrate.py` treats a `SUGGEST-ESCALATE` first line as an immediate escalation
   (no burned attempts) unless run with `--insist`.
 - Re-review this file when a listed model ships a major version; entries carry the
-  review date above.
+  review date above. Prefer observed fitness report numbers over vendor claims
+  when sample sizes are large enough (see above).

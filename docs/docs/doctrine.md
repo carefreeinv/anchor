@@ -3,7 +3,7 @@ sidebar_position: 3
 sidebar_label: Doctrine
 ---
 
-<!-- synced-from: anchor/ANCHOR.md @ 351117cab4c0a6d729db80e16f04674663d85969 -->
+<!-- synced-from: anchor/ANCHOR.md @ 0ffd612e1b71687a1241cc850f910d12a636da7b -->
 
 # The Doctrine
 
@@ -59,7 +59,7 @@ flowchart TB
 - **Forced structure** — templates with mandatory sections; a model that must fill `## Acceptance criteria` cannot skip thinking about them. Outputs missing the required footer are rejected and retried by the pipeline, not forgiven.
 - **One task per fresh context** — context rot hits small models hardest; never run task chains in one conversation.
 - **Role separation** — planner → executor → critic as three clean contexts outperforms one long chat, even on the same model. In the orchestrated path the split is harness-enforced by the `scripts/roles.py` capability map (planner writes only `.plans/**`; executor never `.plans/**` or its own spec; critic writes nothing), applied per phase by `orchestrate.py` and by the project-orchestrator MCP server's role-scoped toolsets. Role transitions are logged orchestrator events; single-model sessions keep the discipline by prompt alone.
-- **External verification** — tests, linters, builds, and diff-scope checks decide done-ness.
+- **External verification** — tests, linters, builds, and diff-scope checks decide done-ness. Fleet runs pair the model’s claim with actual verify exits in `var/fleet-metrics/outcomes.jsonl`; aggregate with `fitness_report.py` and prefer those rates when updating model-fitness prose.
 - **Escalation paths** — ambiguity, architecture, and twice-failed tasks go up a tier by rule, not by judgment.
 
 ## The templates

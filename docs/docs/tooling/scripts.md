@@ -75,6 +75,22 @@ The whole loop: plan (planner role or `--plan-file`) → split into tasks → ex
 
 The role→capability map behind ANCHOR.md's role-separation bullet — planner / executor / critic as **harness-enforced capability sets**, not prompt framing, in one module so nothing re-declares role powers elsewhere. Each `RoleCapabilities` carries writable-path allow/deny globs (reusing `scope_gate.path_matches` — one glob implementation), a `can_dispatch` flag (orchestrator only), and the MCP toolset the role may see. `check_role_writes(caps, paths)` classifies a phase's writes; unlike the scope gate it is always active (an empty allowlist means read-only). Consumed by `orchestrate.py` (per-phase enforcement) and the project-orchestrator MCP server (`--role` toolsets). Reads stay unrestricted for every role — only writes and dispatch are gated.
 
+At each task's verify step, `orchestrate.py` appends a **claimed-vs-actual** row to `var/fleet-metrics/outcomes.jsonl` (override with `--metrics-ledger PATH`, disable with `--metrics-ledger ''`). See `fleet_metrics.py` / `fitness_report.py`.
+
+## fleet_metrics.py
+
+Parse an executor `## Result` footer claim (`success` / `should-work` / `blocked` / `unparseable`), pair it with the actual verify exit (and optional scope verdict), and append metadata-only JSONL under `var/fleet-metrics/outcomes.jsonl`. No prompts or task bodies — safe even when `var/` is untracked.
+
+## fitness_report.py
+
+Read-only aggregate of the outcomes ledger: per-model claim accuracy, verify pass-rate, unparseable rate. Rates with **n < 5** are withheld. Does **not** rewrite `model-fitness.md` — humans update prose from the report.
+
+```bash
+python fitness_report.py
+python fitness_report.py --json
+python fitness_report.py --ledger var/fleet-metrics/outcomes.jsonl
+```
+
 ## scope_gate.py
 
 Machine-enforces mythos-core rule 7 ("scope is sacred"). `check_scope(diff_paths, in_scope, allowed_generated)` is a pure classifier; `worktree_changes(root)` reads the git diff (tracked vs HEAD + untracked); `enforce_scope(...)` combines them. Any changed path outside the task spec's `## Files in scope` (or an `Allowed generated files:` allowlist) is a violation. Globs are gitignore-style: `*` within a segment, `**` across segments, trailing `/` for a subtree, plain paths match exactly or as a directory prefix. Use as a **verify pre-step** so tests never run on an out-of-scope diff — `python scope_gate.py --root . --spec spec.md && pytest -q` (exit `3` = violation) — or via `orchestrate.py --scope-spec`.
