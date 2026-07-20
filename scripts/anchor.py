@@ -81,6 +81,7 @@ CONVENTIONS_LEGACY_REL = "ANCHOR-CONVENTIONS.md"
 CORE_FILES: list[str] = [
     "anchor/ANCHOR.md",
     "anchor/model-fitness.md",
+    "anchor/capacity-routing.md",
     "anchor/system-prompts/mythos-core.md",
     "anchor/templates/plan.md",
     "anchor/templates/task-spec.md",
@@ -191,6 +192,7 @@ PLATFORMS: dict[str, dict] = {
             (".claude/commands/config.md", ".claude/commands/config.md"),
             (".claude/commands/work.md", ".claude/commands/work.md"),
             (".claude/commands/draft.md", ".claude/commands/draft.md"),
+            (".claude/commands/commit-prep.md", ".claude/commands/commit-prep.md"),
             (".claude/commands/fleet-watch.md", ".claude/commands/fleet-watch.md"),
             (".claude/commands/install-anchor.md", ".claude/commands/install-anchor.md"),
             # Scaffolded skills (source under platforms/; Anchor /anchor is path-required base)
@@ -204,6 +206,7 @@ PLATFORMS: dict[str, dict] = {
             ("platforms/grok-build/GROK.md", "GROK.md"),
             (".grok/skills/work/SKILL.md", ".grok/skills/work/SKILL.md"),
             (".grok/skills/draft/SKILL.md", ".grok/skills/draft/SKILL.md"),
+            (".grok/skills/commit-prep/SKILL.md", ".grok/skills/commit-prep/SKILL.md"),
             (".grok/skills/fleet-watch/SKILL.md", ".grok/skills/fleet-watch/SKILL.md"),
             (".grok/skills/install-anchor/SKILL.md", ".grok/skills/install-anchor/SKILL.md"),
             # Scaffolded skills (source under platforms/; Anchor /anchor is path-required base)

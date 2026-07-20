@@ -55,6 +55,10 @@ A sloppy prompt costs a frontier model money and costs a small model *correctnes
 
 The escalation path above (stop after two failures, hand up a tier) has an inverse that's just as important and easier to forget: before spending an expensive tier's tokens, ask whether the task actually needs them. If it looks like boilerplate, formatting, a rename, or a single well-specified function, the model should say so and ask whether to proceed at the current tier or hand off to a smaller model or a model already registered in `scripts/endpoints.yaml` — rather than silently burning frontier capacity on work a cheap/local model would do just as correctly. `scripts/router.py` implements this lookup; a model without fleet access should still flag the mismatch in words.
 
+### When the tier you want is rationed
+
+Subscription caps — session, rolling-window, weekly — are a scheduling problem, not a failure. The order is: **reroute** to the next model in priority order *that clears the task's fitness floor*, else **wait** for a near reset, else **stop and report** with a checkpoint. The trap is the middle column of `model-fitness.md`: rerouting boilerplate down a tier is free, rerouting architecture or security work down a tier buys confident wrong answers. Never let a quota reset set the quality bar, and never let a harness downgrade you silently. Full doctrine: `capacity-routing.md`.
+
 ## Code quality defaults
 
 Every tier defaults to these regardless of task size — they're cheap to apply and expensive to skip:

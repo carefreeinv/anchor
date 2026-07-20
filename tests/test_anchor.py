@@ -73,6 +73,22 @@ def test_plan_copy_includes_plans_tree_and_work_commands(tmp_path):
     assert "platforms/claude-code/commands/anchor.md" in srcs
 
 
+def test_plan_copy_scaffolds_commit_prep_for_both_platforms(tmp_path):
+    # CLAUDE.md/GROK.md make /commit-prep a hard rule before any commit, and /work
+    # calls it — so every scaffolded project must actually receive the command.
+    plan = anchor.plan_copy(tmp_path, ["claude", "grok"], want_fleet=False)
+    dests = {str(dest.relative_to(tmp_path)) for _, dest in plan}
+    assert ".claude/commands/commit-prep.md" in dests
+    assert ".grok/skills/commit-prep/SKILL.md" in dests
+
+
+def test_plan_copy_includes_capacity_routing_doctrine(tmp_path):
+    # Standing rules in both platform files reference .anchor/capacity-routing.md.
+    plan = anchor.plan_copy(tmp_path, ["claude"], want_fleet=False)
+    dests = {str(dest.relative_to(tmp_path)) for _, dest in plan}
+    assert ".anchor/capacity-routing.md" in dests
+
+
 def test_doctrine_dest_maps_anchor_prefix():
     assert anchor.doctrine_dest("anchor/ANCHOR.md") == ".anchor/ANCHOR.md"
     assert anchor.doctrine_dest("anchor/templates/plan.md") == ".anchor/templates/plan.md"

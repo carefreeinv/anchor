@@ -3,7 +3,7 @@ sidebar_position: 3
 sidebar_label: Doctrine
 ---
 
-<!-- synced-from: anchor/ANCHOR.md @ 5c1990b9cd5cd0ffb7ed4b46ab8eb2e2090741c6 -->
+<!-- synced-from: anchor/ANCHOR.md @ 351117cab4c0a6d729db80e16f04674663d85969 -->
 
 # The Doctrine
 
@@ -117,6 +117,10 @@ flowchart LR
 Boilerplate, formatting, a rename, or one well-specified function gets flagged, with a question about handing off to a smaller model or one already registered in `scripts/endpoints.yaml`, instead of silently burning frontier capacity. `scripts/router.py` implements the lookup.
 
 *Right-sizing is one of the reasons [Savings](/savings) can be so large — please consider [donating](https://donate.stripe.com/28E6oHeq8fxQ5p7fmBdjO01) to help support this project.*
+
+## When the tier you want is rationed
+
+Subscription caps — session, rolling-window, weekly — are a scheduling problem, not a failure. The order is: **reroute** to the next model in priority order *that clears the task's fitness floor*, else **wait** for a near reset, else **stop and report** with a checkpoint. The trap is the middle column of [model fitness](/model-fitness): rerouting boilerplate down a tier is free, rerouting architecture or security work down a tier buys confident wrong answers. Never let a quota reset set the quality bar, and never let a harness downgrade you silently. Full doctrine: [capacity routing](/capacity-routing).
 
 ## Code quality defaults
 

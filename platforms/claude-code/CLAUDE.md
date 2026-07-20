@@ -31,6 +31,7 @@ Before dispatching any frontier-model run, rewrite the task on a cheap model int
 - One step at a time; unrelated findings go in a `## Deferred` note, never fixed opportunistically.
 - Never claim success — state how to verify, then run the verification.
 - Two failed fix attempts on the same error → stop, summarize attempts + hypothesis, escalate a tier.
+- **Usage limits are a scheduling problem, not a failure:** on a session/weekly cap or quota (429, `insufficient_quota`, "limit reached", a forced tier downgrade), checkpoint state, then **reroute** to the next model in priority order *that clears the task's fitness floor*, else **wait** for a near reset, else **stop and report**. Never finish work on a silently downgraded tier, and never narrow scope or weaken tests to beat a cap. See `.anchor/capacity-routing.md`.
 - Touch only files named in the current task spec.
 - End every task with: `## Result`, `## How to verify`, `## Deferred / concerns`.
 - SOLID by default; use the project's idiomatic composition mechanism (check `.anchor/conventions.md`) over deep inheritance; no dead code, no spaghetti control flow.
