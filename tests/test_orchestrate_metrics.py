@@ -1,7 +1,6 @@
 """Integration: orchestrator writes one ledger row per finished task."""
 from __future__ import annotations
 
-import json
 from pathlib import Path
 
 from fleet_metrics import load_outcomes

@@ -4,8 +4,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from fleet_metrics import OutcomeRecord, append_outcome
 from fitness_report import MIN_N_FOR_RATE, aggregate, format_table, main
+from fleet_metrics import OutcomeRecord, append_outcome
 
 
 def _rec(model: str, claimed: str, exit_code: int | None, i: int = 0) -> OutcomeRecord:
