@@ -5,7 +5,7 @@ import json
 from pathlib import Path
 
 from fitness_report import MIN_N_FOR_RATE, aggregate, format_table, main
-from fleet_metrics import OutcomeRecord, append_outcome
+from fleet_metrics import OutcomeRecord, append_outcome, load_outcomes
 
 
 def _rec(model: str, claimed: str, exit_code: int | None, i: int = 0) -> OutcomeRecord:
@@ -62,3 +62,37 @@ def test_cli_json_and_table(tmp_path: Path, capsys):
     out = capsys.readouterr().out
     assert "Qwen" in out
     assert "records: 3" in out
+
+
+def test_role_violation_does_not_count_as_an_accurate_claim(tmp_path):
+    """A run that claimed success and passed verify, but wrote outside its role
+    boundary, must not inflate positive claim accuracy."""
+    ledger = tmp_path / "outcomes.jsonl"
+    for _ in range(MIN_N_FOR_RATE):
+        append_outcome(
+            OutcomeRecord(
+                model="m", tier="mid", task_id="t", claimed="success",
+                actual_verify_exit=0, scope_verdict="pass", timestamp=0.0,
+                role_verdict="fail",
+            ),
+            ledger,
+        )
+    stats = aggregate(load_outcomes(ledger))
+    assert len(stats) == 1
+    assert stats[0].claim_positive == MIN_N_FOR_RATE
+    assert stats[0].claim_positive_and_verify_pass == 0  # none of them count
+
+
+def test_role_pass_still_counts_as_an_accurate_claim(tmp_path):
+    ledger = tmp_path / "outcomes.jsonl"
+    for _ in range(MIN_N_FOR_RATE):
+        append_outcome(
+            OutcomeRecord(
+                model="m", tier="mid", task_id="t", claimed="success",
+                actual_verify_exit=0, scope_verdict="pass", timestamp=0.0,
+                role_verdict="pass",
+            ),
+            ledger,
+        )
+    stats = aggregate(load_outcomes(ledger))
+    assert stats[0].claim_positive_and_verify_pass == MIN_N_FOR_RATE
