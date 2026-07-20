@@ -2,6 +2,11 @@
 
 <!-- The unit of work handed to an executor model. One concern. Fits one context window. -->
 
+## Budget
+- Context window: <n tokens, from the target endpoint's `max_context` in `scripts/endpoints.yaml`> | `unspecified`
+- Output ceiling: <n tokens = context window − this spec − provided context − margin> | `unspecified`
+- Spec + provided context exceeding this budget means the task is decomposed wrong — reject back to the planner, never truncate silently.
+
 ## Goal
 <one sentence>
 

@@ -8,6 +8,8 @@ tags: [fleet, verification, model-fitness]
 
 Anchor already treats a model’s claim of success as an **input** to verification, not a substitute. That sentence now has a ledger.
 
+<!-- truncate -->
+
 When `orchestrate.py` finishes a task, it pairs the executor’s `## Result` footer (parsed as `success`, `should-work`, `blocked`, or `unparseable`) with the actual verify exit code and optional scope-gate verdict. Each row lands in `var/fleet-metrics/outcomes.jsonl` — metadata only (model, tier, task id hash, claim, exits). No prompts or task bodies.
 
 Aggregate with:

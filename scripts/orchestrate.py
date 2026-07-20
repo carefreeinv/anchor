@@ -28,7 +28,7 @@ import sys
 import time
 from pathlib import Path
 
-from anchor_client import Fleet, has_required_footer, load_prompt
+from anchor_client import Endpoint, Fleet, has_required_footer, load_prompt
 from fleet_metrics import record_task_outcome
 from roles import CRITIC, EXECUTOR, PLANNER, RoleCapabilities, check_role_writes
 from scope_gate import (
@@ -41,6 +41,27 @@ from scope_gate import (
 
 MAX_ATTEMPTS = 2  # Anchor stop condition: two failures → escalate/hold, never a third.
 ROLE_VIOLATION_EXIT = 4
+
+BUDGET_CHARS_PER_TOKEN = 4  # matches prompt_tuner's conservative estimate
+
+
+def check_budget(text: str, target: Endpoint) -> tuple[bool, str]:
+    """Refuse dispatch when `text` already exceeds `target`'s serving ceiling.
+
+    Budget is advisory when the endpoint's max_context is unset (nothing to check
+    against) — never invented. A violation is a decomposition error, not a retryable
+    failure: the caller must reject, never silently truncate the prompt.
+    """
+    ceiling = target.quirks.get("max_context")
+    if not ceiling:
+        return True, ""
+    tokens = len(text) // BUDGET_CHARS_PER_TOKEN + 1
+    if tokens > int(ceiling):
+        return False, (
+            f"BUDGET: task text (~{tokens} tokens) exceeds {target.name}'s max_context "
+            f"({ceiling} tokens) — decomposed wrong, send back to the planner rather than truncate."
+        )
+    return True, ""
 
 # Never execute drafts/completed/ambiguous/blocked via --plan-file.
 _BLOCKED_PLAN_LANES = frozenset({"drafts", "completed", "ambiguous", "blocked"})
@@ -192,6 +213,16 @@ def execute_task(task: str, plan: str, fleet: Fleet, verify_cmd: str | None,
         prompt = f"PLAN (context only):\n{plan}\n\nYOUR SINGLE TASK:\n{task}"
         if history:
             prompt += f"\n\nPREVIOUS ATTEMPT FAILED. Verbatim failure output:\n{history[-1]}"
+
+        # Budget gate: refuse dispatch rather than truncate when the prompt already
+        # exceeds this endpoint's serving ceiling — a decomposition error, not
+        # something a retry fixes.
+        ok, budget_msg = check_budget(system + prompt, ep)
+        if not ok:
+            print(f"[budget] rejected: {budget_msg}", file=sys.stderr)
+            return {"task": task, "status": "failed-budget", "attempts": attempt,
+                    "message": budget_msg}
+
         out = ep.chat([{"role": "system", "content": system},
                        {"role": "user", "content": prompt}], max_tokens=8192)
         last_out = out

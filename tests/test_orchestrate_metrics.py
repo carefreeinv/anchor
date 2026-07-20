@@ -13,6 +13,7 @@ class FakeEndpoint:
         self.name = "fake-ep"
         self.model = "fake-model"
         self.tier = "mid"
+        self.quirks: dict = {}  # real Endpoint always has one; budget gate reads it
         self.calls = 0
 
     def chat(self, messages, **kwargs):
