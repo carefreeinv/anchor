@@ -6,6 +6,11 @@ Newest first.
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-07-19
+
+First tagged release. Anchor's doctrine, `.plans/` workflow, scaffold CLI, fleet
+tooling, and MCP servers as they stand today.
+
 ### Added
 
 - **Capacity routing doctrine** (`anchor/capacity-routing.md` → scaffolded as `.anchor/capacity-routing.md`; docs at `/capacity-routing`) — what an agent does when a subscription tier runs out of capacity (session cap, rolling window, weekly quota, `429`/`insufficient_quota`, or a forced tier downgrade). Distinguishes capacity limits from transient rate limits, then works a fixed order: **reroute** to the next model in priority order *that clears the task's fitness floor*, else **wait** for a near reset, else **stop and report** — always after checkpointing to the in-progress plan. Rerouting requires restating the task spec on the new tier and re-verifying inherited claims, since a new model has no session memory. Hard limits: never continue on a silently downgraded tier, never narrow scope or weaken tests to beat a cap, never fabricate completion. Most useful in multi-provider harnesses (Cursor, Cline, OpenRouter-backed tools, `endpoints.yaml` fleets). Standing rules added to `platforms/claude-code/CLAUDE.md` and `platforms/grok-build/GROK.md`; routing section added to `anchor/ANCHOR.md`
@@ -57,6 +62,10 @@ Newest first.
 - **Two agents could collide on one in-progress plan** — a plan claimed by a live agent that hadn't recorded a lease (leases were optional) or whose short 1h TTL had lapsed looked *stalled/orphaned* to a second `/work`, which could silently reclaim it. Bare `/work` no longer scans `in-progress/` at all, claiming always writes a lease, the TTL is long (24h) with a heartbeat, and an unleased or expired-lease in-progress plan is **never** silently reclaimed — takeover of genuinely-abandoned work is an explicit `work_once.py --recover` / MCP `plans_claim(recover=true)`
 - **Docs internal links** — rewrite relative cross-page links to absolute `/…` paths so they resolve correctly with Docusaurus `trailingSlash: true` (was producing broken `/anchor/tooling/skills/…`-style URLs)
 - **Wording** — prefer **project** over “consumer app” / “consumer project”, and **Anchor** (or **Anchor base**) over “Anchor monorepo”, in skills, platform docs, README, and CLI docs
+- Docs social cards for non-home routes: `trailingSlash: true` so GitHub Pages serves `/blog/`, `/doctrine/`, etc. (not 404); stronger global OG/Twitter image tags and blog description
+- Mermaid diagrams render on the docs site (theme + `markdown.mermaid: true`)
+- `orchestrate.py --plan-file` rejects non-executable lanes (`drafts/`, `completed/`, parked)
+- README note for editable installs on old distro pip/setuptools (PEP 660)
 
 ### Changed
 
@@ -84,10 +93,3 @@ Newest first.
 - Scaffold fleet install includes `work_once` / `plan_select` / `plan_lease` / `fleet_watch`
 - Mid-page donate asks are **humble plain text** (link to [Savings](docs/docs/savings.md) + Stripe), not button CTA blocks
 - Docs platforms, intro, playbook, MCP, scripts aligned with fleet + plans workflow
-
-### Fixed
-
-- Docs social cards for non-home routes: `trailingSlash: true` so GitHub Pages serves `/blog/`, `/doctrine/`, etc. (not 404); stronger global OG/Twitter image tags and blog description
-- Mermaid diagrams render on the docs site (theme + `markdown.mermaid: true`)
-- `orchestrate.py --plan-file` rejects non-executable lanes (`drafts/`, `completed/`, parked)
-- README note for editable installs on old distro pip/setuptools (PEP 660)
