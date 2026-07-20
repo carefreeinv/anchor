@@ -357,3 +357,62 @@ def test_execute_task_budget_rejection_holds_in_detached_mode_message_unchanged(
     result = execute_task("do the thing", "plan", fleet, verify_cmd=None, hold_on_fail=True)
 
     assert result["status"] == "failed-budget"
+
+
+# --- ledger rows carry the role verdict -------------------------------------
+# A task can pass its verify step and still have written outside its role's
+# allowed paths. The claimed-vs-actual ledger exists to measure claim accuracy,
+# so a role-violating run must not be recorded as a clean, accurate claim.
+
+
+def _ledger_rows(path):
+    from fleet_metrics import load_outcomes
+
+    return load_outcomes(path)
+
+
+def test_role_violating_task_is_not_recorded_as_a_clean_claim(git_repo, monkeypatch):
+    """Executor claims success, verify is absent, but it wrote into .plans/** —
+    the ledger row must carry role_verdict='fail', not a bare accurate claim."""
+    import orchestrate
+
+    def executor_touches_plans():
+        p = git_repo / ".plans" / "features" / "sneaky.md"
+        p.parent.mkdir(parents=True)
+        p.write_text("# widened my own mandate\n")
+
+    ledger = git_repo / "outcomes.jsonl"
+    fleet = SideEffectFleet([
+        (None, PLAN_TEXT),                      # planner (clean)
+        (executor_touches_plans, GOOD_OUTPUT),  # executor claims success
+        (None, "review: ok"),                   # critic
+    ])
+    _run_main(monkeypatch, git_repo, fleet,
+              extra_args=("--metrics-ledger", str(ledger)))
+
+    with pytest.raises(SystemExit):
+        orchestrate.main()
+
+    rows = _ledger_rows(ledger)
+    assert len(rows) == 1
+    assert rows[0].claimed == "success"      # the model still claimed success
+    assert rows[0].role_verdict == "fail"    # ...but the harness caught the write
+
+
+def test_clean_task_records_role_verdict_pass(git_repo, monkeypatch):
+    import orchestrate
+
+    ledger = git_repo / "outcomes.jsonl"
+    fleet = SideEffectFleet([
+        (None, PLAN_TEXT),     # planner
+        (None, GOOD_OUTPUT),   # executor (writes nothing it shouldn't)
+        (None, "review: ok"),  # critic
+    ])
+    _run_main(monkeypatch, git_repo, fleet,
+              extra_args=("--metrics-ledger", str(ledger)))
+
+    orchestrate.main()  # clean run: no SystemExit
+
+    rows = _ledger_rows(ledger)
+    assert len(rows) == 1
+    assert rows[0].role_verdict == "pass"

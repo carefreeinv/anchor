@@ -176,31 +176,57 @@ def _ledger_outcome(
     scope_verdict: str | None,
     metrics_ledger: Path | None,
     task_slug: str | None,
+    sink: dict | None = None,
 ) -> None:
-    """Append claimed-vs-actual row; never raise into the orchestrator loop."""
+    """Append claimed-vs-actual row; never raise into the orchestrator loop.
+
+    When ``sink`` is given the row is *held* rather than written: the caller
+    finishes it later via :func:`_flush_outcome`. The orchestrated path needs
+    this because a task's role verdict is only known after ``execute_task``
+    returns — writing at the verify step would score a role-violating run as an
+    accurate claim.
+    """
     if metrics_ledger is None:
         return
+    fields = dict(
+        output=out,
+        verify_exit=verify_exit,
+        model=getattr(ep, "model", None) or getattr(ep, "name", "unknown"),
+        tier=getattr(ep, "tier", None) or "unknown",
+        task=task,
+        ledger_path=metrics_ledger,
+        scope_verdict=scope_verdict,
+        endpoint=getattr(ep, "name", None),
+        task_slug=task_slug,
+    )
+    if sink is not None:
+        sink.clear()
+        sink.update(fields)
+        return
     try:
-        record_task_outcome(
-            output=out,
-            verify_exit=verify_exit,
-            model=getattr(ep, "model", None) or getattr(ep, "name", "unknown"),
-            tier=getattr(ep, "tier", None) or "unknown",
-            task=task,
-            ledger_path=metrics_ledger,
-            scope_verdict=scope_verdict,
-            endpoint=getattr(ep, "name", None),
-            task_slug=task_slug,
-        )
+        record_task_outcome(**fields)
     except OSError as exc:
         print(f"[metrics] failed to write outcome ledger: {exc}", file=sys.stderr)
+
+
+def _flush_outcome(sink: dict, *, role_verdict: str | None) -> None:
+    """Write a held outcome row, stamped with the role verdict main() computed."""
+    if not sink:
+        return  # nothing recorded (no ledger, or the task never reached a record point)
+    try:
+        record_task_outcome(role_verdict=role_verdict, **sink)
+    except OSError as exc:
+        print(f"[metrics] failed to write outcome ledger: {exc}", file=sys.stderr)
+    finally:
+        sink.clear()
 
 
 def execute_task(task: str, plan: str, fleet: Fleet, verify_cmd: str | None,
                  hold_on_fail: bool, insist: bool = False,
                  scope: ScopeConfig | None = None,
                  metrics_ledger: Path | None = None,
-                 task_slug: str | None = None) -> dict:
+                 task_slug: str | None = None,
+                 outcome_sink: dict | None = None) -> dict:
     system = load_prompt("anchor/system-prompts/mythos-core.md")
     history: list[str] = []
     last_ep = None
@@ -237,7 +263,7 @@ def execute_task(task: str, plan: str, fleet: Fleet, verify_cmd: str | None,
                 status = "hold" if hold_on_fail else "escalate"
                 _ledger_outcome(
                     task=task, out=out, ep=ep, verify_exit=None,
-                    scope_verdict=None, metrics_ledger=metrics_ledger,
+                    scope_verdict=None, metrics_ledger=metrics_ledger, sink=outcome_sink,
                     task_slug=task_slug,
                 )
                 recorded = True
@@ -266,7 +292,7 @@ def execute_task(task: str, plan: str, fleet: Fleet, verify_cmd: str | None,
                 history.append(f"SCOPE: could not determine worktree changes: {exc}")
                 _ledger_outcome(
                     task=task, out=out, ep=ep, verify_exit=None,
-                    scope_verdict="error", metrics_ledger=metrics_ledger,
+                    scope_verdict="error", metrics_ledger=metrics_ledger, sink=outcome_sink,
                     task_slug=task_slug,
                 )
                 recorded = True
@@ -276,7 +302,7 @@ def execute_task(task: str, plan: str, fleet: Fleet, verify_cmd: str | None,
                 print(f"[scope] rejected: {', '.join(verdict.offending)}", file=sys.stderr)
                 _ledger_outcome(
                     task=task, out=out, ep=ep, verify_exit=None,
-                    scope_verdict="fail", metrics_ledger=metrics_ledger,
+                    scope_verdict="fail", metrics_ledger=metrics_ledger, sink=outcome_sink,
                     task_slug=task_slug,
                 )
                 recorded = True
@@ -294,14 +320,14 @@ def execute_task(task: str, plan: str, fleet: Fleet, verify_cmd: str | None,
                 if attempt >= MAX_ATTEMPTS:
                     _ledger_outcome(
                         task=task, out=out, ep=ep, verify_exit=1,
-                        scope_verdict=scope_label, metrics_ledger=metrics_ledger,
+                        scope_verdict=scope_label, metrics_ledger=metrics_ledger, sink=outcome_sink,
                         task_slug=task_slug,
                     )
                     recorded = True
                 continue
             _ledger_outcome(
                 task=task, out=out, ep=ep, verify_exit=0,
-                scope_verdict=scope_label, metrics_ledger=metrics_ledger,
+                scope_verdict=scope_label, metrics_ledger=metrics_ledger, sink=outcome_sink,
                 task_slug=task_slug,
             )
             recorded = True
@@ -310,7 +336,7 @@ def execute_task(task: str, plan: str, fleet: Fleet, verify_cmd: str | None,
         # No verify command: still record claim vs unknown actual (exit None).
         _ledger_outcome(
             task=task, out=out, ep=ep, verify_exit=None,
-            scope_verdict=scope_label, metrics_ledger=metrics_ledger,
+            scope_verdict=scope_label, metrics_ledger=metrics_ledger, sink=outcome_sink,
             task_slug=task_slug,
         )
         recorded = True
@@ -321,7 +347,7 @@ def execute_task(task: str, plan: str, fleet: Fleet, verify_cmd: str | None,
     if not recorded and last_ep is not None:
         _ledger_outcome(
             task=task, out=last_out, ep=last_ep, verify_exit=None,
-            scope_verdict=None, metrics_ledger=metrics_ledger,
+            scope_verdict=None, metrics_ledger=metrics_ledger, sink=outcome_sink,
             task_slug=task_slug,
         )
     return {"task": task, "status": status, "attempts": MAX_ATTEMPTS, "history": history}
@@ -440,14 +466,23 @@ def main() -> None:
     results = []
     for t in tasks:
         before = snapshot_changes(root)
+        # Hold the ledger row until the role verdict exists: a task can pass verify
+        # and still have written outside its role's allowed paths, and a row written
+        # at the verify step would score that run as an accurate claim.
+        outcome_sink: dict = {}
         r = execute_task(
             t, plan, fleet, args.verify, args.hold_on_fail, args.insist, scope,
             metrics_ledger=metrics_ledger, task_slug=task_slug,
+            outcome_sink=outcome_sink,
         )
         role_verdict = guard(EXECUTOR, before, spec_deny)
         if role_verdict is not None and not role_verdict.ok:
             r["status"] = "failed-role"
             r["role_offending"] = list(role_verdict.offending)
+        _flush_outcome(
+            outcome_sink,
+            role_verdict=None if role_verdict is None else ("pass" if role_verdict.ok else "fail"),
+        )
         results.append(r)
 
     log_event(events, "role-transition", role_from="executor", role_to="critic",

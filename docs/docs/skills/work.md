@@ -127,7 +127,7 @@ The behavior above is identical everywhere. Only how the agent loads the skill d
 | Platform | Install |
 |----------|---------|
 | **Claude Code** | Scaffold installs `.claude/commands/work.md` |
-| **Grok Build** | Scaffold installs `.grok/skills/work/SKILL.md` (or use `platforms/grok-build/commands/work.md`) |
+| **Grok Build** | Scaffold installs `.grok/skills/work/SKILL.md` |
 | **Generic Chat** | No command file — follow the no-shell adaptation below (and in `CHAT.md`) |
 | **Local / NIM** | Same contract when the harness has shell; headless: `work_once.py` / `orchestrate.py --plan-file` |
 

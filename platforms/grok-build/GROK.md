@@ -127,9 +127,11 @@ merge to `dev`/`main`). Skill: `.grok/skills/commit-prep/SKILL.md`.
 
 ## /config
 
-`commands/config.md` in this folder documents a `/config` command: it asks which
-platform(s)/fleet tooling you want as your Anchor default, then runs `./config.sh`
-non-interactively to save them and reports the `anchor <project-dir>` command to
-scaffold with them. Wiring depends on whether your Grok Build environment supports
-file-based custom commands — `(unverified)`, see the caveat in that file. Help:
+`.grok/skills/config/SKILL.md` documents a `/config` command: it asks which
+platform(s)/fleet tooling you want as your Anchor default, plus your model
+priority and preferred orchestrator, then runs `./config.sh` non-interactively to
+save them and reports the `anchor <project-dir>` command to scaffold with them.
+Run it from the Anchor checkout — it sets *your* defaults, not a project's.
+Wiring depends on whether your Grok Build environment supports file-based skills
+— `(unverified)`, see the caveat in that file. Help:
 https://carefreeinv.com/anchor

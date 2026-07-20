@@ -102,10 +102,15 @@ def aggregate(records: list[OutcomeRecord]) -> list[ModelStats]:
             if r.actual_verify_exit == 0:
                 s.verify_pass += 1
 
-        # Positive claim accuracy: success/should-work vs actual exit 0
+        # Positive claim accuracy: success/should-work vs actual exit 0.
+        # A role violation disqualifies the claim even when verify passed — the
+        # executor reached that green by writing outside its boundary, so "it
+        # worked" is not a claim this ledger should score as accurate. Scope
+        # failures need no equivalent guard: they short-circuit before verify
+        # runs, so they arrive here with actual_verify_exit=None already.
         if r.claimed in ("success", "should-work") and r.actual_verify_exit is not None:
             s.claim_positive += 1
-            if r.actual_verify_exit == 0:
+            if r.actual_verify_exit == 0 and r.role_verdict != "fail":
                 s.claim_positive_and_verify_pass += 1
 
     return sorted(buckets.values(), key=lambda x: (-x.n, x.model, x.tier))

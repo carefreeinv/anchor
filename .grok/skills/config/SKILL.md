@@ -1,11 +1,16 @@
-# /config — Anchor defaults helper (Grok Build)
+---
+name: config
+description: Set your Anchor platform/fleet/model-priority defaults and show how to scaffold a project with them
+---
+
+# /config — Anchor defaults helper
 
 <!-- (unverified) Grok Build's file-based custom-command convention, if any, isn't
      documented publicly as of this writing. If your Grok Build environment loads
-     custom commands from a folder, drop this file there under the name `config`.
-     Otherwise paste the body below into custom instructions, or skip the command
-     entirely and just run `./config.sh` yourself — this file only exists to make
-     `/config` mean the same thing everywhere Anchor is installed. -->
+     skills from `.grok/skills/`, this file is picked up as `/config`. Otherwise
+     paste the body below into custom instructions, or skip the command entirely
+     and just run `./config.sh` yourself — this file only exists to make `/config`
+     mean the same thing everywhere Anchor is installed. -->
 
 When the user types `/config`:
 
@@ -25,5 +30,5 @@ When the user types `/config`:
 4. Point the user to https://carefreeinv.com/anchor for further help.
 
 Mark anything about your specific Grok Build environment's command mechanism as
-`(unverified)` per the hard rules in `../GROK.md` — don't assert this file is
-wired up unless you've confirmed it.
+`(unverified)` per the hard rules in `GROK.md` — don't assert this file is wired
+up unless you've confirmed it.
