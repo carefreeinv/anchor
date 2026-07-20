@@ -13,3 +13,18 @@ tooling:
 docs:
   label: Docs
   description: Documentation and doctrine changes
+doctrine:
+  label: Doctrine
+  description: The behavioral contract in ANCHOR.md and the system prompts
+fleet:
+  label: Fleet
+  description: Running several models against one project
+model-fitness:
+  label: Model Fitness
+  description: Where each model excels or fails, and how routing uses it
+verification:
+  label: Verification
+  description: Proving work is done rather than claiming it
+skills:
+  label: Skills
+  description: Slash-command skills scaffolded into projects
