@@ -3,7 +3,7 @@ sidebar_position: 1
 sidebar_label: Claude Code
 ---
 
-<!-- synced-from: platforms/claude-code/CLAUDE.md @ 6fc5df28707fe73c5bbc815a65aa3cd74b69216d -->
+<!-- synced-from: platforms/claude-code/CLAUDE.md @ bf8115f2b1c552e7e6530a4fd1b99530ba3d140c -->
 
 # Claude Code
 
@@ -40,7 +40,7 @@ flowchart TB
 
 **Fleet offload.** With `model-fleet` connected, mechanical steps go to your own hardware (`delegate` tool) before spending plan-limit tokens. The frontier agent stays the judge, your fleet becomes the hands.
 
-**Standing rules** apply to every tier: fit-check-first (a task in the current model's weak column per [model fitness](/model-fitness) opens with `SUGGEST-ESCALATE:` and stops unless the user insists), restate-first, one step at a time, verify-don't-claim, two-failures-then-escalate, scope is sacred, required output footer, **docs describe current state not plans** (never document `.plans/` contents as product docs; document shipped code only), and **`/commit-prep` before any `git commit`**.
+**Standing rules** apply to every tier: fit-check-first (a task in the current model's weak column per [model fitness](/model-fitness) opens with `SUGGEST-ESCALATE:` and stops unless the user insists), restate-first, one step at a time, verify-don't-claim, two-failures-then-escalate, scope is sacred, required output footer, **docs describe current state not plans** (never document `.plans/` contents as product docs; document shipped code only), **`/commit-prep` before any `git commit`**, and **capacity limits are a scheduling problem** — on a session/weekly cap or a forced tier downgrade, checkpoint and then reroute to the next model that clears the task's fitness floor, wait for a near reset, or stop and report (see [capacity routing](/capacity-routing)); never finish on a silently downgraded tier and never weaken the work to beat a cap.
 
 ## Tracked plans
 

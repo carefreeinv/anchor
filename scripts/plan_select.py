@@ -5,7 +5,9 @@ Path is authoritative:
 
   - drafts/ — not ready (never execute)
   - bugs/, features/ — ready (pick by priority + fit)
-  - in-progress/ — claimed; **only the agent that moved it there** may work it
+  - in-progress/ — claimed; **only the agent holding the lease** may work it.
+    Bare pick never scans this lane — resuming your own work is an explicit
+    named claim, not a side effect of `/work`.
   - ambiguous/ — half-baked (never auto-execute; agent may park here)
   - blocked/ — cannot proceed (never auto-execute; agent may park here)
   - review-needed/ — agent believes Done when holds, awaiting human sign-off
@@ -13,17 +15,18 @@ Path is authoritative:
     **human** may move review-needed/ → completed/)
   - completed/ — archive (never execute)
 
-Priority for bare pick:
+Priority for bare pick (ready lanes only — in-progress is never bare-picked):
 
-  1. Own in-progress plans first (resume)
-  2. All bugs/*.md before any feature
-  3. within a lane by Priority P1 → P2 → P3 (default P2), then Value high →
+  1. All bugs/*.md before any feature
+  2. within a lane by Priority P1 → P2 → P3 (default P2), then Value high →
      medium → low (default medium), then oldest first (mtime), then filename
-  4. Model-fit filter unless no_fit_check or explicit slug/path override
-  5. Skip plans with **unmet Depends on** unless no_dep_check
+  3. Model-fit filter unless no_fit_check or explicit slug/path override
+  4. Skip plans with **unmet Depends on** unless no_dep_check
 
-Ignore every in-progress plan you did not claim (lease agent_id mismatch or no
-matching lease for this agent).
+A named in-progress plan resolves only if **you hold its active lease**. A
+foreign, unleased, or expired-lease in-progress plan is refused — there is no
+silent reclaim; crashed work is recovered explicitly or by a human. Ignore
+every in-progress plan you do not own.
 
 **Depends on:** header slugs (or ``none``). A dependency is met if the slug is only
 under completed/ (or git history shows it was removed from completed/), and is not
@@ -32,11 +35,19 @@ to propose Depends on; executors must not start work with unmet deps.
 """
 from __future__ import annotations
 
+import argparse
+import json
+import os
 import re
 import subprocess
+import sys
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
+
+GOAL_RE = re.compile(
+    r"^##\s+Goal\s*$([\s\S]*?)(?=^##\s|\Z)", re.MULTILINE | re.IGNORECASE
+)
 
 READY_LANES = ("bugs", "features")
 IN_PROGRESS_LANE = "in-progress"
@@ -670,16 +681,17 @@ def resolve_target(
         if lane == IN_PROGRESS_LANE:
             lease = active_lease(plans_root, rel_s)
             owner = lease.agent_id if lease else None
-            if agent_id and owner and owner != agent_id:
+            if owner and owner != agent_id:
                 raise ValueError(
                     f"in-progress plan owned by {owner!r}; ignore unless you are that agent"
                 )
-            if agent_id and not owner:
-                # orphan — allow named path for reclaim
-                pass
-            elif not agent_id and owner:
+            if not owner:
+                # No active lease (never claimed, or expired past TTL). Never
+                # silently reclaim — it may be another agent's live work. Recover
+                # explicitly (work_once --recover) or let a human return it.
                 raise ValueError(
-                    f"in-progress plan owned by {owner!r}; pass agent_id to resume your own work"
+                    f"in-progress plan {rel_s} has no active lease for "
+                    f"{agent_id!r}; recover explicitly instead of resuming"
                 )
             return _record_from_path(
                 resolved, lane, w, owner=owner, plans_root=plans_root
@@ -733,11 +745,13 @@ def select_one(
     skip_rels: set[str] | None = None,
     agent_id: str | None = None,
 ) -> PlanRecord | None:
-    """Pick one plan: resume own in-progress first, then ready by /work rules.
+    """Pick one ready-lane plan by /work rules (bugs before features).
 
-    Never returns another agent's in-progress plan.
-    Skips plans with unmet Depends on unless no_dep_check (named targets still
-    return the record so callers can surface unmet deps).
+    Bare pick considers **ready lanes only** — it never scans in-progress to
+    resume or reclaim. A named slug/path may still target your own in-progress
+    plan (ownership enforced in resolve_target). Skips plans with unmet Depends
+    on unless no_dep_check (named targets still return the record so callers can
+    surface unmet deps).
     """
     skip = skip_rels or set()
 
@@ -766,16 +780,8 @@ def select_one(
             return None
         return rec
 
-    # 1) Resume own in-progress (still respect unmet deps unless no_dep_check)
-    if agent_id:
-        for rec in inventory_in_progress(
-            plans_root, worker, agent_id=agent_id, only_mine=True
-        ):
-            if not no_dep_check and not rec.deps_met:
-                continue
-            return rec
-
-    # 2) Ready lanes
+    # Ready lanes only — bare pick never resumes/reclaims in-progress. Resuming
+    # your own work is an explicit named claim (resolve_target enforces the lease).
     for rec in inventory_ready(plans_root, worker):
         if rec.rel in skip:
             continue
@@ -806,3 +812,111 @@ def format_list_table(records: list[PlanRecord]) -> str:
             f"\t{r.fit.value}\t{deps}\t{owner}"
         )
     return "\n".join(lines)
+
+
+def _goal_snippet(path: Path, limit: int = 200) -> str:
+    try:
+        text = path.read_text(encoding="utf-8")
+    except OSError:
+        return ""
+    m = GOAL_RE.search(text)
+    return " ".join((m.group(1) if m else "").split())[:limit]
+
+
+def _next_main(argv: list[str] | None = None) -> int:
+    """Reliable single-plan picker for small/less-reliable models.
+
+    Prints exactly one next **ready** plan (or a clear nothing-ready message) so a
+    model never has to reason about lanes or leases. With --claim it performs the
+    atomic move-to-in-progress + lease write itself, so the model never runs
+    ``git mv`` or touches ``.leases/`` by hand.
+
+    Exit codes: 0 a plan was printed/claimed · 1 nothing ready · 2 error.
+    """
+    ap = argparse.ArgumentParser(
+        prog="plan_select.py",
+        description=_next_main.__doc__,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    ap.add_argument("--next", action="store_true", help="print the next ready plan")
+    ap.add_argument("--root", default=".", help="project root containing .plans/")
+    ap.add_argument(
+        "--claim",
+        action="store_true",
+        help="also move the plan to in-progress/ and write your lease (atomic)",
+    )
+    ap.add_argument("--json", action="store_true", help="emit a JSON object")
+    ap.add_argument("--tier", default="mid", help="worker fit tier (default mid)")
+    ap.add_argument("--model", help="worker model name for Preferred-models match")
+    ap.add_argument(
+        "--no-fit-check", action="store_true", help="ignore Preferred-models filter"
+    )
+    ap.add_argument(
+        "--no-dep-check", action="store_true", help="ignore unmet Depends on"
+    )
+    ap.add_argument("--agent-id", help="lease identity for --claim (default work-$USER)")
+    args = ap.parse_args(argv)
+
+    plans_root = plans_root_for(Path(args.root).resolve())
+    if not plans_root.is_dir():
+        msg = f"no .plans/ under {args.root}"
+        print(json.dumps({"ok": False, "error": msg}) if args.json else f"error: {msg}",
+              file=sys.stderr)
+        return 2
+
+    worker = Worker(name=args.model or args.tier, tier=args.tier)
+    rec = select_one(
+        plans_root,
+        worker,
+        no_fit_check=args.no_fit_check,
+        no_dep_check=args.no_dep_check,
+    )
+    if rec is None:
+        if args.json:
+            print(json.dumps({"ok": True, "plan": None, "note": "nothing ready"}))
+        else:
+            print("nothing ready (no fit plan under bugs/ or features/)")
+        return 1
+
+    goal = _goal_snippet(rec.path)
+    out: dict[str, object] = {
+        "ok": True,
+        "rel": rec.rel,
+        "lane": rec.lane,
+        "slug": rec.slug,
+        "priority": rec.priority,
+        "value": rec.value,
+        "fit": rec.fit.value,
+        "goal": goal,
+        "path": str(rec.path),
+    }
+
+    if args.claim:
+        from plan_lease import ClaimError, claim_and_move
+
+        agent_id = args.agent_id or f"work-{os.environ.get('USER') or 'agent'}"
+        try:
+            lease, dest = claim_and_move(plans_root, rec.rel, agent_id)
+        except ClaimError as exc:
+            if args.json:
+                print(json.dumps({"ok": False, "error": str(exc)}), file=sys.stderr)
+            else:
+                print(f"claim failed: {exc}", file=sys.stderr)
+            return 2
+        out.update({"claimed": True, "agent_id": agent_id,
+                    "rel": lease.plan_rel, "path": str(dest)})
+
+    if args.json:
+        print(json.dumps(out))
+    else:
+        claimed = " (claimed → in-progress/)" if args.claim else ""
+        print(f"next: {out['rel']}  [{rec.priority}/{rec.value}, fit={rec.fit.value}]{claimed}")
+        if goal:
+            print(f"goal: {goal}")
+        if not args.claim:
+            print(f"claim: python scripts/plan_select.py --next --claim --root {args.root}")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(_next_main())

@@ -26,6 +26,7 @@ LANES_READ = (
     "bugs",
     "features",
     "in-progress",
+    "review-needed",
     "drafts",
     "completed",
     "ambiguous",
@@ -665,6 +666,7 @@ def plans_claim(
     plan_ref: str,
     *,
     allow_unmet_deps: bool = False,
+    recover: bool = False,
     ttl_seconds: int = plan_lease.DEFAULT_TTL_SECONDS,
 ) -> dict[str, Any]:
     require_cap(cfg, CAP_L1)
@@ -704,7 +706,7 @@ def plans_claim(
 
     try:
         lease, dest = plan_lease.claim_and_move(
-            cfg.plans_root, rel, cfg.agent_id, ttl_seconds=ttl_seconds
+            cfg.plans_root, rel, cfg.agent_id, ttl_seconds=ttl_seconds, recover=recover
         )
     except ClaimError as exc:
         raise CoordinatorError(str(exc)) from exc
@@ -716,6 +718,35 @@ def plans_claim(
         "agent_id": lease.agent_id,
         "expires_at": lease.expires_at,
         "origin_rel": lease.origin_rel,
+    }
+
+
+def plans_heartbeat(cfg: CoordinatorConfig, plan_ref: str) -> dict[str, Any]:
+    """Extend this agent's lease on an in-progress plan (keep-alive).
+
+    A live agent calls this periodically so its in-progress work never looks
+    orphaned under the long TTL. Refuses if a different agent holds an active
+    lease.
+    """
+    require_cap(cfg, CAP_L1)
+    path = _resolve_plan_path(cfg, plan_ref)
+    plans = _real(cfg.plans_root)
+    rel = str(path.relative_to(plans)).replace("\\", "/")
+    lane = rel.split("/", 1)[0]
+    if lane != "in-progress":
+        raise CoordinatorError(
+            f"heartbeat requires an in-progress plan; got {lane}/"
+        )
+    try:
+        lease = plan_lease.renew(cfg.plans_root, rel, cfg.agent_id)
+    except ClaimError as exc:
+        raise CoordinatorError(str(exc)) from exc
+    return {
+        "ok": True,
+        "action": "heartbeat",
+        "plan_rel": lease.plan_rel,
+        "agent_id": lease.agent_id,
+        "expires_at": lease.expires_at,
     }
 
 
@@ -750,14 +781,19 @@ def plans_release(
 
 
 def plans_complete(cfg: CoordinatorConfig, plan_ref: str) -> dict[str, Any]:
-    """Move-only complete: client asserts Done when; no verify gate."""
+    """Move an in-progress plan the agent believes is done → ``review-needed/``.
+
+    Client asserts Done when; no verify gate. The plan lands in ``review-needed/``
+    for **human sign-off** — only a human moves it on to ``completed/``. This
+    keeps "agent says done" and "actually done" as separate events.
+    """
     require_cap(cfg, CAP_L1)
     path = _resolve_plan_path(cfg, plan_ref)
     plans = _real(cfg.plans_root)
     rel = str(path.relative_to(plans)).replace("\\", "/")
     lane = rel.split("/", 1)[0]
 
-    if lane in ("drafts", "completed"):
+    if lane in ("drafts", "completed", "review-needed"):
         raise CoordinatorError(f"refuse complete from {lane}/")
     if lane != "in-progress":
         raise CoordinatorError(
@@ -768,16 +804,21 @@ def plans_complete(cfg: CoordinatorConfig, plan_ref: str) -> dict[str, Any]:
     try:
         plan_lease._assert_owner_if_in_progress(cfg.plans_root, rel, cfg.agent_id)
         plan_lease.release(cfg.plans_root, rel, force=True)
-        dest_rel, dest_path = plan_lease._move_file(cfg.plans_root, rel, "completed")
+        dest_rel, dest_path = plan_lease._move_file(
+            cfg.plans_root, rel, "review-needed"
+        )
     except ClaimError as exc:
         raise CoordinatorError(str(exc)) from exc
 
     return {
         "ok": True,
-        "action": "move_only_complete",
+        "action": "move_to_review_needed",
         "plan_rel": dest_rel,
         "path": str(dest_path),
-        "note": "Client asserted Done when; no verify ran inside MCP.",
+        "note": (
+            "Client asserted Done when; moved to review-needed/ for human "
+            "sign-off. Only a human moves it on to completed/."
+        ),
     }
 
 

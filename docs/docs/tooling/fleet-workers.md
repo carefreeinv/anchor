@@ -272,14 +272,17 @@ flowchart LR
   ip --- lease
 ```
 
-(Leases are gitignored via scaffold `.plans/.gitignore`.) Fields: `agent_id`, `origin` (prior path), `claimed_at`, `expires_at` (default TTL 3600s; override with `--lease-ttl`).
+(Leases are gitignored via scaffold `.plans/.gitignore`.) Fields: `agent_id`, `origin` (prior path), `claimed_at`, `expires_at` (long **TTL 86400s / 24h**; override with `--lease-ttl`).
 
-- **Ownership** → only that `agent_id` may resume/execute the in-progress file; everyone else ignores it.
+- **Ownership** → only that `agent_id` may resume/execute the in-progress file; everyone else ignores it. Bare `/work` and `work_once` never scan in-progress.
 - **Double claim** → second worker sees the plan gone from ready lanes; exit 1 if nothing else fits.
-- **Stale lease** → expired leases can be reclaimed (orphan in-progress reclaimable carefully).
+- **Heartbeat** → a live worker extends its lease so long jobs never look orphaned:  
+  `python scripts/work_once.py --heartbeat in-progress/foo.md --agent-id mid-h100-a`
+- **Stale lease** → there is **no silent reclaim**. A lease left untouched past the 24h TTL (crashed worker) is taken over only by an **explicit** recover:  
+  `python scripts/work_once.py --recover --path in-progress/foo.md --agent-id mid-h100-b`
 - **Release early**:  
   `python scripts/work_once.py --release in-progress/foo.md --agent-id mid-h100-a`
-- Failed `--run` (orchestrate) **leaves the plan in `in-progress/` with the lease**—fix the failure or wait for TTL.
+- Failed `--run` (orchestrate) **leaves the plan in `in-progress/` with the lease**—fix the failure, heartbeat to hold it, or `--release` it.
 
 ## Bounded loop vs one-shot
 

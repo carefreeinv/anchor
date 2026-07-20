@@ -120,12 +120,32 @@ def plans_stale_report() -> str:
         return _err(e)
 
 
-def plans_claim(plan_ref: str, allow_unmet_deps: bool = False) -> str:
-    """Claim a ready plan → in-progress + lease. Refuses unmet Depends on unless override."""
+def plans_claim(
+    plan_ref: str, allow_unmet_deps: bool = False, recover: bool = False
+) -> str:
+    """Claim a ready plan → in-progress + lease (the move IS the claim).
+
+    Refuses unmet Depends on unless allow_unmet_deps. Refuses an in-progress plan
+    with no active lease unless recover=True (take over a crashed agent's work
+    whose lease expired past the long TTL); never reclaims an active foreign lease.
+    """
     try:
         return _out(
-            coord.plans_claim(_cfg(), plan_ref, allow_unmet_deps=allow_unmet_deps)
+            coord.plans_claim(
+                _cfg(),
+                plan_ref,
+                allow_unmet_deps=allow_unmet_deps,
+                recover=recover,
+            )
         )
+    except coord.CoordinatorError as e:
+        return _err(e)
+
+
+def plans_heartbeat(plan_ref: str) -> str:
+    """Extend your lease on an in-progress plan (keep-alive under the long TTL)."""
+    try:
+        return _out(coord.plans_heartbeat(_cfg(), plan_ref))
     except coord.CoordinatorError as e:
         return _err(e)
 
@@ -143,7 +163,7 @@ def plans_release(plan_ref: str, target_lane: str = "") -> str:
 
 
 def plans_complete(plan_ref: str) -> str:
-    """Move in-progress plan to completed/ only. Client asserts Done when — no verify in MCP."""
+    """Move in-progress plan → review-needed/ for human sign-off. Client asserts Done when — no verify in MCP."""
     try:
         return _out(coord.plans_complete(_cfg(), plan_ref))
     except coord.CoordinatorError as e:
@@ -168,6 +188,7 @@ _TOOL_FUNCS = {
         plans_suggest_dependencies,
         plans_stale_report,
         plans_claim,
+        plans_heartbeat,
         plans_release,
         plans_complete,
         conventions_get,

@@ -3,7 +3,7 @@ sidebar_position: 2
 sidebar_label: Grok Build
 ---
 
-<!-- synced-from: platforms/grok-build/GROK.md @ 1eccd795ab7ebced62a9ba0808b90a3ef7dd12c1 -->
+<!-- synced-from: platforms/grok-build/GROK.md @ 94f99e9aab8ebe132250a1eeca614e56669717ad -->
 
 # Grok Build
 
@@ -28,7 +28,7 @@ flowchart LR
   s -->|"two fails"| stop["Stop + escalate"]
 ```
 
-The hard rules (restate → plan → one-step-per-turn → verify-don't-claim → mark `(unverified)` → two-fail stop → scope → footer → **docs describe current state, not plans** → **`/commit-prep` before any `git commit`**) plus three Grok-specific ones:
+The hard rules (restate → plan → one-step-per-turn → verify-don't-claim → mark `(unverified)` → two-fail stop → scope → footer → **docs describe current state, not plans** → **`/commit-prep` before any `git commit`** → **capacity limits are a scheduling problem**, not a failure: checkpoint, then reroute to the next model clearing the task's fitness floor, wait for a near reset, or stop and report — see [capacity routing](/capacity-routing)) plus three Grok-specific ones:
 
 - Force risk enumeration before the plan ("list 3 ways this could go wrong") — surfaces the reasoning Grok skips.
 - **One task spec per session.** Restart instead of accumulating context; instruction decay makes long Grok sessions untrustworthy.

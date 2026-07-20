@@ -41,9 +41,13 @@ file. Ignore those fields if present; do not write them.
 | `.plans/drafts/` | yes (edit plan only) | **no** | |
 | `.plans/completed/` | yes (history) | **no** | |
 
-**Never** implement from `drafts/` or `completed/`. **Ignore** every plan under
-`in-progress/` that **you** did not move there (ownership = lease under
-`.plans/.leases/` with your agent id, or you performed the mv this session).
+**Never** implement from `drafts/` or `completed/`. **Bare `/work` never scans
+`in-progress/`** — it picks only ready lanes. Every in-progress plan is **owned**
+by whoever claimed it (a **required lease** under `.plans/.leases/` with an agent
+id). **Ignore** every in-progress plan you do not own; a foreign, unleased, or
+expired-lease in-progress plan is **never** silently reclaimed. Resuming your own
+in-progress work is an **explicit named claim** (`/work in-progress/<slug>.md`,
+or `work_once.py --recover` for an expired lease) — not a bare-pick side effect.
 If the user names a draft: refuse execution; offer **edit-only**. Do **not** promote it.
 
 ### Agent move rule (hard)
@@ -72,16 +76,27 @@ point of that lane), or touch another agent's `in-progress/` plan.
 
 ## Priority (when no target is given)
 
-1. **Your** plans under `.plans/in-progress/` first (resume).
-2. All of `.plans/bugs/*.md` before any feature.
-3. Within each lane, order by header `Priority: P1 | P2 | P3` (default **P2** if
+Bare `/work` picks from **ready lanes only** (`bugs/`, `features/`). It never
+scans `in-progress/` to resume or reclaim — resume is an explicit named target.
+
+1. All of `.plans/bugs/*.md` before any feature.
+2. Within each lane, order by header `Priority: P1 | P2 | P3` (default **P2** if
    absent): P1 → P2 → P3; then `Value: high | medium | low` (default **medium**):
    high → medium → low; then oldest first (mtime), ties by filename.
-4. Among ready plans, keep only **model-fit** plans (next section) — unless
+3. Among ready plans, keep only **model-fit** plans (next section) — unless
    `--no-fit-check` is set.
-5. **Skip plans with unmet `Depends on`** — do not start; report blockers.
-6. Skip `drafts/`, `completed/`, `ambiguous/`, `blocked/`, `review-needed/`,
-   foreign `in-progress/`, and `README.md`.
+4. **Skip plans with unmet `Depends on`** — do not start; report blockers.
+5. Skip `drafts/`, `completed/`, `ambiguous/`, `blocked/`, `review-needed/`,
+   **all** `in-progress/` (owned by whoever claimed it), and `README.md`.
+
+**Less-reliable / small models:** don't reason about lanes by hand — run the
+deterministic picker, which only ever returns ready work and claims it atomically
+(move + lease together):
+
+```bash
+python scripts/plan_select.py --next            # print the next ready plan
+python scripts/plan_select.py --next --claim --agent-id <id>   # + claim it
+```
 
 If multiple plans share the top priority, **just pick the first in sorted order**
 (Priority → Value → oldest → filename) and start — this is the default; do **not**
@@ -275,10 +290,18 @@ the queue moving. Small models do not grab architecture plans to "try hard."
 
 ### 4. Mark in progress
 
-- If the plan is still under `bugs/` or `features/`, **move it** to
-  `.plans/in-progress/` (same filename) before substantive work. Prefer
-  `git mv` when the file is tracked. Optionally record a lease via
-  `work_once.py` / `.plans/.leases/` with a stable agent id.
+- If the plan is still under `bugs/` or `features/`, **claim it** — move it to
+  `.plans/in-progress/` (same filename) **and record a lease** with your stable
+  agent id, together. The claim is **required**, not optional: it is what marks
+  the plan as yours so other agents skip it. Do this atomically with the picker
+  (`python scripts/plan_select.py --next --claim --agent-id <id>`, or
+  `work_once.py --once --agent-id <id>`), which writes the lease under
+  `.plans/.leases/` as it moves the file. A bare `git mv` with no lease leaves the
+  plan looking unowned — don't do that.
+- **Long-running work:** the lease has a long TTL (24h); a live agent refreshes
+  it (`work_once.py --heartbeat in-progress/<slug>.md --agent-id <id>`) so its
+  plan never looks orphaned. Only a lease left untouched past the TTL is
+  reclaimable, and only via an explicit `--recover`.
 - Optionally add or update a brief `## Progress` note. Do **not** write
   `Status:` or `Lane:` fields.
 
