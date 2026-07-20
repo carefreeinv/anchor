@@ -30,7 +30,7 @@ The fleet registry: endpoints with `tier` (swarm / executor / executor-heavy / r
 
 ## prompt_tuner.py
 
-Playbook move #3 as a command: `python prompt_tuner.py "fix the login bug"` → a filled task-spec from a cheap model, with honest `TODO(owner):` markers where the rough description was silent. Never invents details — an honest TODO is a success, a plausible invention is a failure.
+Playbook move #3 as a command: `python prompt_tuner.py "fix the login bug"` → a filled task-spec from a cheap model, with honest `TODO(owner):` markers where the rough description was silent. Never invents details — an honest TODO is a success, a plausible invention is a failure. Pass `--target <endpoint-name>` (a name from `endpoints.yaml`) to have it fill the spec's `## Budget` section with that endpoint's `max_context` and a computed output ceiling; without `--target`, or if the endpoint has no `max_context`, both fields read `unspecified`. The tuning model never fills these numbers in itself — tooling overwrites whatever it wrote.
 
 ## router.py
 
@@ -69,11 +69,27 @@ python pending_merges.py --json --exit-code
 
 ## orchestrate.py
 
-The whole loop: plan (planner role or `--plan-file`) → split into tasks → execute each in a fresh context → verify with your `--verify` command → two-strike escalate or `--hold-on-fail` (detached mode) → fresh-context critic review → JSON run report. Format-gates every executor output (missing footer = failed attempt). Pass `--scope-spec <task-spec.md>` (with `--worktree <root>`) to run the **scope gate** before `--verify`: a change outside the spec's `## Files in scope` marks the task `failed-scope` and tests never run. Roles are also harness-enforced per phase via the `roles.py` capability map: writes made during the planner phase outside `.plans/**`, executor writes into `.plans/**` (or its own spec), or any critic write are **role violations** — logged as events, marked `failed-role` on the task, and the run exits `4` after still emitting its outputs. Role transitions (plan approved → executors spawned → review) are explicit logged events. Often invoked by `work_once.py --run` after a claim.
+The whole loop: plan (planner role or `--plan-file`) → split into tasks → execute each in a fresh context → verify with your `--verify` command → two-strike escalate or `--hold-on-fail` (detached mode) → fresh-context critic review → JSON run report. Format-gates every executor output (missing footer = failed attempt). Pass `--scope-spec <task-spec.md>` (with `--worktree <root>`) to run the **scope gate** before `--verify`: a change outside the spec's `## Files in scope` marks the task `failed-scope` and tests never run. Before every dispatch attempt it also runs a **budget gate**: if the prompt already exceeds the picked endpoint's `max_context`, the task is marked `failed-budget` and rejected outright — never truncated — because an oversized prompt means the task was decomposed wrong, not that it needs a retry. Roles are also harness-enforced per phase via the `roles.py` capability map: writes made during the planner phase outside `.plans/**`, executor writes into `.plans/**` (or its own spec), or any critic write are **role violations** — logged as events, marked `failed-role` on the task, and the run exits `4` after still emitting its outputs. Role transitions (plan approved → executors spawned → review) are explicit logged events. Often invoked by `work_once.py --run` after a claim.
 
 ## roles.py
 
 The role→capability map behind ANCHOR.md's role-separation bullet — planner / executor / critic as **harness-enforced capability sets**, not prompt framing, in one module so nothing re-declares role powers elsewhere. Each `RoleCapabilities` carries writable-path allow/deny globs (reusing `scope_gate.path_matches` — one glob implementation), a `can_dispatch` flag (orchestrator only), and the MCP toolset the role may see. `check_role_writes(caps, paths)` classifies a phase's writes; unlike the scope gate it is always active (an empty allowlist means read-only). Consumed by `orchestrate.py` (per-phase enforcement) and the project-orchestrator MCP server (`--role` toolsets). Reads stay unrestricted for every role — only writes and dispatch are gated.
+
+At each task's verify step, `orchestrate.py` appends a **claimed-vs-actual** row to `var/fleet-metrics/outcomes.jsonl` (override with `--metrics-ledger PATH`, disable with `--metrics-ledger ''`). See `fleet_metrics.py` / `fitness_report.py`.
+
+## fleet_metrics.py
+
+Parse an executor `## Result` footer claim (`success` / `should-work` / `blocked` / `unparseable`), pair it with the actual verify exit (and optional scope verdict), and append metadata-only JSONL under `var/fleet-metrics/outcomes.jsonl`. No prompts or task bodies — safe even when `var/` is untracked.
+
+## fitness_report.py
+
+Read-only aggregate of the outcomes ledger: per-model claim accuracy, verify pass-rate, unparseable rate. Rates with **n < 5** are withheld. Does **not** rewrite `model-fitness.md` — humans update prose from the report.
+
+```bash
+python fitness_report.py
+python fitness_report.py --json
+python fitness_report.py --ledger var/fleet-metrics/outcomes.jsonl
+```
 
 ## scope_gate.py
 

@@ -33,10 +33,11 @@ def test_split_tasks_unrecognized_format_raises_with_preview():
 
 
 class FakeEndpoint:
-    def __init__(self, replies):
+    def __init__(self, replies, quirks=None):
         self.replies = list(replies)
         self.name = "fake-ep"
         self.calls = 0
+        self.quirks = quirks or {}
 
     def chat(self, messages, **kwargs):
         self.calls += 1
@@ -44,8 +45,8 @@ class FakeEndpoint:
 
 
 class FakeFleet:
-    def __init__(self, replies):
-        self.ep = FakeEndpoint(replies)
+    def __init__(self, replies, quirks=None):
+        self.ep = FakeEndpoint(replies, quirks=quirks)
 
     def pick(self, role):
         return self.ep
@@ -174,6 +175,7 @@ class SideEffectEndpoint:
 
     def __init__(self, replies):
         self.replies = list(replies)
+        self.quirks: dict = {}  # real Endpoint always has one; budget gate reads it
 
     def chat(self, messages, **kwargs):
         side_effect, reply = self.replies.pop(0)
@@ -300,3 +302,58 @@ def test_enforce_role_phase_ignores_preexisting_changes(git_repo):
     verdict = enforce_role_phase(CRITIC, git_repo, before, events)
     assert verdict.ok  # critic wrote nothing new; dirty.py not blamed
     assert events == []
+
+
+def test_check_budget_ok_when_endpoint_has_no_max_context():
+    from anchor_client import Endpoint
+    from orchestrate import check_budget
+
+    ep = Endpoint(name="unspecified-ep", tier="executor", base_url="http://x", model="m")
+    ok, msg = check_budget("x" * 100_000, ep)
+    assert ok
+    assert msg == ""
+
+
+def test_check_budget_rejects_text_over_max_context():
+    from anchor_client import Endpoint
+    from orchestrate import check_budget
+
+    ep = Endpoint(name="tiny-ep", tier="executor", base_url="http://x", model="m",
+                  quirks={"max_context": 100})
+    ok, msg = check_budget("x" * 10_000, ep)  # ~2500 estimated tokens >> 100
+    assert not ok
+    assert "tiny-ep" in msg
+    assert "decomposed wrong" in msg
+
+
+def test_check_budget_ok_when_text_fits_max_context():
+    from anchor_client import Endpoint
+    from orchestrate import check_budget
+
+    ep = Endpoint(name="roomy-ep", tier="executor", base_url="http://x", model="m",
+                  quirks={"max_context": 100_000})
+    ok, msg = check_budget("x" * 100, ep)
+    assert ok
+    assert msg == ""
+
+
+def test_execute_task_rejects_oversized_prompt_without_calling_endpoint():
+    from orchestrate import execute_task
+
+    fleet = FakeFleet([GOOD_OUTPUT], quirks={"max_context": 10})
+    result = execute_task("do the thing", "plan", fleet, verify_cmd=None, hold_on_fail=False)
+
+    assert result["status"] == "failed-budget"
+    assert "decomposed wrong" in result["message"]
+    assert fleet.ep.calls == 0  # rejected before dispatch — never sent, never truncated
+
+
+def test_execute_task_budget_rejection_holds_in_detached_mode_message_unchanged():
+    from orchestrate import execute_task
+
+    # Budget rejection is not a retryable/escalatable failure mode like SUGGEST-ESCALATE
+    # or a failed verify — it always reports failed-budget regardless of hold_on_fail.
+    fleet = FakeFleet([GOOD_OUTPUT], quirks={"max_context": 10})
+    result = execute_task("do the thing", "plan", fleet, verify_cmd=None, hold_on_fail=True)
+
+    assert result["status"] == "failed-budget"

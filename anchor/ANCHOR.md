@@ -19,7 +19,8 @@ Small models drift: they forget constraints mid-task, conflate planning with doi
 
 - **Forced structure** — require fixed output formats (the templates in `templates/`). A model that must fill in an `## Acceptance criteria` section cannot skip thinking about acceptance criteria.
 - **One task per context** — never give a small model the whole project. Give it one task spec with exactly the context it needs. Fresh context per task; context rot is real and hits small models hardest.
-- **External verification** — tooling (not the model) runs tests, linters, and diffs. The model's claim of success is an input to verification, never a substitute.
+- **Declared budget + a fixed pre-flight gate** — every task spec carries an explicit `## Budget` (context window, output ceiling, computed by tooling, never guessed) so "does this fit" is a number, not a vibe. Mythos-core rule 13 makes every executor print a fixed 6-item pass/fail block before doing any work — goal, acceptance criteria, files-in-scope, budget, tier fit, task size — so a model that would otherwise plow ahead on a poorly-specified or oversized task has to notice and stop first.
+- **External verification** — tooling (not the model) runs tests, linters, and diffs. The model's claim of success is an input to verification, never a substitute. Fleet runs record that pairing in `var/fleet-metrics/outcomes.jsonl` (`scripts/fleet_metrics.py`); aggregate with `python scripts/fitness_report.py` and prefer those rates over vendor claims when updating `model-fitness.md`.
 - **Role separation** — the same small model performs better as three sequential roles (planner → executor → critic) than as one conversational blob, because each role gets a clean context and a narrow job. In the orchestrated path the split is harness-enforced, not just prompted: `scripts/roles.py` is the single role→capability map (planner writes only `.plans/**`; executor never writes `.plans/**` or its own spec; critic writes nothing), applied per phase by `scripts/orchestrate.py` and by the project-orchestrator MCP server's role-scoped toolsets (a `--role planner` session never even sees lifecycle tools). Role transitions are explicit, logged orchestrator events — no self-promotion. Single-model sessions with no orchestrator keep the discipline by prompt alone.
 - **Escalation paths** — define upfront what gets escalated to a bigger model: ambiguous requirements, architectural decisions, twice-failed tasks, final review.
 
@@ -83,7 +84,7 @@ Every tier defaults to these regardless of task size — they're cheap to apply 
 ## Templates
 
 - `templates/plan.md` — planner output format (header: Value / Slug / Preferred models when using `./.plans`; **path** is lane/status — no in-file Lane/Status)
-- `templates/task-spec.md` — the unit of work handed to an executor
+- `templates/task-spec.md` — the unit of work handed to an executor; its `## Budget` section (context window / output ceiling) is what mythos-core rule 13's pre-flight check reads before work starts
 - `templates/review.md` — critic pass format
 - `templates/verification.md` — machine-checkable done-ness checklist
 

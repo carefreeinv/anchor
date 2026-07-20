@@ -3,7 +3,7 @@ sidebar_position: 3
 sidebar_label: Doctrine
 ---
 
-<!-- synced-from: anchor/ANCHOR.md @ 351117cab4c0a6d729db80e16f04674663d85969 -->
+<!-- synced-from: anchor/ANCHOR.md @ d1d3ef3c1551d6eff0c8b179f6ee80e48f2e027c -->
 
 # The Doctrine
 
@@ -58,13 +58,14 @@ flowchart TB
 
 - **Forced structure** — templates with mandatory sections; a model that must fill `## Acceptance criteria` cannot skip thinking about them. Outputs missing the required footer are rejected and retried by the pipeline, not forgiven.
 - **One task per fresh context** — context rot hits small models hardest; never run task chains in one conversation.
+- **Declared budget + pre-flight gate** — every task spec's `## Budget` (context window, output ceiling) comes from tooling, not the model's guess; mythos-core rule 13 makes every executor print a fixed 6-item pass/fail block (goal, acceptance criteria, files-in-scope, budget, tier fit, task size) before doing any work, and stop on the first FAIL instead of plowing ahead.
 - **Role separation** — planner → executor → critic as three clean contexts outperforms one long chat, even on the same model. In the orchestrated path the split is harness-enforced by the `scripts/roles.py` capability map (planner writes only `.plans/**`; executor never `.plans/**` or its own spec; critic writes nothing), applied per phase by `orchestrate.py` and by the project-orchestrator MCP server's role-scoped toolsets. Role transitions are logged orchestrator events; single-model sessions keep the discipline by prompt alone.
-- **External verification** — tests, linters, builds, and diff-scope checks decide done-ness.
+- **External verification** — tests, linters, builds, and diff-scope checks decide done-ness. Fleet runs pair the model’s claim with actual verify exits in `var/fleet-metrics/outcomes.jsonl`; aggregate with `fitness_report.py` and prefer those rates when updating model-fitness prose.
 - **Escalation paths** — ambiguity, architecture, and twice-failed tasks go up a tier by rule, not by judgment.
 
 ## The templates
 
-Four files in `.anchor/templates/` (source: `anchor/templates/`) are the doctrine's working surface: `plan.md` (planner output; Value / Preferred models when using `./.plans` — lane/lifecycle from **path**, not in-file Status/Lane), `task-spec.md` (the unit of dispatched work), `review.md` (critic pass), `verification.md` (tooling-filled done-ness table). The `mythos-core.md` system prompt binds any model to the six behaviors and the required output footer.
+Four files in `.anchor/templates/` (source: `anchor/templates/`) are the doctrine's working surface: `plan.md` (planner output; Value / Preferred models when using `./.plans` — lane/lifecycle from **path**, not in-file Status/Lane), `task-spec.md` (the unit of dispatched work; its `## Budget` section is what mythos-core rule 13's pre-flight check reads), `review.md` (critic pass), `verification.md` (tooling-filled done-ness table). The `mythos-core.md` system prompt binds any model to the six behaviors and the required output footer.
 
 ## Tracked plans (`./.plans`)
 
