@@ -175,6 +175,7 @@ class SideEffectEndpoint:
 
     def __init__(self, replies):
         self.replies = list(replies)
+        self.quirks: dict = {}  # real Endpoint always has one; budget gate reads it
 
     def chat(self, messages, **kwargs):
         side_effect, reply = self.replies.pop(0)
