@@ -60,6 +60,18 @@ python work_once.py --path .plans/in-progress/x.md --park blocked --agent-id mid
 
 Shared selection: `plan_select.py` (fit + deps). Claims + moves: `plan_lease.claim_and_move` / `park` / `return_to_ready`.
 
+## plan_board.py
+
+Read-only, zero-dependency terminal kanban board for a project's `.plans/`: **Drafts | Ready | In Progress | Review Needed | Completed**, each column sorted by the same Priority → Value → mtime order as `/work`. Header shows rolling 7-day throughput (**Completed** / **Processed** into `review-needed/`), preferring `.plans/logs/*.csv` event files when present and falling back to git-commit-time/mtime otherwise. Each card shows a brief label for its most recent logged event, if any. Never writes to `.plans/`.
+
+```bash
+python scripts/plan_board.py               # live, redraws every 60s
+python scripts/plan_board.py --once         # single frame, for piping/CI
+python scripts/plan_board.py --include-parked --no-color
+```
+
+Column color accents: green (Completed), yellow (Review Needed), orange (In Progress), red (everything else) — an accent only, never the sole signal; column names stay authoritative under `--no-color` or on non-TTY output (auto-disabled).
+
 ## fleet_watch.py
 
 Implementation behind the [**`/fleet-watch`**](/skills/fleet-watch) skill (prefer the skill in an agent). Direct CLI for automation/CI: `--project`, `--status`, `--list` / `--once`, `--emit systemd|cron`, `--install-user` (systemd **user** timers; reboot-safe with `loginctl enable-linger $USER`). See [Fleet workers](/tooling/fleet-workers) for the pull model.
