@@ -58,11 +58,13 @@ def test_plan_copy_includes_plans_tree_and_work_commands(tmp_path):
     assert "anchor/ANCHOR.md" not in dests
     assert ".claude/commands/work.md" in dests
     assert ".claude/commands/draft.md" in dests
+    assert ".claude/commands/review.md" in dests
     assert ".claude/commands/install-anchor.md" in dests
     assert ".claude/commands/local-models.md" in dests
     assert ".claude/commands/anchor.md" in dests
     assert ".grok/skills/work/SKILL.md" in dests
     assert ".grok/skills/draft/SKILL.md" in dests
+    assert ".grok/skills/review/SKILL.md" in dests
     assert ".grok/skills/install-anchor/SKILL.md" in dests
     assert ".grok/skills/local-models/SKILL.md" in dests
     assert ".grok/skills/anchor/SKILL.md" in dests

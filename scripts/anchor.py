@@ -195,6 +195,7 @@ PLATFORMS: dict[str, dict] = {
             # inside a scaffolded project.
             (".claude/commands/work.md", ".claude/commands/work.md"),
             (".claude/commands/draft.md", ".claude/commands/draft.md"),
+            (".claude/commands/review.md", ".claude/commands/review.md"),
             (".claude/commands/commit-prep.md", ".claude/commands/commit-prep.md"),
             (".claude/commands/fleet-watch.md", ".claude/commands/fleet-watch.md"),
             (".claude/commands/install-anchor.md", ".claude/commands/install-anchor.md"),
@@ -209,6 +210,7 @@ PLATFORMS: dict[str, dict] = {
             ("platforms/grok-build/GROK.md", "GROK.md"),
             (".grok/skills/work/SKILL.md", ".grok/skills/work/SKILL.md"),
             (".grok/skills/draft/SKILL.md", ".grok/skills/draft/SKILL.md"),
+            (".grok/skills/review/SKILL.md", ".grok/skills/review/SKILL.md"),
             (".grok/skills/commit-prep/SKILL.md", ".grok/skills/commit-prep/SKILL.md"),
             (".grok/skills/fleet-watch/SKILL.md", ".grok/skills/fleet-watch/SKILL.md"),
             (".grok/skills/install-anchor/SKILL.md", ".grok/skills/install-anchor/SKILL.md"),

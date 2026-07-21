@@ -118,7 +118,7 @@ flowchart LR
   release -.->|"another agent"| claim
 ```
 
-Mid-session stop: leave the file in **`in-progress/`** with a short `## Progress` note. Other agents must ignore it. Half-baked → `ambiguous/`; stuck → `blocked/` or return to ready. Want human sign-off before final? → `review-needed/`; only a human moves that on to `completed/`.
+Mid-session stop: leave the file in **`in-progress/`** with a short `## Progress` note. Other agents must ignore it. Half-baked → `ambiguous/`; stuck → `blocked/` or return to ready. Want human sign-off before final? → `review-needed/`; the human then runs [**`/review`**](/skills/review) (AI critic + survey) to Approve → `completed/`, Needs Work → `bugs|features/`, or Skip. Agents must not complete from `review-needed/` outside that confirmed path.
 
 ## Install (platform wiring)
 

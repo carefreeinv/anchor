@@ -44,7 +44,7 @@ file. Ignore those fields if present; do not write them.
 | `.plans/in-progress/` | yes | **only if you moved it there** | claimed; others **ignore** |
 | `.plans/ambiguous/` | yes | **no** | half-baked; agent may park here |
 | `.plans/blocked/` | yes | **no** | cannot fix now; agent may park here |
-| `.plans/review-needed/` | yes | **no** | agent believes `Done when` holds, awaiting human sign-off; only a human moves it to `completed/` |
+| `.plans/review-needed/` | yes | **no** | agent believes `Done when` holds, awaiting human sign-off; human runs **`/review`** (AI + survey) → `completed/` or `bugs|features/` |
 | `.plans/drafts/` | yes (edit plan only) | **no** | |
 | `.plans/completed/` | yes (history) | **no** | |
 
@@ -319,9 +319,10 @@ the queue moving. Small models do not grab architecture plans to "try hard."
    if needed). Optional rename: `YYYY-MM-DD-<slug>.md`. That move **is** the
    done marker — do not set a Status field. Drop any lease for the plan.
    If the plan or the operator wants human sign-off before this is final,
-   `git mv` to `.plans/review-needed/` instead — a **human** then moves it on
-   to `completed/` (or back to `in-progress/`/`bugs/`/`features/`). Never
-   perform the `review-needed/` → `completed/` move yourself.
+   `git mv` to `.plans/review-needed/` instead — a **human** then runs
+   **`/review`** (AI critic + survey) to Approve → `completed/`, Needs Work →
+   `bugs|features/`, or Skip. Never perform the `review-needed/` →
+   `completed/` move yourself outside a human-confirmed `/review` Approve.
 2. Session footer: `## Result`, `## How to verify`, `## Deferred / concerns`,
    including the new path under `completed/` (or `review-needed/`).
 

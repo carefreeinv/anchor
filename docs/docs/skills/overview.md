@@ -16,6 +16,7 @@ and Grok Build; install paths differ.
 | [**`/anchor`**](/skills/anchor) | **In a project:** keep this tree current. **In Anchor:** scaffold/reconfigure **another** project (path required). | Project: CWD/git root. Anchor base: explicit path. | Scaffolded: yes (`claude`/`grok`). Anchor: base skill only. |
 | [**`/draft`**](/skills/draft) | Any project with **`.plans/`** when you are **planning**, not implementing. | Current repo’s `.plans/drafts/` | Yes (dual-use base + scaffold) |
 | [**`/work`**](/skills/work) | Any project with ready plans under **`.plans/bugs/`** or **`features/`** when you want interactive **execution**. | Current repo’s `.plans/` | Yes |
+| [**`/review`**](/skills/review) | When plans sit in **`.plans/review-needed/`** and a human should sign off (AI critic + survey). | Current repo’s `.plans/review-needed/` | Yes |
 | [**`/fleet-watch`**](/skills/fleet-watch) | Turn on **background** pullers for a project’s `.plans/` (often from Anchor CWD with a sibling name, or from the project itself). | CWD if it has `.plans/`, else named path / `../app` | Yes |
 | [**`/install-anchor`**](/skills/install-anchor) | Anywhere `anchor` is missing or broken on **PATH** (first machine setup or new shell). | Locates Anchor checkout; not project-specific | Yes |
 | [**`/local-models`**](/skills/local-models) | **Inside a project** when choosing/installing a **lean local** executor for this machine. | This host + optional reconfigure draft for **this** project | Scaffolded only (`platforms/…`) |
@@ -28,12 +29,14 @@ flowchart TD
   q --> a["Update / install Anchor in this project"]
   q --> p["Write or promote a plan"]
   q --> e["Execute a ready plan now"]
+  q --> r["Sign off review-needed work"]
   q --> b["Always-on workers for .plans/"]
   q --> c["anchor command not on PATH"]
   q --> l["What local model fits this box?"]
   a --> sa["/anchor"]
   p --> sd["/draft"]
   e --> sw["/work"]
+  r --> sr["/review"]
   b --> sf["/fleet-watch"]
   c --> si["/install-anchor"]
   l --> sl["/local-models"]
@@ -50,7 +53,7 @@ flowchart TD
 
 | Kind | Examples | Lives in |
 |------|----------|----------|
-| **Dual-use** (Anchor base **and** scaffolded into projects) | `/draft`, `/work`, `/commit-prep`, `/fleet-watch`, `/install-anchor` | Anchor `.grok/skills` / `.claude/commands` (and scaffolded copies) |
+| **Dual-use** (Anchor base **and** scaffolded into projects) | `/draft`, `/work`, `/review`, `/commit-prep`, `/fleet-watch`, `/install-anchor` | Anchor `.grok/skills` / `.claude/commands` (and scaffolded copies) |
 | **Scaffolded into projects** (source under `platforms/`) | `/local-models`, project `/anchor` | `platforms/claude-code/…`, `platforms/grok-build/…` |
 | **Anchor base only** (path-required `/anchor`) | Anchor `/anchor` | Anchor checkout base skills — not the project CWD-default variant |
 

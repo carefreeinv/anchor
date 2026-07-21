@@ -20,7 +20,7 @@ files freely; do **not** put `Lane:` or `Status:` inside plan markdown.
 | `in-progress/` | claimed / being worked | **only the agent that moved it there** |
 | `ambiguous/` | half-baked / needs clarification | **no** (parked; not auto-picked) |
 | `blocked/` | cannot proceed with current means | **no** (parked; not auto-picked) |
-| `review-needed/` | agent believes `Done when` holds; awaiting human sign-off | **no** (human moves to `completed/` or back to `in-progress/`/`bugs/`/`features/`) |
+| `review-needed/` | agent believes `Done when` holds; awaiting human sign-off | **no** (human runs **`/review`**: Approve → `completed/`, Needs Work → `bugs|features/`, Skip stays; optional return to `in-progress/` outside the skill) |
 | `drafts/` | not ready (edit / design) | no one (edit only) |
 | `completed/` | finished archive | no one |
 
@@ -113,10 +113,12 @@ Execute:  /work → follow Steps; verify each step
 Park:     agent → ambiguous/ (half-baked) or blocked/ (cannot fix)
 Release:  agent → bugs|features/ (give up claim; still ready for others)
 Review:   agent → git mv in-progress/ → review-needed/ (Done when holds, wants
-          human sign-off) — human then moves to completed/ or back to
-          in-progress/bugs/features; agents must never do the → completed/ move
+          human sign-off). Human runs **`/review`**: AI critic + survey —
+          Approve → completed/; Needs Work → bugs|features/ (inferred);
+          Skip stays in review-needed/. Agents must never do → completed/
+          outside a human-confirmed `/review` Approve.
 Finish:   agent: git mv in-progress/ → completed/ (optional YYYY-MM-DD-<slug>.md),
-          or human: git mv review-needed/ → completed/
+          or human via `/review` Approve: review-needed/ → completed/
 Worktree: parallel agents use scripts/worktree_for_agent.py ensure
           --agent-id … [--slug …] (var/worktrees/<id>/); or work_once --ensure-worktree
 Branch:   from **dev** (else **develop**); if neither exists, **create dev**

@@ -6,6 +6,10 @@ Newest first.
 
 ## [Unreleased]
 
+### Added
+
+- **`/review` skill** — human sign-off for `.plans/review-needed/`: pick **one** plan per invocation, check out `feature/<slug>` when safe, optional low-risk local launch, fresh-context **AI critic** (`templates/review.md`), then a survey (**Approve** / **Needs Work** / **Skip**) with follow-ups. Approve → `completed/`; Needs Work → `bugs/` or `features/` (same inference as `/draft --promote`, never `in-progress/`). Scaffolded for Claude (`.claude/commands/review.md`) and Grok (`.grok/skills/review/SKILL.md`); docs at `/skills/review`; cross-linked from `/work` and `.plans/README.md`
+
 ### Fixed
 
 - **A role-violating task was scored as an accurate claim** — the claimed-vs-actual ledger row was written inside `execute_task` at the verify step, but a task's **role verdict** is only known after it returns. An executor that wrote outside its role boundary (e.g. into `.plans/**`) and still passed verify was recorded as a clean, accurate `success` — in the very tool whose job is measuring claim accuracy. `orchestrate.py` now holds the row until the role check has run and stamps it with `role_verdict` (`pass`/`fail`, `None` when the run had no role enforcement); `OutcomeRecord` gains the field, `load_outcomes` reads it back, and `fitness_report.py` excludes `role_verdict == "fail"` rows from positive claim accuracy. Scope failures need no equivalent guard — they short-circuit before verify and already arrive with no exit code. Covered by four tests across `test_orchestrate.py` and `test_fitness_report.py`
