@@ -49,11 +49,10 @@ stateDiagram-v2
   [*] --> drafts: write plan
   drafts --> ready: human promote only
   ready --> in_progress: start work + lease
-  in_progress --> completed: Done when holds
-  in_progress --> review_needed: Done when holds, wants sign-off
-  review_needed --> completed: human only
+  in_progress --> review_needed: Done when holds (required)
+  review_needed --> completed: human /review Approve
   review_needed --> in_progress: human requested changes
-  review_needed --> ready: release/return
+  review_needed --> ready: Needs Work or release/return
   ready --> ambiguous: half-baked
   ready --> blocked: cannot fix now
   in_progress --> ambiguous: half-baked
@@ -68,7 +67,7 @@ stateDiagram-v2
   end note
 ```
 
-Agents must **never** promote drafts except via [**`/draft --promote`**](/skills/draft), move work into `drafts/`, move `review-needed/` → `completed/` (human-only — the entire point of that lane), or touch another agent’s `in-progress/` plan. **Preserve basename** on every lane move (including `.local.md`); only a human may rename for privacy/tracking.
+Agents must **never** promote drafts except via [**`/draft --promote`**](/skills/draft), move work into `drafts/`, move **`in-progress/` → `completed/`** (always finish to `review-needed/`), move `review-needed/` → `completed/` except under human-confirmed [**`/review` Approve**](/skills/review), or touch another agent’s `in-progress/` plan. **Preserve basename** on every lane move (including `.local.md`); only a human may rename for privacy/tracking.
 
 ## Priority (bare `/work`)
 
@@ -102,23 +101,22 @@ flowchart LR
   exec["Execute<br/>/work steps"]
   park["Park<br/>ambiguous/ or blocked/"]
   release["Release<br/>back to bugs|features"]
-  review["Review<br/>review-needed/ (agent)"]
-  finish["Finish<br/>completed/ (agent, or human from review-needed/)"]
+  review["Finish agent work<br/>review-needed/"]
+  finish["Archive<br/>completed/ (human /review Approve)"]
 
   write --> promote
   promote --> claim
   claim --> exec
-  exec --> finish
   exec --> review
   exec --> park
   exec --> release
   review --> finish
-  review -.->|"human: changes requested"| claim
+  review -.->|"Needs Work / changes"| claim
   park -.->|"when unblocked"| claim
   release -.->|"another agent"| claim
 ```
 
-Mid-session stop: leave the file in **`in-progress/`** with a short `## Progress` note. Other agents must ignore it. Half-baked → `ambiguous/`; stuck → `blocked/` or return to ready. Want human sign-off before final? → `review-needed/`; the human then runs [**`/review`**](/skills/review) (AI critic + survey) to Approve → `completed/`, Needs Work → `bugs|features/`, or Skip. Agents must not complete from `review-needed/` outside that confirmed path.
+Mid-session stop: leave the file in **`in-progress/`** with a short `## Progress` note. Other agents must ignore it. Half-baked → `ambiguous/`; stuck → `blocked/` or return to ready. When Done when holds → **always** `review-needed/`; the human then runs [**`/review`**](/skills/review) (AI critic + survey) to Approve → `completed/`, Needs Work → `bugs|features/`, or Skip. Agents never archive to `completed/` from `/work`.
 
 ## Install (platform wiring)
 
@@ -135,7 +133,7 @@ Scaffold always creates the empty `.plans/` tree + README. Process contract also
 
 ### Chat / no shell
 
-When the user types `/work` without tool access: ask them to `ls .plans/bugs .plans/features .plans/in-progress` and paste output; pick by the same priority and model-fit rules; dictate `git mv` into `in-progress/` when starting and into `completed/` (or `review-needed/` for human sign-off) when Done when holds. Never dictate a promote move, or a `review-needed/` → `completed/` move. Never work a foreign in-progress path.
+When the user types `/work` without tool access: ask them to `ls .plans/bugs .plans/features .plans/in-progress` and paste output; pick by the same priority and model-fit rules; dictate `git mv` into `in-progress/` when starting and into **`review-needed/`** when Done when holds. Never dictate a promote move, an `in-progress/` → `completed/` move, or a `review-needed/` → `completed/` move (use [**`/review`**](/skills/review)). Never work a foreign in-progress path.
 
 ### Headless / fleet
 

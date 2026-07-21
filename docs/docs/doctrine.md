@@ -3,7 +3,7 @@ sidebar_position: 3
 sidebar_label: Doctrine
 ---
 
-<!-- synced-from: anchor/ANCHOR.md @ d1d3ef3c1551d6eff0c8b179f6ee80e48f2e027c -->
+<!-- synced-from: anchor/ANCHOR.md @ 511bc69012245cef48557ef8e2282ee35d3cbdd7 -->
 
 # The Doctrine
 
@@ -95,7 +95,7 @@ flowchart LR
   park -->|"return"| ready
 ```
 
-Ready lanes are `bugs/` then `features/` (within a lane by `Priority` P1→P2→P3, default P2, then Value, then oldest first); agents move claimed work to `in-progress/` (only the claimer may continue — others ignore); may park half-baked or stuck work in `ambiguous/` or `blocked/`; may move work an agent believes is done to `review-needed/` for human sign-off before it's final (human runs [**`/review`**](/skills/review): AI critic + survey — Approve → `completed/`, Needs Work → `bugs|features/`; agents must not complete from `review-needed/` outside that path); finished work goes to `completed/`; never execute `drafts/`, `ambiguous/`, `blocked/`, or `review-needed/`. Do not put `Lane:` or `Status:` inside plan files. **Promotion** from drafts: [**`/draft --promote <slug>`**](/skills/draft) (user-authorized; agent infers bugs vs features from the plan) or a human move — never from `/work` or fleet pullers. Prefer [**`/draft`**](/skills/draft) to create/list/load drafts, [**`/work`**](/skills/work) to execute ready plans, and [**`/review`**](/skills/review) for `review-needed/` sign-off. Headless: `scripts/work_once.py --once --tier mid --agent-id …`. Multi-tier pollers: [Fleet workers](/tooling/fleet-workers). Preferred orchestrator: `anchor <dir> --set-orchestrator …` (if unset, frontier/near-frontier may act as temporary coordinator; lesser models escalate).
+Ready lanes are `bugs/` then `features/` (within a lane by `Priority` P1→P2→P3, default P2, then Value, then oldest first); agents move claimed work to `in-progress/` (only the claimer may continue — others ignore); may park half-baked or stuck work in `ambiguous/` or `blocked/`; when Done when holds agents **always** move work to `review-needed/` for human sign-off (human runs [**`/review`**](/skills/review): AI critic + survey — Approve → `completed/`, Needs Work → `bugs|features/`; agents must not archive to `completed/` from `/work`); never execute `drafts/`, `ambiguous/`, `blocked/`, or `review-needed/`. Do not put `Lane:` or `Status:` inside plan files. **Promotion** from drafts: [**`/draft --promote <slug>`**](/skills/draft) (user-authorized; agent infers bugs vs features from the plan) or a human move — never from `/work` or fleet pullers. Prefer [**`/draft`**](/skills/draft) to create/list/load drafts, [**`/work`**](/skills/work) to execute ready plans, and [**`/review`**](/skills/review) for `review-needed/` sign-off. Headless: `scripts/work_once.py --once --tier mid --agent-id …`. Multi-tier pollers: [Fleet workers](/tooling/fleet-workers). Preferred orchestrator: `anchor <dir> --set-orchestrator …` (if unset, frontier/near-frontier may act as temporary coordinator; lesser models escalate).
 
 ## Right-size before you start
 

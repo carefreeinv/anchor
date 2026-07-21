@@ -3,7 +3,7 @@ sidebar_position: 4
 sidebar_label: Local Models
 ---
 
-<!-- synced-from: platforms/local-models/README.md @ 98a97c338c8132096d737e8c67a9d6f635a5419c -->
+<!-- synced-from: platforms/local-models/README.md @ 0da2ccbecfc08c09f3c4fa7c8df0ac0753c2ef4c -->
 
 # Local Models
 
@@ -33,4 +33,4 @@ The quirks are encoded in `scripts/endpoints.yaml` (`quirks:` block) and applied
 
 ## Tracked plans and coordination
 
-Local models follow the same **`/work`** contract when the harness has shell: honor **Preferred models** and **Depends on**, claim into `in-progress/`, never promote drafts. They do **not** self-appoint as temporary coordinator when Preferred orchestrator is unset—escalate to a frontier session. See [model fitness](/model-fitness) and Skills → [`/work`](/skills/work).
+Local models follow the same **`/work`** contract when the harness has shell: honor **Preferred models** and **Depends on**, claim into `in-progress/`, finish to **`review-needed/`** (human [`/review`](/skills/review) → `completed/`), never promote drafts. They do **not** self-appoint as temporary coordinator when Preferred orchestrator is unset—escalate to a frontier session. See [model fitness](/model-fitness) and Skills → [`/work`](/skills/work).

@@ -3,7 +3,7 @@ sidebar_position: 5
 sidebar_label: Generic Chat
 ---
 
-<!-- synced-from: platforms/chat/CHAT.md @ 003d69d60507fea5f6d7e9ecc9e2ef122735d616 -->
+<!-- synced-from: platforms/chat/CHAT.md @ e2c82336938b344379fa9364fd3828b4d28bbe62 -->
 
 # Generic Chat
 

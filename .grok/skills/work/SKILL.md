@@ -62,11 +62,10 @@ Agents may relocate plan files **only** as:
 
 ```text
 bugs|features/     →  in-progress/     (start work + lease)
-in-progress/       →  completed/       (Done when holds)
-in-progress/       →  review-needed/   (Done when holds; wants human sign-off)
-review-needed/     →  completed/       (HUMAN ONLY — agents must never do this move)
+in-progress/       →  review-needed/   (Done when holds — required agent finish)
+review-needed/     →  completed/       (HUMAN ONLY via /review Approve)
 review-needed/     →  in-progress/     (human requested changes; agent resumes)
-review-needed/     →  bugs|features/   (release/return)
+review-needed/     →  bugs|features/   (release/return; also /review Needs Work)
 bugs|features|in-progress/  →  ambiguous/   (half-baked / underspecified)
 bugs|features|in-progress/  →  blocked/     (cannot fix now)
 in-progress/       →  bugs|features/   (release claim for other agents)
@@ -77,8 +76,9 @@ ambiguous|blocked/ →  bugs|features/   (return when clarified / unblocked)
 drop or add the `.local` suffix; only a human may rename for privacy/tracking.
 
 Agents must **never** promote drafts (use **`/draft --promote`** instead), move
-work into `drafts/`, move `review-needed/` → `completed/` (human-only — the
-entire point of that lane), or touch another agent’s `in-progress/` plan.
+work into `drafts/`, move **`in-progress/` → `completed/`** (forbidden — always
+finish to `review-needed/`), move `review-needed/` → `completed/` except under a
+human-confirmed **`/review` Approve**, or touch another agent’s `in-progress/` plan.
 
 ## Priority (when no target is given)
 
@@ -315,20 +315,22 @@ the queue moving. Small models do not grab architecture plans to "try hard."
 
 **Done when** all checklist items hold and verifications pass:
 
-1. `git mv` the file from `in-progress/` to `.plans/completed/` (create the dir
-   if needed). Optional rename: `YYYY-MM-DD-<slug>.md`. That move **is** the
-   done marker — do not set a Status field. Drop any lease for the plan.
-   If the plan or the operator wants human sign-off before this is final,
-   `git mv` to `.plans/review-needed/` instead — a **human** then runs
-   **`/review`** (AI critic + survey) to Approve → `completed/`, Needs Work →
-   `bugs|features/`, or Skip. Never perform the `review-needed/` →
-   `completed/` move yourself outside a human-confirmed `/review` Approve.
-2. Session footer: `## Result`, `## How to verify`, `## Deferred / concerns`,
-   including the new path under `completed/` (or `review-needed/`).
+1. **Always** `git mv` the file from `in-progress/` to `.plans/review-needed/`
+   (create the dir if needed). Drop any lease for the plan. That move means
+   *agent asserts Done when* — it is **not** final archive. Do **not** set a
+   Status field. Do **not** move to `completed/` from `/work` (no optional
+   self-certify path).
+2. Tell the human to run **`/review`** (or `/review <slug>`) for sign-off: AI
+   critic + survey — Approve → `completed/`, Needs Work → `bugs|features/`,
+   Skip. Never perform `review-needed/` → `completed/` yourself outside a
+   human-confirmed `/review` Approve.
+3. Session footer: `## Result`, `## How to verify`, `## Deferred / concerns`,
+   including the new path under `review-needed/` and a one-line “run `/review`”
+   reminder.
 
 **If the user stops mid-plan:** leave the file in **`in-progress/`** with a
-brief `## Progress` note. Do **not** move to `completed/`. Other agents must
-ignore it.
+brief `## Progress` note. Do **not** move to `completed/` or `review-needed/`.
+Other agents must ignore it.
 
 **If the plan is half-baked:** move to `.plans/ambiguous/` and note what is
 missing (acceptance criteria, scope, etc.).

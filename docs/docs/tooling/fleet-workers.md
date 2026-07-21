@@ -223,8 +223,8 @@ Workers do **not** watch `drafts/` or chat. Eligibility is entirely filesystem:
 | Foreign `in-progress/` | other workers | **Ignore** — do not list as pickable, do not execute |
 | Park → `ambiguous/` or `blocked/` | agent | Half-baked or cannot-fix; **not** auto-picked |
 | Return → `bugs/`\|`features/` | agent | Release claim or unpark when ready again |
-| `git mv` → `completed/` | owning executor when Done when holds | Leaves in-progress |
-| `git mv` → `review-needed/` | owning executor, when Done when holds but sign-off is wanted | Leaves in-progress; **not** auto-picked; only a human moves it to `completed/` (or back to `in-progress/`/`bugs/`/`features/`) |
+| `git mv` → `review-needed/` | owning executor when Done when holds (**required** agent finish) | Leaves in-progress; **not** auto-picked; human **`/review`** → `completed/` or Needs Work → ready |
+| `git mv` → `completed/` | **human only** (via `/review` Approve) | Agents must not self-archive |
 
 So “monitor the project folder” means: **poll `.plans/bugs`, `.plans/features`, and your own `.plans/in-progress`**, not the whole repository. Prefer promoting drafts only when acceptance criteria and Preferred models are filled in.
 
@@ -304,7 +304,7 @@ Never “drain entire backlog forever” as the default—bounded polls keep eco
 4. [ ] Each worker has unique `--agent-id` and correct `--tier` / `--endpoint`.
 5. [ ] Pollers treat exit `1` as idle; alert only on exit `2` or repeated claim storms.
 6. [ ] Git isolation: **worktree per agent-id** (`worktree_for_agent.py` / `work_once --ensure-worktree`) or single-writer clone.
-7. [ ] On completion, executor archives: `git mv .plans/in-progress/<slug>.md .plans/completed/`.
+7. [ ] On completion, executor moves to review-needed: `git mv .plans/in-progress/<slug>.md .plans/review-needed/` (human `/review` → `completed/`).
 8. [ ] Spot-check with `--list` per tier (deps column shows met/UNMET):
 
 ```bash

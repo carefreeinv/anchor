@@ -111,9 +111,10 @@ makes a local plan tracked. **Path is
 authoritative:** `bugs/` and `features/` are ready; agents move claimed work to
 `in-progress/` (only the claimer continues — others **ignore**); may park to
 `ambiguous/` (half-baked) or `blocked/` (cannot fix), or return in-progress to
-ready; finished plans go to `completed/`; never execute `drafts/` / `ambiguous/`
-/ `blocked/`. Do not put `Lane:` or `Status:` inside plan files. **Promotion**
-from `drafts/` → ready is via explicit **`/draft --promote <slug>`**
+ready; agents finish claimed work to `review-needed/` (human sign-off via
+**`/review`** → `completed/`); never execute `drafts/` / `ambiguous/` /
+`blocked/` / `review-needed/`. Do not put `Lane:` or `Status:` inside plan files.
+**Promotion** from `drafts/` → ready is via explicit **`/draft --promote <slug>`**
 (user-authorized; agent infers `bugs/` vs `features/` from the plan; **keeps**
 `.local.md` if present) or a human filesystem move — never from `/work` or fleet pullers. Selection order: own
 in-progress, then bugs before features; within a lane by **`Priority`**
@@ -122,10 +123,11 @@ include **Priority**, **Preferred models** and **Depends on**.
 
 **Draft with `/draft`** (list / load / create / promote). **Start execution with
 `/work`** (Claude: `.claude/commands/work.md`; Grok: `.grok/skills/work/SKILL.md`;
-Chat: follow the `/work` section in `CHAT.md`).
-Optional: `/work --list`, `/work <slug>`, `/work --no-fit-check`. Headless pull:
-`scripts/work_once.py --once --tier mid` (claim + print path; same fit rules).
-Multi-tier always-on pollers: `docs/docs/tooling/fleet-workers.md`. Operator-named:
+Chat: follow the `/work` section in `CHAT.md`). **Human sign-off with `/review`**
+for `review-needed/` plans. Optional: `/work --list`, `/work <slug>`,
+`/work --no-fit-check`. Headless pull: `scripts/work_once.py --once --tier mid`
+(claim + print path; same fit rules). Multi-tier always-on pollers:
+`docs/docs/tooling/fleet-workers.md`. Operator-named:
 `scripts/orchestrate.py --plan-file .plans/features/<slug>.md` (refuses `drafts/`
 and `completed/`). Process contract: `.plans/README.md` in repos that use the tree.
 

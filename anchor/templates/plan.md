@@ -2,12 +2,13 @@
 
 <!-- When writing into a repo that uses `./.plans`, use /draft (planning mode)
      so agents save under drafts/ until a human moves the file into bugs/ or
-     features/. The only agent git mv is ready-lane → completed/ when Done when
-     holds. Private plans: /draft --local → <slug>.local.md (gitignored). See
-     `.plans/README.md`.
+     features/. Agent finish: in-progress/ → review-needed/ when Done when holds;
+     human /review Approve → completed/. Private plans: /draft --local →
+     <slug>.local.md (gitignored). See `.plans/README.md`.
 
      Path is authoritative — do NOT put Lane: or Status: in the file.
-     drafts/ = not ready · bugs|features/ = ready · completed/ = done. -->
+     drafts/ = not ready · bugs|features/ = ready · review-needed/ = await human
+     · completed/ = done. -->
 
 - **Value:** high | medium | low          <!-- features only; omit for bugs -->
 - **Priority:** P1 | P2 | P3               <!-- P1 > P2 > P3; default P2 if omitted; orders within a lane -->

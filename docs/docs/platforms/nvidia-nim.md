@@ -3,7 +3,7 @@ sidebar_position: 3
 sidebar_label: NVIDIA NIM / Nemotron
 ---
 
-<!-- synced-from: platforms/nvidia-nim/NEMOTRON.md @ 2fdef67121407575424eefd68a27386cb9e35f85 -->
+<!-- synced-from: platforms/nvidia-nim/NEMOTRON.md @ b626cf8888a2396dc2679c42adfafea67fdffd24 -->
 
 # NVIDIA NIM / Nemotron
 
@@ -45,4 +45,4 @@ Nemotron Super/Ultra with thinking on is the most credible local stand-in for a 
 
 ## Tracked plans
 
-Same `.plans/` contract as other platforms: draft under `drafts/`, human promotes to ready, claim → `in-progress/`, finish → `completed/`. **Docs describe current state, not plans** — never write product docs from `.plans/` contents; document shipped code only.
+Same `.plans/` contract as other platforms: draft under `drafts/`, human promotes to ready, claim → `in-progress/`, finish → `review-needed/` (human `/review` → `completed/`). **Docs describe current state, not plans** — never write product docs from `.plans/` contents; document shipped code only.

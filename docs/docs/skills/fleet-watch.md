@@ -19,7 +19,7 @@ You run the skill once (or occasionally) in a coding agent to **configure** thos
 |------------------------|---------------------|
 | You must open a session and run `/work` for each plan | Watchers poll, claim fit-appropriate plans, and run the work loop unattended |
 | Idle machines stay idle until someone remembers | Mid/small/reasoner workers keep watching after reboot |
-| Handoff depends on chat history | File-based ready → in-progress → completed continues on its own |
+| Handoff depends on chat history | File-based ready → in-progress → review-needed continues on its own |
 
 Watchers **pull one plan per tick** (they do not drain the whole backlog by default and do not promote drafts). They still honor Preferred models / fit and do **not** replace a [preferred orchestrator](/tooling/cli#preferred-orchestrator-per-project) for architecture—lesser workers escalate hard planning.
 

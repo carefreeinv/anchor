@@ -30,11 +30,10 @@ Agents may relocate plan files **only** as follows:
 
 ```text
 bugs|features/<slug>.md     ──mv──►  in-progress/     (starting work + lease)
-in-progress/<slug>.md       ──mv──►  completed/       (Done when holds)
-in-progress/<slug>.md       ──mv──►  review-needed/   (agent believes Done when holds; wants human sign-off)
-review-needed/<slug>.md     ──mv──►  completed/       (HUMAN ONLY — agents must never perform this move)
+in-progress/<slug>.md       ──mv──►  review-needed/   (Done when holds — required agent finish)
+review-needed/<slug>.md     ──mv──►  completed/       (HUMAN ONLY via /review Approve)
 review-needed/<slug>.md     ──mv──►  in-progress/     (human requested changes; agent resumes)
-review-needed/<slug>.md     ──mv──►  bugs|features/   (release/return)
+review-needed/<slug>.md     ──mv──►  bugs|features/   (release/return; also /review Needs Work)
 bugs|features|in-progress/  ──mv──►  ambiguous/       (half-baked / underspecified)
 bugs|features|in-progress/  ──mv──►  blocked/         (cannot fix now)
 in-progress/<slug>.md       ──mv──►  bugs|features/   (release claim for others)
@@ -55,8 +54,10 @@ Agents must **never**:
 - Move ready/in-progress → `drafts/`
 - Swap `bugs/` ↔ `features/` except via explicit return targeting a lane
 - Move anything out of `completed/`
-- **Move `review-needed/` → `completed/`** — that move is **human-only**;
-  it is the entire point of the lane
+- **Move `in-progress/` → `completed/`** — agents always finish to
+  `review-needed/`; there is no self-certify archive path
+- **Move `review-needed/` → `completed/`** except under a human-confirmed
+  **`/review` Approve** — that is the entire point of the lane
 - **Touch another agent’s `in-progress/` plan** (ignore it)
 
 If a draft is named for execution: refuse; offer edit-only; tell the human to
@@ -112,13 +113,11 @@ Claim:    agent → move into in-progress/ + lease (path = working)
 Execute:  /work → follow Steps; verify each step
 Park:     agent → ambiguous/ (half-baked) or blocked/ (cannot fix)
 Release:  agent → bugs|features/ (give up claim; still ready for others)
-Review:   agent → git mv in-progress/ → review-needed/ (Done when holds, wants
-          human sign-off). Human runs **`/review`**: AI critic + survey —
+Finish:   agent → git mv in-progress/ → review-needed/ (Done when holds —
+          required). Human runs **`/review`**: AI critic + survey —
           Approve → completed/; Needs Work → bugs|features/ (inferred);
-          Skip stays in review-needed/. Agents must never do → completed/
-          outside a human-confirmed `/review` Approve.
-Finish:   agent: git mv in-progress/ → completed/ (optional YYYY-MM-DD-<slug>.md),
-          or human via `/review` Approve: review-needed/ → completed/
+          Skip stays in review-needed/. Agents must never archive to
+          completed/ from /work.
 Worktree: parallel agents use scripts/worktree_for_agent.py ensure
           --agent-id … [--slug …] (var/worktrees/<id>/); or work_once --ensure-worktree
 Branch:   from **dev** (else **develop**); if neither exists, **create dev**
@@ -175,7 +174,7 @@ work for cheaper or stronger models.
 | Role | Writes / reads |
 |------|----------------|
 | Planner (NIM, local, human) | Write under `drafts/` only; **human** moves when ready |
-| Executor (`/work`, Fable, Sonnet, Grok, …) | Ready → own `in-progress/` → `completed/` (or → `review-needed/` if sign-off is wanted, then human moves to `completed/`); ignore others’ in-progress |
+| Executor (`/work`, Fable, Sonnet, Grok, …) | Ready → own `in-progress/` → `review-needed/`; human **`/review`** → `completed/` (or Needs Work → ready); ignore others’ in-progress |
 | Critic | Plan **Done when** + diff |
 
 Plans must be **self-contained** (Goal, Steps with verify commands, Done when).

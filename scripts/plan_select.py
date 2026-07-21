@@ -10,10 +10,9 @@ Path is authoritative:
     named claim, not a side effect of `/work`.
   - ambiguous/ — half-baked (never auto-execute; agent may park here)
   - blocked/ — cannot proceed (never auto-execute; agent may park here)
-  - review-needed/ — agent believes Done when holds, awaiting human sign-off
-    (never auto-execute; agent may move in-progress/ here, but only a
-    **human** may move review-needed/ → completed/)
-  - completed/ — archive (never execute)
+  - review-needed/ — required agent finish when Done when holds; awaiting
+    human /review (never auto-execute; agents must not archive to completed/)
+  - completed/ — archive after human /review Approve (never execute)
 
 Priority for bare pick (ready lanes only — in-progress is never bare-picked):
 

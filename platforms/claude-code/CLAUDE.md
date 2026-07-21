@@ -63,13 +63,20 @@ resume own `in-progress/` first; bugs before features; honor **Preferred models*
 and **Depends on** (skip unmet deps); never execute `drafts/` / `completed/` /
 `ambiguous/` / `blocked/`; ignore foreign `in-progress/`; claim ready →
 `in-progress/`; park half-baked → `ambiguous/` or stuck → `blocked/`; finish
-`in-progress/` → `completed/`. Do not promote drafts from `/work` (use
-`/draft --promote`). If Preferred orchestrator is unset, frontier/near-frontier
+`in-progress/` → `review-needed/` (required; human **`/review`** → `completed/`).
+Do not promote drafts from `/work` (use `/draft --promote`). If Preferred orchestrator is unset, frontier/near-frontier
 may act as temporary coordinator (`TEMPORARY-COORDINATOR:`). On Git projects: **worktree per agent**
 (`scripts/worktree_for_agent.py ensure --agent-id … --slug …`); feature-branch
 from **`dev`**/`develop` (**create `dev` from main/master if missing**);
 **`/commit-prep` before commit**; never auto-merge. Command:
 `.claude/commands/work.md`.
+
+## /review
+
+Human sign-off for **one** plan under `.plans/review-needed/`: checkout
+`feature/<slug>` when safe, fresh-context AI critic, survey (Approve / Needs
+Work / Skip). Approve → `completed/`; Needs Work → `bugs|features/`. Command:
+`.claude/commands/review.md`.
 
 ## /fleet-watch
 
