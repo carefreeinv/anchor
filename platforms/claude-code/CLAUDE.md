@@ -108,7 +108,10 @@ when available.
 
 ## /config
 
-`.claude/commands/config.md` (scaffolded alongside this file) wires up a `/config`
-command: it asks which platform(s)/fleet tooling you want as your default, runs
-`./config.sh` non-interactively to save them, and shows the `anchor <project-dir>`
-command to scaffold with them. Help: https://carefreeinv.com/anchor
+`/config` lives in the **Anchor checkout**, not in this project — it is deliberately
+not scaffolded. It sets *your* operator defaults (platform(s)/fleet tooling, model
+priority, preferred orchestrator) by running `./config.sh`, and there is nothing for
+it to act on inside a scaffolded tree. Run it from the Anchor checkout
+(`.claude/commands/config.md` there), then scaffold with `anchor <project-dir>`.
+To change just this project's orchestrator: `anchor <dir> --set-orchestrator <token>`.
+Help: https://carefreeinv.com/anchor

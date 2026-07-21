@@ -82,6 +82,16 @@ def test_plan_copy_scaffolds_commit_prep_for_both_platforms(tmp_path):
     assert ".grok/skills/commit-prep/SKILL.md" in dests
 
 
+def test_plan_copy_never_scaffolds_config_for_either_platform(tmp_path):
+    # /config sets the *operator's* Anchor defaults and runs ./config.sh from the
+    # Anchor checkout — it has nothing to act on inside a scaffolded project, so it
+    # is base-only for both platforms. Claude used to ship it; this locks that shut.
+    plan = anchor.plan_copy(tmp_path, ["claude", "grok"], want_fleet=True)
+    dests = {str(dest.relative_to(tmp_path)) for _, dest in plan}
+    assert ".claude/commands/config.md" not in dests
+    assert ".grok/skills/config/SKILL.md" not in dests
+
+
 def test_plan_copy_includes_capacity_routing_doctrine(tmp_path):
     # Standing rules in both platform files reference .anchor/capacity-routing.md.
     plan = anchor.plan_copy(tmp_path, ["claude"], want_fleet=False)

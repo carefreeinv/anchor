@@ -3,7 +3,7 @@ sidebar_position: 1
 sidebar_label: Claude Code
 ---
 
-<!-- synced-from: platforms/claude-code/CLAUDE.md @ bf8115f2b1c552e7e6530a4fd1b99530ba3d140c -->
+<!-- synced-from: platforms/claude-code/CLAUDE.md @ 75f3ae84c4c447ef7e34cd1ee6daf47b956d6b1d -->
 
 # Claude Code
 
