@@ -92,6 +92,13 @@ one writer per clone/worktree.
 `/fleet-watch <name>` from Anchor)—see
 [docs](https://carefreeinv.com/anchor/docs/skills/fleet-watch).
 
+**Kanban board (optional, read-only):** `python scripts/plan_board.py` (or
+`.anchor/scripts/plan_board.py` once scaffolded) renders this project's
+`.plans/` as a terminal kanban board — Drafts | Ready | In Progress | Review
+Needed | Completed — with 7-day throughput stats and per-card last-event
+labels. Never writes to `.plans/`; `--once` for a single frame, `--no-color`
+for plain output, `--include-parked` to also show `ambiguous/`/`blocked/`.
+
 ## Priority (bare `/work`)
 
 Ready lanes only — bare `/work` never scans `in-progress/`.
