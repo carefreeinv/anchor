@@ -44,7 +44,7 @@ file. Ignore those fields if present; do not write them.
 | `.plans/in-progress/` | yes | **only if you moved it there** | claimed; others **ignore** |
 | `.plans/ambiguous/` | yes | **no** | half-baked; agent may park here |
 | `.plans/blocked/` | yes | **no** | cannot fix now; agent may park here |
-| `.plans/review-needed/` | yes | **no** | agent believes `Done when` holds, awaiting human sign-off; human runs **`/review`** (AI + survey) → `completed/` or `bugs|features/` |
+| `.plans/review-needed/` | yes | **no** | agent believes `Done when` holds, awaiting human sign-off; human runs **`/review`** (AI + survey): Approve merges feature→dev then → `completed/`; Needs Work → `bugs|features/`; empty queue may Promote dev→main |
 | `.plans/drafts/` | yes (edit plan only) | **no** | |
 | `.plans/completed/` | yes (history) | **no** | |
 
@@ -383,9 +383,10 @@ the queue moving. Small models do not grab architecture plans to "try hard."
    Status field. Do **not** move to `completed/` from `/work` (no optional
    self-certify path).
 2. Tell the human to run **`/review`** (or `/review <slug>`) for sign-off: AI
-   critic + survey — Approve → `completed/`, Needs Work → `bugs|features/`,
-   Skip. Never perform `review-needed/` → `completed/` yourself outside a
-   human-confirmed `/review` Approve.
+   critic + survey — Approve merges `feature/<slug>` → dev then → `completed/`;
+   Needs Work → `bugs|features/`; Skip. Never perform `review-needed/` →
+   `completed/` or any branch merge yourself outside a human-confirmed
+   `/review` Approve.
 3. Session footer: `## Result`, `## How to verify`, `## Deferred / concerns`,
    including the new path under `review-needed/` and a one-line “run `/review`”
    reminder.
@@ -435,16 +436,17 @@ missing). Optional `--slug` checks out `feature/<slug>` inside the worktree.
 
 1. Prefer **`dev`**, else **`develop`**; create **`dev` from main/master** if neither
    exists (report creation; push `origin dev` when allowed).
-2. Feature branch `feature/<slug>` **in your worktree** — never auto-merge to
-   `dev`/`main`/`master`.
+2. Feature branch `feature/<slug>` **in your worktree** — **`/work` never
+   merges** to `dev`/`main`/`master` (human **`/review` Approve** lands the
+   feature on integration; empty-queue **Promote** lands integration on mainline).
 3. When plan work is complete (Done when holds / finishing `/work`):
    - Run **`/commit-prep`** first (**prep only** — tests, CHANGELOG, blog).
    - If gates are **green**: **stage + commit on the feature branch** (HEREDOC
      message). Optional `git push -u origin HEAD` when a remote feature branch is
      expected. Report branch + commit SHA.
    - If gates are **red**: do not commit; fix or stop per stop rules.
-   - **Never** commit on `main`/`master`/`dev`/`develop`; **never** auto-merge to
-     integration. Leave PR/merge to the human.
+   - **Never** commit on `main`/`master`/`dev`/`develop`; **never** merge from
+     `/work`. Tell the human to run **`/review`** for sign-off + integrate.
 
 ## Out of scope
 

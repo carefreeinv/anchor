@@ -36,7 +36,7 @@ Plans are git-tracked markdown under the **`.plans/`** dotdir. Do not gitignore 
 | `.plans/in-progress/` | claimed / being worked | **only if you moved it there** — others **ignore** |
 | `.plans/ambiguous/` | half-baked / needs clarification | **no** (agent may park here) |
 | `.plans/blocked/` | cannot proceed | **no** (agent may park here) |
-| `.plans/review-needed/` | agent believes `Done when` holds, awaiting human sign-off | **no** (only a human moves it to `completed/`) |
+| `.plans/review-needed/` | agent believes `Done when` holds, awaiting human sign-off | **no** (human [**`/review`**](/skills/review): Approve merges feature→dev then → `completed/`; empty queue may Promote dev→main) |
 | `.plans/drafts/` | not ready | **no** (edit only) |
 | `.plans/completed/` | finished archive | **no** |
 
@@ -124,7 +124,7 @@ flowchart LR
   release -.->|"another agent"| claim
 ```
 
-Mid-session stop: leave the file in **`in-progress/`** with a short `## Progress` note. Other agents must ignore it. Half-baked → `ambiguous/`; stuck → `blocked/` or return to ready. When Done when holds → **always** `review-needed/`; the human then runs [**`/review`**](/skills/review) (AI critic + survey) to Approve → `completed/`, Needs Work → `bugs|features/`, or Skip. Agents never archive to `completed/` from `/work`.
+Mid-session stop: leave the file in **`in-progress/`** with a short `## Progress` note. Other agents must ignore it. Half-baked → `ambiguous/`; stuck → `blocked/` or return to ready. When Done when holds → **always** `review-needed/`; the human then runs [**`/review`**](/skills/review) (AI critic + survey) to **Approve** (merges `feature/<slug>` → dev, then → `completed/`), Needs Work → `bugs|features/`, or Skip. Agents never archive to `completed/` or merge from `/work`.
 
 ## Install (platform wiring)
 
@@ -166,10 +166,12 @@ When the project uses Git and work needs a branch:
    ```
    Edit only under the printed `WORKTREE=` path.
 2. Integration branch: **`dev`**, else **`develop`**. **If neither exists, create `dev` from `main` (else `master`)** (the ensure helper does this).
-3. Feature branch `feature/<slug>` inside that worktree; never auto-merge to dev/main.
+3. Feature branch `feature/<slug>` inside that worktree; **`/work` never merges**
+   to dev/main (human [**`/review` Approve**](/skills/review) merges feature → dev;
+   empty-queue **Promote** merges dev → main).
 4. When plan work is complete: run **`/commit-prep`** (prep only). If gates are
    **green**, stage + commit on the feature branch; optional push of that branch
-   only — never auto-merge to dev/main.
+   only — never merge from `/work`.
 
 See [Fleet workers — isolation](/tooling/fleet-workers#4-isolation-git-multi-writer).
 

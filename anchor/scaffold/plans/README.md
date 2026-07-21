@@ -29,7 +29,7 @@ files freely; do **not** put `Lane:` or `Status:` inside plan markdown.
 | `in-progress/` | claimed / being worked | **only the agent that moved it there** |
 | `ambiguous/` | half-baked / needs clarification | **no** (parked; not auto-picked) |
 | `blocked/` | cannot proceed with current means | **no** (parked; not auto-picked) |
-| `review-needed/` | agent asserts Done when; await human `/review` | **no** (human sign-off only) |
+| `review-needed/` | agent asserts Done when; await human `/review` | **no** (`/review` Approve merges feature→dev then → `completed/`; empty queue may Promote dev→main) |
 | `drafts/` | not ready (edit / design) | no one (edit only) |
 | `completed/` | finished archive | no one |
 
@@ -128,14 +128,17 @@ Claim:    agent → move into in-progress/ + lease (path = working)
 Execute:  /work → follow Steps; verify each step
 Park:     agent → ambiguous/ (half-baked) or blocked/ (cannot fix)
 Release:  agent → bugs|features/ (give up claim; still ready for others)
-Finish:   agent: git mv in-progress/ → review-needed/; human /review → completed/
+Finish:   agent: git mv in-progress/ → review-needed/; human /review Approve
+          merges feature → dev then → completed/; empty queue may Promote dev → main
 Worktree: parallel agents use scripts/worktree_for_agent.py ensure
           --agent-id … [--slug …] (var/worktrees/<id>/); or work_once --ensure-worktree
 Branch:   from **dev** (else **develop**); if neither exists, **create dev**
           from **main** (else **master**) and push origin when possible
 Commit:   **/commit-prep** first (prep only: tests + CHANGELOG + blog); if green
           and plan complete, commit on feature branch (see /work); optional push
-          of that branch only; never auto-merge to dev/main.
+          of that branch only. **Agents/`/work` never merge** to dev/main —
+          human **`/review` Approve** merges feature → dev; empty-queue
+          **Promote** merges dev → main (survey-gated; no force-push).
 ```
 
 Mid-session stop: leave the file in **`in-progress/`** with a short `## Progress`
@@ -197,7 +200,7 @@ status/comments and commit that. Only *completing* it is reserved to the human.
 | Role | Writes / reads |
 |------|----------------|
 | Planner (NIM, local, human) | Write under `drafts/` only; **human** moves when ready |
-| Executor (`/work`, Fable, Sonnet, Grok, …) | Ready → own `in-progress/` → `review-needed/`; human `/review` → `completed/`; ignore others’ in-progress |
+| Executor (`/work`, Fable, Sonnet, Grok, …) | Ready → own `in-progress/` → `review-needed/`; human `/review` Approve merges feature→dev then → `completed/`; ignore others’ in-progress |
 | Critic | Plan **Done when** + diff |
 
 Plans must be **self-contained** (Goal, Steps with verify commands, Done when).

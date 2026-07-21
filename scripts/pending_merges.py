@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 """Advise which finished work is committed but **not yet merged** into integration.
 
-Completed plans move to ``.plans/completed/`` and their code lands on a
-``feature/<slug>`` branch — but the branch still has to be merged into
-``dev``/``develop`` (and eventually ``main``/``master``). It is easy to pile up
-green feature branches that never land. This script surfaces them for a human or
-a coordinator.
+The normal path is human **``/review``**: Approve merges ``feature/<slug>`` into
+``dev``/``develop`` and archives the plan; an empty ``review-needed/`` queue can
+**Promote** integration into ``main``/``master``. This script still surfaces
+branches that were signed off without a merge, diverged, or never reviewed —
+advisory only (it never merges).
 
 For each local branch it computes the commits it carries that its **merge target**
 does not:

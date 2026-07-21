@@ -87,14 +87,16 @@ Do not promote drafts from `/work` (use `/draft --promote`). If Preferred orches
 (`TEMPORARY-COORDINATOR:`). On Git projects: **worktree per agent**
 (`scripts/worktree_for_agent.py ensure --agent-id … --slug …`); feature-branch
 from **`dev`**/`develop` (**create `dev` from main/master if missing**);
-**`/commit-prep` before commit**; never auto-merge. Skill:
+**`/commit-prep` before commit**; `/work` never merges (human `/review` does). Skill:
 `.grok/skills/work/SKILL.md`.
 
 ## /review
 
 Human sign-off for **one** plan under `.plans/review-needed/`: checkout
 `feature/<slug>` when safe, fresh-context AI critic, survey (Approve / Needs
-Work / Skip). Approve → `completed/`; Needs Work → `bugs|features/`. Skill:
+Work / Skip). **Approve merges `feature/<slug>` → `dev`**, then → `completed/`;
+Needs Work → `bugs|features/`. Empty queue with `dev` ahead of `main` offers a
+**promotion** survey (**Promote** merges `dev` → `main`). Skill:
 `.grok/skills/review/SKILL.md`.
 
 ## /fleet-watch

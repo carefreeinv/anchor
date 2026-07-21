@@ -20,7 +20,7 @@ files freely; do **not** put `Lane:` or `Status:` inside plan markdown.
 | `in-progress/` | claimed / being worked | **only the agent that moved it there** |
 | `ambiguous/` | half-baked / needs clarification | **no** (parked; not auto-picked) |
 | `blocked/` | cannot proceed with current means | **no** (parked; not auto-picked) |
-| `review-needed/` | agent believes `Done when` holds; awaiting human sign-off | **no** (human runs **`/review`**: Approve → `completed/`, Needs Work → `bugs|features/`, Skip stays; optional return to `in-progress/` outside the skill) |
+| `review-needed/` | agent believes `Done when` holds; awaiting human sign-off | **no** (human runs **`/review`**: Approve merges `feature/<slug>` → **dev** then → `completed/`; Needs Work → `bugs|features/`; Skip stays; empty queue may **Promote** dev → main) |
 | `drafts/` | not ready (edit / design) | no one (edit only) |
 | `completed/` | finished archive | no one |
 
@@ -124,7 +124,9 @@ Branch:   from **dev** (else **develop**); if neither exists, **create dev**
           from **main** (else **master**) and push origin when possible
 Commit:   **/commit-prep** first (prep only: tests + CHANGELOG + blog); if green
           and plan complete, commit on feature branch (see /work); optional push
-          of that branch only; never auto-merge to dev/main.
+          of that branch only. **Agents/`/work` never merge** to dev/main —
+          human **`/review` Approve** merges feature → dev; empty-queue
+          **Promote** merges dev → main (survey-gated; no force-push).
 ```
 
 Mid-session stop: leave the file in **`in-progress/`** with a short `## Progress`

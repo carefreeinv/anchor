@@ -1,4 +1,4 @@
-<!-- synced-from: platforms/grok-build/GROK.md @ 60474fd326aac1e75ac99d83fc837dac93d21db0 -->
+<!-- synced-from: platforms/grok-build/GROK.md @ 7ec19a6d801c1303e2cbec1d365851fab50c1393 -->
 ---
 sidebar_position: 2
 sidebar_label: Grok Build
@@ -43,7 +43,7 @@ If MCP is available, connect `anchor-prompts` and call `tune_prompt` on any vagu
 
 ## Tracked plans
 
-Scaffold installs [**`/draft`**](/skills/draft), [**`/work`**](/skills/work), [**`/review`**](/skills/review), [**`/fleet-watch`**](/skills/fleet-watch), [**`/install-anchor`**](/skills/install-anchor), [**`/anchor`**](/skills/anchor) (conform **this** project; CWD default), and [**`/local-models`**](/skills/local-models). Draft: create/list/load/`--promote <slug>` (infer bugs vs features); optional `--local`. `/work` finishes → `review-needed/`; human `/review` → `completed/`. Git: **worktree per agent** (`worktree_for_agent.py`), feature branches from `dev`/`develop` (**create `dev` from main/master if missing**). Grok 4.5 may act as temporary coordinator when Preferred orchestrator is unset. `/install-anchor` registers the CLI on PATH (user-local symlink, no sudo). Full contract: source `platforms/grok-build/GROK.md`.
+Scaffold installs [**`/draft`**](/skills/draft), [**`/work`**](/skills/work), [**`/review`**](/skills/review), [**`/fleet-watch`**](/skills/fleet-watch), [**`/install-anchor`**](/skills/install-anchor), [**`/anchor`**](/skills/anchor) (conform **this** project; CWD default), and [**`/local-models`**](/skills/local-models). Draft: create/list/load/`--promote <slug>` (infer bugs vs features); optional `--local`. `/work` finishes → `review-needed/`; human `/review` Approve merges feature→`dev` then → `completed/` (empty queue may Promote `dev`→`main`). Git: **worktree per agent** (`worktree_for_agent.py`), feature branches from `dev`/`develop` (**create `dev` from main/master if missing**); `/work` never merges. Grok 4.5 may act as temporary coordinator when Preferred orchestrator is unset. `/install-anchor` registers the CLI on PATH (user-local symlink, no sudo). Full contract: source `platforms/grok-build/GROK.md`.
 
 ## /commit-prep
 
