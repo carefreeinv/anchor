@@ -538,6 +538,49 @@ def resolve_framework(project_dir: Path, cli_framework: str | None, saved_langua
     return None
 
 
+def lesser_model_block(orch: str | None = None) -> str:
+    """The "If you are a lesser … model" section of ``.anchor/conventions.md``.
+
+    One owner: both the scaffold path (``plan_conventions``) and the trivial
+    ``--set-orchestrator`` path render this. They drifted once — the short
+    version dropped the "you may still claim work that fits you" half and left
+    lesser models with escalate-only guidance, which stalls the backlog.
+
+    Both halves are load-bearing. Escalation is scoped to orchestration-class
+    and weak-column work; everything else the model is *expected* to claim.
+    """
+    target = (
+        f"`SUGGEST-ESCALATE: {orch} — <one-line reason>`"
+        if orch
+        else "`SUGGEST-ESCALATE: <preferred orchestrator or frontier tier> — <one-line reason>`"
+    )
+    return (
+        "### If you are a lesser / executor / local / small model\n\n"
+        "When the user asks you to act as the project **orchestrator** (long-horizon "
+        "planning across services, multi-hour autonomy, fleet coordination, dependency "
+        "analysis across plans, promotion of drafts, or any task in your weak column "
+        "in `.anchor/model-fitness.md`):\n\n"
+        "1. Do **not** silently attempt it.\n"
+        "2. Recommend the **Preferred orchestrator** above when set; otherwise recommend "
+        "a frontier/near-frontier session as temporary coordinator (or the top of the "
+        "model-priority list).\n"
+        f"3. Your ENTIRE first line must be {target}, then stop.\n"
+        "4. You may still execute well-scoped task specs and ready `/work` plans whose "
+        "**Preferred models** match your tier **and** whose **Depends on** are met.\n\n"
+        "**This cuts both ways — do not under-claim.** The escalation duty above covers "
+        "orchestration-class work and your documented weak column. It is **not** a reason "
+        "to decline scoped work you can do. Specifically:\n\n"
+        "- Only the **tiers** in a plan's **Preferred models** set the floor. Stronger "
+        "product *names* in that list are extra good-fit hits, not a raised bar.\n"
+        "- A plan with no **Preferred models** line, or one naming only models you are "
+        "not, is **unknown** fit — eligible, not off-limits.\n"
+        "- Difficulty discovered *after* claiming is a per-step route/escalate decision, "
+        "not grounds to refuse the claim.\n\n"
+        "Refusing work that fits you stalls the backlog exactly as badly as attempting "
+        "work that doesn't. \"A better model could do this\" is not a fit verdict.\n\n"
+    )
+
+
 def plan_conventions(
     project_dir: Path,
     framework: str | None,
@@ -592,21 +635,8 @@ Detected/declared language or framework: **{framework}**
         "(`anchor --set-orchestrator …`) so the next session is not ambiguous.\n"
         "4. If you are **mid / small / local / executor-tier**, do **not** self-appoint; "
         "escalate (below) or ask the human to pick a stronger session.\n\n"
-        "### If you are a lesser / executor / local / small model\n\n"
-        "When the user asks you to act as the project **orchestrator** (long-horizon "
-        "planning across services, multi-hour autonomy, fleet coordination, dependency "
-        "analysis across plans, promotion of drafts, or any task in your weak column "
-        "in `.anchor/model-fitness.md`):\n\n"
-        "1. Do **not** silently attempt it.\n"
-        "2. Recommend the **Preferred orchestrator** above when set; otherwise recommend "
-        "a frontier/near-frontier session as temporary coordinator (or the top of the "
-        "model-priority list).\n"
-        "3. Your ENTIRE first line must be "
-        "`SUGGEST-ESCALATE: <preferred orchestrator or frontier tier> — <one-line reason>`, "
-        "then stop.\n"
-        "4. You may still execute well-scoped task specs and ready `/work` plans whose "
-        "**Preferred models** match your tier **and** whose **Depends on** are met.\n\n"
-        "Change the durable orchestrator any time: edit the bold line, or run "
+        + lesser_model_block(orch)
+        + "Change the durable orchestrator any time: edit the bold line, or run "
         "`anchor <project-dir> --set-orchestrator <token>`.\n"
     )
 
@@ -659,10 +689,7 @@ def set_project_orchestrator(project_dir: Path, orchestrator: str) -> None:
             block = (
                 "\nThis is who should **plan multi-step work, coordinate fleets, make "
                 "architecture calls, and review large merges** for this project.\n\n"
-                "### If you are a lesser / executor / local / small model\n\n"
-                "When the user asks you to act as the project **orchestrator**, do **not** "
-                "silently attempt it. Recommend the Preferred orchestrator. First line: "
-                f"`SUGGEST-ESCALATE: {orch} — <one-line reason>`.\n"
+                + lesser_model_block(orch)
             )
             new_text = new_text.replace(
                 f"**Preferred orchestrator:** `{orch}`",

@@ -154,6 +154,7 @@ blocker is cleared.
 - **Priority:** P1 | P2 | P3         # P1 > P2 > P3; default P2; orders within a lane
 - **Slug:** <filename-without-md>
 - **Preferred models:** <names and/or tiers>
+- **Assignee:** ai                   # optional; default ai. A name/username/email (or `human`) = a person completes it, agents auto-skip claiming
 - **Depends on:** <slug-a, slug-b | none>
 
 ## Goal
@@ -179,6 +180,17 @@ propose Depends on when discussing a plan.
 Body sections match `.anchor/templates/plan.md`. **Preferred models** uses tiers
 `small | mid | reasoner | frontier` and/or concrete names so `/work` can leave
 work for cheaper or stronger models.
+
+### Human-owned plans (optional)
+
+**Assignee** names who owns *completion* — separate from **Preferred models**
+(which model *executes*). It defaults to **ai**: omit it, or use `ai` / `agent` /
+`unassigned`, and any agent may claim the plan. Set it to a person's **name,
+username, or email** (or `human`) for work a person must finish — a release
+sign-off, manual QA, anything gated on human judgment or access. Agents then
+**auto-skip** claiming it (`/work`, `plan_fit.py`, `work_once.py`, coordinator
+MCP), whatever its fit; they may still read it and edit its body for
+status/comments and commit that. Only *completing* it is reserved to the human.
 
 ## Cross-model handoff
 

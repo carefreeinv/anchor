@@ -533,6 +533,10 @@ def test_set_project_orchestrator_writes_conventions(tmp_path):
     text = conv.read_text()
     assert "**Preferred orchestrator:** `claude:opus`" in text
     assert "SUGGEST-ESCALATE" in text or "lesser" in text
+    # --set-orchestrator once wrote a truncated block that told lesser models to
+    # escalate and never told them what they may still claim. Both halves ship.
+    assert "do not under-claim" in text
+    assert "may still execute well-scoped task specs" in text
     manifest = json.loads((project / ".anchor-manifest.json").read_text())
     assert manifest["preferred_orchestrator"] == "claude:opus"
     assert ".anchor/conventions.md" in manifest["files"]

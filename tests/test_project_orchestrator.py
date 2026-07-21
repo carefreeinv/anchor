@@ -49,19 +49,41 @@ def _write(
     goal: str = "do the thing",
     depends: str = "none",
     value: str = "medium",
+    assignee: str | None = None,
 ) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
+    asg = f"- **Assignee:** {assignee}\n" if assignee is not None else ""
     path.write_text(
         f"# Plan: {title}\n\n"
         f"- **Value:** {value}\n"
         f"- **Slug:** {path.stem.replace('.local', '')}\n"
         f"- **Preferred models:** {preferred}\n"
+        f"{asg}"
         f"- **Depends on:** {depends}\n\n"
         f"## Goal\n{goal}\n\n"
         f"## Steps\n| 1 | x |\n\n"
         f"## Done when\n- [ ] ok\n",
         encoding="utf-8",
     )
+
+
+def test_human_assigned_claim_refused(tmp_path: Path):
+    plans = _plans_tree(tmp_path)
+    _write(plans / "features" / "hers.md", title="hers", assignee="alice@corp.com")
+    cfg = build_config(tmp_path, agent_id="a", tier="mid")
+    with pytest.raises(CoordinatorError, match="assigned to alice@corp.com"):
+        plans_claim(cfg, "features/hers.md")
+    # Refused claim leaves the plan in place (a human still completes it).
+    assert (plans / "features" / "hers.md").is_file()
+    assert list((plans / "in-progress").iterdir()) == []
+
+
+def test_ai_assigned_claim_allowed(tmp_path: Path):
+    plans = _plans_tree(tmp_path)
+    _write(plans / "features" / "mine.md", title="mine", assignee="ai")
+    cfg = build_config(tmp_path, agent_id="a", tier="mid")
+    out = plans_claim(cfg, "features/mine.md")
+    assert out["ok"] and out["plan_rel"] == "in-progress/mine.md"
 
 
 def test_path_escape_refused(tmp_path: Path):

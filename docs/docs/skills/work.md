@@ -89,7 +89,15 @@ Plan headers SHOULD include **Preferred models** (tiers `small | mid | reasoner 
 
 **Same-model effort right-size:** when no cheaper worker exists, emit a pasteable command for the plan’s Preferred tier (`small`/`mid` → low/medium effort; `reasoner`+ → high). Examples: Grok Build **`/effort low`** or CLI **`--effort low`**; Nemotron/Qwen3 thinking off for bulk execute. High effort on a mid-class model is a **cost dial**, not a tier promotion — good-fit mid plans stay eligible. True overqualified + no cheaper worker → suggest `/work --no-fit-check` and the effort command; underqualified still skips.
 
+**Let the script decide fit:** `python scripts/plan_fit.py --tier <yours> [--effort <current>]` prints one `take:`/`skip:` line per ready plan with the reason, plus an effort note when the dial is wrong for that plan's tier (`--endpoint` for fleet workers, `--json` for tooling). Read-only — claim with `plan_select.py --next --claim`. Its verdicts are the fit rules; a session that disagrees with it is wrong. See [scripts](/tooling/scripts).
+
+**Refusals are terse.** A poor-fit skip is a one-line verdict (`skip: features/<slug> — underqualified (Preferred: reasoner; you: Sonnet 5/mid)`) plus at most two `→` lines — the dispatch command or model to escalate to, and `/work --no-fit-check <slug>`. The capacity probe shows up only as the target in that `→` line; narrating what was checked and what was unreachable is noise. No restated Goal, no re-derived fit rules, and no `## Result` footer on a turn that did no work.
+
+**Do not under-rate yourself:** only the **tiers** a plan lists set the floor. Stronger product *names* alongside a tier you match are extra good-fit hits, not a raised bar; a names-only list you miss — or no **Preferred models** line at all — is **unknown** fit, which is eligible after a one-line fit note. Difficulty found *after* claiming is a per-step **Route to** / escalation-trigger decision, not grounds to refuse the claim. An unnecessary skip stalls the backlog exactly the way a wasteful frontier pickup burns credits.
+
 **Depends on:** comma-separated other plan slugs (or `none`). A dependency is **met** when that slug is under `completed/` (or git history shows it was under `completed/`) and is **not** still open in another lane. Coordinators/planners should inventory existing plans when drafting and fill this field. Executors must not start work with unmet dependencies.
+
+**Assignee (human-owned plans):** an optional `- **Assignee:**` header names who owns *completion*, separate from **Preferred models** (which model *executes*). It defaults to **ai** — absent, `ai`, `agent`, or `unassigned` means any agent may claim it. A person's name, username, email, or `human` means a person completes it: `/work`, `plan_fit.py`, `work_once.py`, and the coordinator MCP all **auto-skip** claiming it, whatever its fit. Agents may still read it and edit its body (status/comments) and commit that — only moving it to `in-progress/`/`completed/` is reserved. `work_once.py --allow-assigned` forces a named claim when an operator wants an agent to take it anyway.
 
 ## Lifecycle
 

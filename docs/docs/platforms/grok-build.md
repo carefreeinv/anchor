@@ -1,9 +1,10 @@
+<!-- synced-from: platforms/grok-build/GROK.md @ 60474fd326aac1e75ac99d83fc837dac93d21db0 -->
 ---
 sidebar_position: 2
 sidebar_label: Grok Build
 ---
 
-<!-- synced-from: platforms/grok-build/GROK.md @ ddb1b1133f520d97c9cf777863a5c4e8e8931763 -->
+<!-- synced-from: platforms/grok-build/GROK.md @ PENDING -->
 
 # Grok Build
 
@@ -36,7 +37,7 @@ The hard rules (restate → plan → one-step-per-turn → verify-don't-claim �
 
 ## Grok 4.5 (reviewed 2026-07-08)
 
-Play to the strength: terminal/CLI-driven steps are Grok 4.5's best fit (GPT-5.5-class on terminal benchmarks, unusually token-efficient). Compensate for the weakness: it measurably trails Fable/GPT tiers on repo-scale issue resolution, so decompose to file-scoped task specs before handing work over. API `reasoning_effort` defaults to *high* — set low for mechanical steps or pay a token multiple for nothing. In the TUI use **`/effort low`** (or `/model <id> low`); CLI/headless: **`--effort low`**. Catalog tier for Preferred matching is **mid** — high effort is a cost dial, not a frontier promotion. Before [**`/work`**](/skills/work) burns high effort on mid plans, probe for a cheaper local/fleet executor (`scripts/endpoints.yaml`); if none are reachable, emit the effort command rather than a dead stop. Community-reported tool-use flakiness `(unverified)` makes external verification load-bearing. A poor-fit task gets a `SUGGEST-ESCALATE:` first line per the fit check in `.anchor/model-fitness.md`, not a silent attempt.
+Play to the strength: terminal/CLI-driven steps are Grok 4.5's best fit (GPT-5.5-class on terminal benchmarks, unusually token-efficient). Compensate for the weakness: it measurably trails Fable/GPT tiers on repo-scale issue resolution, so decompose to file-scoped task specs before handing work over. API `reasoning_effort` defaults to *high* — set low for mechanical steps or pay a token multiple for nothing. In the TUI use **`/effort low`** (or `/model <id> low`); CLI/headless: **`--effort low`**. Catalog tier for Preferred matching is **mid** — high effort is a cost dial, not a frontier promotion. Before [**`/work`**](/skills/work) burns high effort on mid plans, probe for a cheaper local/fleet executor (`scripts/endpoints.yaml`); if none are reachable, emit the effort command rather than a dead stop. Community-reported tool-use flakiness `(unverified)` makes external verification load-bearing. A poor-fit task gets a `SUGGEST-ESCALATE:` first line per the fit check in `.anchor/model-fitness.md`, not a silent attempt. Symmetrically, **mid is a floor Grok clears, not a ceiling to apologize for**: repo-scale issue resolution is the documented weak spot, file-scoped `mid` plans are not — and a plan whose **Preferred models** also names a stronger product is still a good fit, since only listed *tiers* gate.
 
 If MCP is available, connect `anchor-prompts` and call `tune_prompt` on any vague task before starting, and `preflight_check` before executing any spec.
 

@@ -3,7 +3,7 @@ sidebar_position: 4
 sidebar_label: Model Fitness
 ---
 
-<!-- synced-from: anchor/model-fitness.md @ 5123459edb5da359984eba74985f2af33b426a38 -->
+<!-- synced-from: anchor/model-fitness.md @ 0539f913aa3a822f15ac65db2b632cfeb0726c47 -->
 
 # Model fitness
 
@@ -33,6 +33,8 @@ flowchart TB
 ```
 
 Poor fit → the entire first line is `SUGGEST-ESCALATE: <better-suited model> — <reason>`, then stop. The operator can insist (`orchestrate.py --insist`), and the worker then proceeds strictly in scope with shaky output marked `(unverified)`. Scaffolded projects carry the operator's model-priority order in `ANCHOR-CONVENTIONS.md`, so the suggestion names the nearest better-fitting model from *that user's* list. Suggesting down-tier is equally required — boilerplate on a frontier model is the mirror-image failure.
+
+**What does *not* trigger the fit check.** The gate is your **weak column** and orchestration-class work — nothing wider. Do not escalate because a stronger model exists (true of nearly every task), because a plan's **Preferred models** names one (only the listed *tiers* set the floor; a list with no tier and no name you match is *unknown* fit, which is **eligible**), because the task is unfamiliar or multi-file, or because a single step looks hard (claim the plan and route *that step*). Over-shy escalation is a real failure mode, not the safe default: the plan sits in the backlog, the operator waits, and a model that could have finished it is idle. It just fails quietly.
 
 `orchestrate.py` honors a `SUGGEST-ESCALATE` first line immediately (escalate, or hold in detached mode) without burning retry attempts.
 

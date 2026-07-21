@@ -51,6 +51,12 @@ gitignored — the user may not be ready to commit a fresh draft). Use `--shared
 (alias `--tracked`) to write a committable `<slug>.md` instead. When refining an
 existing draft, keep its current suffix.
 
+**Human-owned plans:** if the work must be completed by a person (release
+sign-off, manual QA, anything gated on human judgment/access), set
+`- **Assignee:** <name|username|email>` (or `human`) in the header. The plan
+body stays normal; agents auto-skip claiming it but may still update its
+status/comments. Absent or `ai` = agent-eligible (the default).
+
 ### Promote (explicit only)
 Resolve draft under `drafts/`; read fully; **infer** ready lane:
 

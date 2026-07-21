@@ -178,4 +178,6 @@ optional `git push -u origin HEAD`. Never merge to integration.
 - Fit check applies here too: if the pending request lands in the current model's
   weak column (`.anchor/model-fitness.md`), say
   `SUGGEST-ESCALATE: <model> — <reason>` as the first line and let the human decide;
-  proceed only if they insist.
+  proceed only if they insist. The weak column is the whole gate — the mere
+  existence of a stronger model, an unfamiliar codebase, or one hard-looking step
+  is not a reason to hand the request back.

@@ -143,6 +143,7 @@ blocker is cleared.
 - **Priority:** P1 | P2 | P3         # P1 > P2 > P3; default P2; orders within a lane
 - **Slug:** <filename-without-md>
 - **Preferred models:** <names and/or tiers>
+- **Assignee:** ai                   # optional; default ai. A name/username/email (or `human`) = a person completes it, agents auto-skip claiming
 - **Depends on:** <slug-a, slug-b | none>
 
 ## Goal

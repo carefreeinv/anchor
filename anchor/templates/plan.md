@@ -14,6 +14,7 @@
 - **Priority:** P1 | P2 | P3               <!-- P1 > P2 > P3; default P2 if omitted; orders within a lane -->
 - **Slug:** <filename without .md and without .local>
 - **Preferred models:** <names and/or tiers — who should execute this plan>
+- **Assignee:** ai                          <!-- optional; default ai. A person's name/username/email (or `human`) marks a plan agents must NOT auto-claim — a human completes it; agents may still edit its body for status/comments and commit that -->
 - **Depends on:** <comma-separated plan slugs, or `none`>  <!-- other .plans work that must be done first -->
 
 ## Goal
@@ -90,3 +91,9 @@ Examples:
 - `small, mid` — keep frontier/Opus off this work
 
 Omit only when unsure; default assumption for executors is **mid**. Per-step **Route to** still applies inside the plan for mixed-difficulty steps.
+
+### Assignee (human-owned plans)
+
+**Assignee** answers *who owns completion*, which is separate from *which model executes* (**Preferred models**). It defaults to **ai** — leave it off and any agent may claim the plan. Set it to a person's **name, username, or email** (or the literal `human`) for work that a person must finish: a release sign-off, a manual QA pass, anything gated on human judgment or access.
+
+An agent-assigned plan (absent, `ai`, `agent`, `unassigned`) is claimable as normal. A human-assigned plan is **auto-skipped** by `/work`, `plan_fit.py`, `work_once.py`, and the coordinator MCP — no agent claims it or moves it to in-progress/review-needed/completed. Agents may still **read it and edit its body** (add a `## Progress`/status note, answer a question) and commit that change; only *completing* it is reserved. `work_once.py --allow-assigned` forces a named claim when an operator really wants an agent to take it.

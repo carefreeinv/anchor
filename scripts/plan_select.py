@@ -40,7 +40,7 @@ import os
 import re
 import subprocess
 import sys
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from enum import Enum
 from pathlib import Path
 
@@ -77,12 +77,48 @@ REGISTRY_TIER_TO_FIT: dict[str, str] = {
     "detached": "mid",
 }
 
+# Reasoning-effort dial, cheapest first. Products expose different subsets
+# (`none`/`minimal` are not universal); unknown names classify as UNKNOWN rather
+# than guessing a rank.
+EFFORT_LEVELS = ("none", "minimal", "low", "medium", "high", "xhigh")
+EFFORT_RANK = {e: i for i, e in enumerate(EFFORT_LEVELS)}
+
+# Plan's highest Preferred tier → the effort band that tier's work deserves.
+# This is the /work "same-model cost right-size" table as data. First entry of
+# each band is the recommended setting (cheapest that still does the job).
+TIER_EFFORT: dict[str, tuple[str, ...]] = {
+    "small": ("low", "minimal", "none"),
+    "mid": ("low", "medium"),
+    "reasoner": ("high",),
+    "frontier": ("high", "xhigh"),
+}
+
 VALUE_RE = re.compile(r"^\s*-\s*\*\*Value:\*\*\s*(\w+)", re.MULTILINE | re.IGNORECASE)
 PRIORITY_RE = re.compile(
     r"^\s*-\s*\*\*Priority:\*\*\s*(\S+)", re.MULTILINE | re.IGNORECASE
 )
 PREFERRED_RE = re.compile(
     r"^\s*-\s*\*\*Preferred models:\*\*\s*(.+)$", re.MULTILINE | re.IGNORECASE
+)
+# Optional `- **Assignee:** …` header. Defaults to **ai** when absent — the
+# framework's whole premise is that agents do the work. The value may be a
+# person's name, username, or email; only an explicit AI token (or absence)
+# means "any agent may take this". A plan assigned to a *named someone* is theirs
+# to complete: no agent auto-claims or executes it, regardless of fit. Agents may
+# still read it and edit its body (status/comments) and commit that; they just
+# never move it to in-progress/completed themselves.
+#
+# Deliberately conservative: we recognize the safe set (AI tokens + absence) and
+# treat everything else as assigned-away. A model *name* belongs in Preferred
+# models, not here — Assignee is human-vs-agent ownership, not routing.
+ASSIGNEE_RE = re.compile(
+    r"^\s*-\s*\*\*Assignee:\*\*\s*(.+)$", re.MULTILINE | re.IGNORECASE
+)
+# First token of the Assignee value (before any note) that means "any agent may
+# take this". Absence means the same. Anything else is a specific assignee.
+AGENT_ASSIGNEE_TOKENS = frozenset(
+    {"ai", "agent", "agents", "bot", "llm", "auto", "any", "anyone",
+     "unassigned", "none", "-"}
 )
 DEPENDS_RE = re.compile(
     r"^\s*-\s*\*\*Depends on:\*\*\s*(.+)$", re.MULTILINE | re.IGNORECASE
@@ -142,6 +178,8 @@ class PlanRecord:
     deps_met: bool = True
     deps_unmet: tuple[str, ...] = ()
     deps_notes: tuple[str, ...] = ()  # human-readable check notes
+    assignee: str | None = None  # raw Assignee value; None == unset (agent-eligible)
+    agent_assignable: bool = True  # False when assigned to a named person
 
     @property
     def ready(self) -> bool:
@@ -201,6 +239,37 @@ def parse_preferred(text: str) -> str | None:
         return None
     raw = m.group(1).strip()
     return raw or None
+
+
+def parse_assignee(text: str) -> str | None:
+    """Return the raw Assignee value, or None when the field is absent."""
+    m = ASSIGNEE_RE.search(text)
+    if not m:
+        return None
+    raw = m.group(1).strip()
+    return raw or None
+
+
+def assignee_first_token(raw: str) -> str:
+    """The assignee identity without any trailing note.
+
+    Tolerates ``alice — owns the migration`` / ``ops@corp (badge access)`` so a
+    human can annotate *why* without defeating the parse.
+    """
+    return re.split(r"\s+[—–-]\s+|\s*[(,]", raw, maxsplit=1)[0].strip().strip("`")
+
+
+def is_agent_assignable(text: str) -> bool:
+    """True when *any agent* may claim this plan.
+
+    That is the safe/default case: the Assignee field is absent, or its value is
+    an explicit AI token (``ai``/``agent``/``unassigned``/…). A named person,
+    username, email, or ``human`` returns False — the plan belongs to them.
+    """
+    raw = parse_assignee(text)
+    if not raw:
+        return True
+    return assignee_first_token(raw).lower() in AGENT_ASSIGNEE_TOKENS
 
 
 def parse_title(text: str, fallback: str) -> str:
@@ -453,6 +522,93 @@ def classify_fit(worker: Worker, preferred: str | None) -> Fit:
     return Fit.UNKNOWN
 
 
+class Effort(str, Enum):
+    """Cost posture of the current session vs. what the plan's tier deserves."""
+
+    OK = "ok"
+    WASTEFUL = "wasteful"  # paying for reasoning this plan does not need
+    UNDERPOWERED = "underpowered"  # dial is below the band; raise it
+    UNKNOWN = "unknown"  # no effort given, or a name we do not rank
+
+
+@dataclass(frozen=True)
+class EffortAdvice:
+    """What to do with the reasoning dial for one plan.
+
+    ``verdict`` never affects eligibility. Effort is a **cost dial, not a tier
+    promotion** (mythos-core rule 11 / `/work` Model fit): cranking a mid model
+    to ``high`` does not qualify it for ``reasoner`` plans, and running a
+    reasoner at ``low`` does not disqualify it from ones it already fits.
+    """
+
+    verdict: Effort
+    suggested: str  # recommended setting for the plan's tier
+    band: tuple[str, ...]  # every acceptable setting for that tier
+    current: str | None = None
+
+    @property
+    def should_change(self) -> bool:
+        return self.verdict in (Effort.WASTEFUL, Effort.UNDERPOWERED)
+
+    def note(self) -> str:
+        """One short clause for a terse listing, or '' when nothing to say."""
+        if self.verdict is Effort.WASTEFUL:
+            return f"effort {self.current}→{self.suggested} (overpaying)"
+        if self.verdict is Effort.UNDERPOWERED:
+            return f"effort {self.current}→{self.suggested} (underpowered)"
+        return ""
+
+
+def normalize_effort(effort: str | None) -> str | None:
+    """Map a product's effort word onto our scale; None when unrecognized.
+
+    Accepts the common synonyms products actually ship (``off``/``minimal``,
+    ``max``/``xhigh``) so callers can pass a harness setting straight through.
+    """
+    if effort is None:
+        return None
+    e = effort.strip().lower().replace("_", "").replace("-", "")
+    aliases = {
+        "off": "none",
+        "disabled": "none",
+        "min": "minimal",
+        "med": "medium",
+        "veryhigh": "xhigh",
+        "max": "xhigh",
+        "ultra": "xhigh",
+    }
+    e = aliases.get(e, e)
+    return e if e in EFFORT_RANK else None
+
+
+def plan_effort_tier(preferred: str | None) -> str:
+    """The tier that sets a plan's effort band: the **highest** tier it lists.
+
+    No listed tier (names-only, or no field at all) → ``mid``, matching the
+    ``/work`` rule that an absent Preferred line is a ceiling hint of ``mid``.
+    Note this is only about *cost*: it never gates who may claim the plan.
+    """
+    tiers, _ = _parse_preferred_tokens(preferred)
+    if not tiers:
+        return "mid"
+    return max(tiers, key=lambda t: FIT_RANK[t])
+
+
+def classify_effort(current: str | None, preferred: str | None) -> EffortAdvice:
+    """Advise on the reasoning dial for a plan. Never gates eligibility."""
+    band = TIER_EFFORT[plan_effort_tier(preferred)]
+    suggested = band[0]
+    now = normalize_effort(current)
+    if now is None:
+        return EffortAdvice(Effort.UNKNOWN, suggested, band, current)
+    if now in band:
+        return EffortAdvice(Effort.OK, suggested, band, now)
+    ranks = [EFFORT_RANK[b] for b in band]
+    if EFFORT_RANK[now] > max(ranks):
+        return EffortAdvice(Effort.WASTEFUL, suggested, band, now)
+    return EffortAdvice(Effort.UNDERPOWERED, suggested, band, now)
+
+
 def _record_from_path(
     path: Path,
     lane: str,
@@ -482,6 +638,8 @@ def _record_from_path(
         deps_met=met,
         deps_unmet=unmet,
         deps_notes=notes,
+        assignee=parse_assignee(text),
+        agent_assignable=is_agent_assignable(text),
     )
 
 
@@ -675,6 +833,8 @@ def resolve_target(
                 priority=parse_priority(text),
                 preferred=parse_preferred(text),
                 title=parse_title(text, resolved.name),
+                assignee=parse_assignee(text),
+                agent_assignable=is_agent_assignable(text),
             )
         rel_s = str(rel).replace("\\", "/")
         if lane == IN_PROGRESS_LANE:
@@ -759,22 +919,7 @@ def select_one(
         if rec is None:
             return None
         fit = classify_fit(worker, rec.preferred)
-        rec = PlanRecord(
-            path=rec.path,
-            rel=rec.rel,
-            lane=rec.lane,
-            slug=rec.slug,
-            value=rec.value,
-            priority=rec.priority,
-            preferred=rec.preferred,
-            title=rec.title,
-            fit=fit,
-            owner=rec.owner,
-            depends_on=rec.depends_on,
-            deps_met=rec.deps_met,
-            deps_unmet=rec.deps_unmet,
-            deps_notes=rec.deps_notes,
-        )
+        rec = replace(rec, fit=fit)
         if rec.rel in skip:
             return None
         return rec
@@ -783,6 +928,10 @@ def select_one(
     # your own work is an explicit named claim (resolve_target enforces the lease).
     for rec in inventory_ready(plans_root, worker):
         if rec.rel in skip:
+            continue
+        # Assigned to a named person → never a bare pick, regardless of fit.
+        # (A named target still returns the record so callers can refuse loudly.)
+        if not rec.agent_assignable:
             continue
         if not no_dep_check and not rec.deps_met:
             continue
@@ -796,10 +945,11 @@ def select_one(
 def format_list_table(records: list[PlanRecord]) -> str:
     if not records:
         return "(no ready plans under bugs/ or features/; no owned in-progress)"
-    lines = ["path\tlane\tpriority\tvalue\tpreferred\tfit\tdeps\towner"]
+    lines = ["path\tlane\tpriority\tvalue\tpreferred\tfit\tdeps\tassignee\towner"]
     for r in records:
         pref = r.preferred or "(default mid)"
         owner = r.owner or "-"
+        assignee = "ai" if r.agent_assignable else assignee_first_token(r.assignee or "human")
         if not r.depends_on:
             deps = "none"
         elif r.deps_met:
@@ -808,7 +958,7 @@ def format_list_table(records: list[PlanRecord]) -> str:
             deps = "UNMET:" + ",".join(r.deps_unmet)
         lines.append(
             f"{r.rel}\t{r.lane}\t{r.priority}\t{r.value}\t{pref}"
-            f"\t{r.fit.value}\t{deps}\t{owner}"
+            f"\t{r.fit.value}\t{deps}\t{assignee}\t{owner}"
         )
     return "\n".join(lines)
 

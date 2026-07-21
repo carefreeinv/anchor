@@ -1,9 +1,10 @@
+<!-- synced-from: platforms/local-models/README.md @ db39c71e59fa5f999db8115e5622777e217277c9 -->
 ---
 sidebar_position: 4
 sidebar_label: Local Models
 ---
 
-<!-- synced-from: platforms/local-models/README.md @ 0da2ccbecfc08c09f3c4fa7c8df0ac0753c2ef4c -->
+<!-- synced-from: platforms/local-models/README.md @ PENDING -->
 
 # Local Models
 
@@ -33,4 +34,4 @@ The quirks are encoded in `scripts/endpoints.yaml` (`quirks:` block) and applied
 
 ## Tracked plans and coordination
 
-Local models follow the same **`/work`** contract when the harness has shell: honor **Preferred models** and **Depends on**, claim into `in-progress/`, finish to **`review-needed/`** (human [`/review`](/skills/review) → `completed/`), never promote drafts. They do **not** self-appoint as temporary coordinator when Preferred orchestrator is unset—escalate to a frontier session. See [model fitness](/model-fitness) and Skills → [`/work`](/skills/work).
+Local models follow the same **`/work`** contract when the harness has shell: honor **Preferred models** and **Depends on**, claim into `in-progress/`, finish to **`review-needed/`** (human [`/review`](/skills/review) → `completed/`), never promote drafts. They do **not** self-appoint as temporary coordinator when Preferred orchestrator is unset—escalate to a frontier session. The reverse failure is just as real: local models are the *intended* executors for `small`/`mid` plans, so a scoped, well-specified task is not escalated because a bigger model exists, because the plan's **Preferred models** also lists one (only listed *tiers* gate), or because the repo is unfamiliar. See [model fitness](/model-fitness) and Skills → [`/work`](/skills/work).

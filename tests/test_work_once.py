@@ -6,10 +6,12 @@ import work_once
 from plan_select import Worker
 
 
-def _plan(path: Path, *, preferred: str = "mid", value: str = "medium") -> None:
+def _plan(path: Path, *, preferred: str = "mid", value: str = "medium",
+          assignee: str | None = None) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
+    asg = f"- **Assignee:** {assignee}\n" if assignee is not None else ""
     path.write_text(
-        f"# Plan: t\n\n- **Value:** {value}\n- **Preferred models:** {preferred}\n\n"
+        f"# Plan: t\n\n- **Value:** {value}\n- **Preferred models:** {preferred}\n{asg}\n"
         "## Goal\ng\n\n## Steps\n| 1 | x |\n\n## Done when\n- [ ] ok\n",
         encoding="utf-8",
     )
@@ -54,6 +56,35 @@ def test_once_no_fit_exits_1(tmp_path):
         ["--root", str(root), "--once", "--tier", "small", "--agent-id", "tiny"]
     )
     assert code == 1
+
+
+def test_bare_loop_never_picks_human_assigned(tmp_path):
+    root = _root(tmp_path)
+    _plan(root / ".plans" / "features" / "hers.md", preferred="mid", assignee="alice")
+    code = work_once.main(
+        ["--root", str(root), "--once", "--tier", "mid", "--agent-id", "w1"]
+    )
+    assert code == 1
+    assert (root / ".plans" / "features" / "hers.md").is_file()
+
+
+def test_named_human_assigned_refused_then_forced(tmp_path, capsys):
+    root = _root(tmp_path)
+    _plan(root / ".plans" / "features" / "hers.md", preferred="mid", assignee="alice")
+    # Named claim of a human plan is refused by default (exit 1, file stays put).
+    code = work_once.main(
+        ["--root", str(root), "--slug", "hers", "--tier", "mid", "--agent-id", "w1"]
+    )
+    assert code == 1
+    assert "assigned to alice" in capsys.readouterr().err
+    assert (root / ".plans" / "features" / "hers.md").is_file()
+    # --allow-assigned forces it (operator override).
+    code = work_once.main(
+        ["--root", str(root), "--slug", "hers", "--tier", "mid",
+         "--agent-id", "w1", "--allow-assigned"]
+    )
+    assert code == 0
+    assert (root / ".plans" / "in-progress" / "hers.md").is_file()
 
 
 def test_once_moves_to_in_progress_and_blocks_others(tmp_path, capsys):

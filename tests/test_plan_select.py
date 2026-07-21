@@ -9,17 +9,21 @@ def _plan(
     path: Path,
     *,
     value: str = "medium",
-    preferred: str = "mid",
+    preferred: str | None = "mid",
     title: str = "t",
     priority: str | None = None,
+    assignee: str | None = None,
 ) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     prio_line = f"- **Priority:** {priority}\n" if priority is not None else ""
+    pref_line = f"- **Preferred models:** {preferred}\n" if preferred is not None else ""
+    asg_line = f"- **Assignee:** {assignee}\n" if assignee is not None else ""
     path.write_text(
         f"# Plan: {title}\n\n"
         f"- **Value:** {value}\n"
         f"{prio_line}"
-        f"- **Preferred models:** {preferred}\n\n"
+        f"{pref_line}"
+        f"{asg_line}\n"
         "## Goal\ng\n\n## Steps\n| 1 | x |\n\n## Done when\n- [ ] ok\n",
         encoding="utf-8",
     )
@@ -90,6 +94,89 @@ def test_fit_skip_overqualified_and_underqualified():
     assert classify_fit(Worker("sonnet", "mid"), "mid, reasoner") == Fit.GOOD
     assert classify_fit(Worker("Grok 4.5", "mid"), "Grok 4.5, Qwen3 32B") == Fit.GOOD
     assert classify_fit(Worker("unknown", "mid"), None) == Fit.UNKNOWN
+
+
+def test_lesser_workers_are_not_gated_out_by_stronger_names():
+    """Only listed *tiers* set the floor — a stronger product name alongside a
+    tier you match must not read as underqualified, and a names-only list you
+    miss is `unknown` (eligible), never a skip. Doctrine in `/work` and
+    `model-fitness.md` must agree with this; over-shy workers stall the backlog.
+    """
+    # Tier you match + stronger names present → still a good fit.
+    assert classify_fit(
+        Worker("Qwen3 32B", "mid"), "mid, Claude Sonnet 5, Grok 4.5"
+    ) == Fit.GOOD
+    # Names only, none of them you → unknown, which callers treat as eligible.
+    for tier in ("small", "mid"):
+        assert classify_fit(
+            Worker("Qwen3 32B", tier), "Claude Sonnet 5, Grok 4.5"
+        ) == Fit.UNKNOWN
+    # No Preferred line at all does not reserve the plan for a higher tier.
+    assert classify_fit(Worker("tiny", "small"), None) == Fit.UNKNOWN
+
+
+def test_unlabeled_and_names_only_plans_are_claimable_by_small(tmp_path):
+    plans = _tree(tmp_path)
+    _plan(plans / "features" / "unlabeled.md", preferred=None)
+    assert select_one(plans, Worker("tiny", "small")) is not None
+
+    names_only = _tree(tmp_path / "names")
+    _plan(names_only / "features" / "named.md", preferred="Claude Sonnet 5, Grok 4.5")
+    assert select_one(names_only, Worker("tiny", "small")) is not None
+
+
+def test_assignee_parse_agent_vs_human():
+    from plan_select import is_agent_assignable
+
+    # Absent field and explicit AI tokens are agent-eligible.
+    assert is_agent_assignable("# Plan\n\n- **Value:** high\n")
+    for tok in ("ai", "AI", "agent", "unassigned", "none", "-", "any"):
+        assert is_agent_assignable(f"- **Assignee:** {tok}\n"), tok
+
+    # A person's name, handle, email, or `human` is not — with or without a note.
+    for who in ("human", "Alice", "@bob", "ops@corp.com",
+                "human — signs the release", "carol (needs badge access)"):
+        assert not is_agent_assignable(f"- **Assignee:** {who}\n"), who
+
+
+def test_bare_pick_skips_human_assigned(tmp_path):
+    plans = _tree(tmp_path)
+    # A P1 bug (top priority) assigned to a human must be passed over for a
+    # lower-priority agent-eligible feature — assignment beats priority.
+    _plan(plans / "bugs" / "human.md", priority="P1", assignee="alice")
+    _plan(plans / "features" / "mine.md", assignee="ai")
+    picked = select_one(plans, Worker("m", "mid"))
+    assert picked is not None and picked.rel == "features/mine.md"
+
+    # Every ready plan human-assigned → nothing to bare-pick, even --no-fit-check.
+    only_human = _tree(tmp_path / "h")
+    _plan(only_human / "features" / "hers.md", assignee="dana")
+    assert select_one(only_human, Worker("m", "mid")) is None
+    assert select_one(only_human, Worker("m", "mid"), no_fit_check=True) is None
+
+
+def test_named_target_returns_human_plan_for_caller_to_refuse(tmp_path):
+    # resolve_target/select_one still return the record (with the flag) so a
+    # caller can refuse loudly — the skip is a caller decision, not a lookup miss.
+    plans = _tree(tmp_path)
+    _plan(plans / "features" / "hers.md", assignee="alice@corp.com — owns migration")
+    rec = select_one(plans, Worker("m", "mid"), slug="hers")
+    assert rec is not None
+    assert rec.agent_assignable is False
+    assert rec.assignee.startswith("alice@corp.com")
+
+
+def test_list_table_shows_assignee_column(tmp_path):
+    from plan_select import format_list_table, inventory_ready
+
+    plans = _tree(tmp_path)
+    _plan(plans / "features" / "mine.md", assignee="ai")
+    _plan(plans / "features" / "hers.md", assignee="alice — owns it")
+    table = format_list_table(inventory_ready(plans, Worker("m", "mid")))
+    assert "assignee" in table.splitlines()[0]
+    rows = {line.split("\t")[0]: line.split("\t") for line in table.splitlines()[1:]}
+    assert rows["features/mine.md"][-2] == "ai"
+    assert rows["features/hers.md"][-2] == "alice"  # note trimmed to identity
 
 
 def test_select_skips_poor_fit_unless_no_fit_check(tmp_path):

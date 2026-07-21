@@ -11,4 +11,10 @@ orchestration_run.json
 benchmark_results.csv
 *:Zone.Identifier
 var/
+# Local secrets — Anchor itself reads ANCHOR_API_KEY / ~/.config/anchor, never a
+# .env file; keep any local .env out of the tree so key-shaped values can't be
+# committed by accident.
+.env
+.env.*
+!.env.example
 

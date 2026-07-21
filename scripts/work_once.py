@@ -202,6 +202,13 @@ def pick_claim_one(
         if rec is None:
             print("[work_once] no matching plan for slug/path", file=sys.stderr)
             return None
+        if not rec.agent_assignable and not args.allow_assigned:
+            print(
+                f"[work_once] {rec.rel} is assigned to {rec.assignee or 'a human'} "
+                f"— agents do not complete it (use --allow-assigned to force)",
+                file=sys.stderr,
+            )
+            return None
         if not rec.deps_met and not args.no_dep_check:
             print(
                 f"[work_once] unmet dependencies for {rec.rel}: "
@@ -321,6 +328,11 @@ def main(argv: list[str] | None = None) -> int:
         "--no-dep-check",
         action="store_true",
         help="allow pick/claim even when Depends on are unmet (still state them)",
+    )
+    ap.add_argument(
+        "--allow-assigned",
+        action="store_true",
+        help="claim a named plan even if its Assignee is a human (default: refuse)",
     )
     ap.add_argument("--slug", help="named plan slug under ready lanes")
     ap.add_argument("--path", help="named plan path (refuses drafts/completed)")

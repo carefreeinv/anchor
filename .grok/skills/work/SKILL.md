@@ -94,12 +94,21 @@ scans `in-progress/` to resume or reclaim. Resume is an explicit named target.
 4. **Skip plans with unmet `Depends on`** (dependency still open / not completed).
    Do not start them; pick another plan or stop and report unmet slugs. Override
    only if the user explicitly insists (and state the risk).
-5. Skip `drafts/`, `completed/`, `ambiguous/`, `blocked/`, `review-needed/`,
+5. **Skip plans assigned to a human.** An `- **Assignee:**` header whose value
+   is a person's name, username, email, or `human` means a person completes it —
+   never bare-pick or claim it, whatever its fit. (Absent, `ai`, `agent`, or
+   `unassigned` = agent-eligible.) You **may** still read it and edit its body to
+   add a status/progress note or answer a question, and commit that; you just
+   never move it to `in-progress/`/`review-needed/`/`completed/`. `plan_fit.py`
+   and the pickers already filter these out.
+6. Skip `drafts/`, `completed/`, `ambiguous/`, `blocked/`, `review-needed/`,
    **all** `in-progress/`, and `README.md`.
 
-**Less-reliable / small models:** run the deterministic picker instead of
-reasoning about lanes — it only ever returns ready work and claims it atomically
-(move + lease): `python scripts/plan_select.py --next [--claim --agent-id <id>]`.
+**Less-reliable / small models:** run the deterministic tools instead of
+reasoning about lanes or fit — `python scripts/plan_fit.py --tier <yours>
+[--effort <current>]` says what fits you and why (read-only), and
+`python scripts/plan_select.py --next [--claim --agent-id <id>]` returns ready
+work and claims it atomically (move + lease).
 
 If multiple plans share the top priority, **just pick the first in sorted order**
 (Priority → Value → oldest → filename) and start — this is the default; do **not**
@@ -118,7 +127,8 @@ Plan headers SHOULD include:
 Tiers: `small` | `mid` | `reasoner` | `frontier` (see `.anchor/templates/plan.md`,
 `.anchor/ANCHOR.md` routing, `.anchor/model-fitness.md`). Absent field → treat as
 **mid** (any solid executor; not a free pass for wasteful frontier pickup of
-obviously trivial work after you load the Goal).
+obviously trivial work after you load the Goal) — a **ceiling hint, not a
+floor**: it does not exclude `small`.
 
 ### Know yourself
 
@@ -136,6 +146,21 @@ Before selecting a plan, identify **all three**:
 3. **Cheaper capacity** on this host/fleet (next subsection) — required whenever
    fit is poor **or** the top ready work is `small`/`mid` while this session is
    expensive (true higher tier, or mid model stuck on high effort).
+
+### Let the script decide fit
+
+Do not judge fit by reading plan headers — it is a mechanical rule, and models
+get it wrong in both directions. Ask:
+
+```bash
+python scripts/plan_fit.py --tier <yours> [--model <name>] [--effort <current>]
+```
+
+One `take:`/`skip:` line per ready plan with the reason, plus an effort note when
+your dial is off for that plan's tier (`--endpoint <name>` instead of `--tier`
+for fleet workers; `--json` for tooling). It is read-only — claim with
+`plan_select.py --next --claim` once you have picked. Its verdicts *are* the
+rules below; if your judgment disagrees with it, the script is right.
 
 ### Cheaper capacity probe
 
@@ -200,7 +225,9 @@ Effort vs fit:
 - **True overqualified** (clearly higher *tier* than all Preferred, e.g. Fable
   on `small`/`mid` only) **+ no cheaper worker + operator needs progress:**
   suggest `/work --no-fit-check` **and** the effort/model command above; stop
-  unless they insist or already authorized “do it on this model.”
+  unless they insist or already authorized “do it on this model.” Use Rule 2's
+  terse skip format — an expensive session declining cheap work should cost the
+  operator three lines, not three paragraphs.
 - **Underqualified:** still skip. Suggest a stronger session/model — cranking
   effort up is not a substitute when Preferred needs reasoner/frontier you are
   not.
@@ -214,9 +241,35 @@ tiers / clearly in the same class.
 | Fit | Meaning | Bare `/work` |
 |-----|---------|--------------|
 | **good** | You are in Preferred models / same class | Eligible (apply effort right-size if needed) |
-| **overqualified** | You are a clearly higher **tier** than all preferred (e.g. Fable/frontier on `small`/`mid` only) | **Skip** if cheaper capacity exists; else probe + effort/`--no-fit-check` suggestions (see above) |
-| **underqualified** | Preferred needs reasoner/frontier (or named stronger models) and you are below that | **Skip** — leave for stronger models |
-| **unknown** | No useful Preferred models signal and Goal is ambiguous | Eligible only after a one-line fit note; prefer plans with an explicit list |
+| **overqualified** | You are a clearly higher **tier** than all preferred (e.g. Fable/frontier on `small`/`mid` only) | **Skip** (Rule 2 format) if cheaper capacity exists; else probe + effort/`--no-fit-check` suggestions |
+| **underqualified** | Every **tier** the plan lists is above yours (e.g. it lists `reasoner`/`frontier` only and you are `mid`) | **Skip** (Rule 2 format) — leave for stronger models |
+| **unknown** | No **Preferred models** line, or a list with no tier and no name you match | **Eligible** — claim after a one-line fit note (this is what `work_once.py` does) |
+
+### Do not under-rate yourself (the floor is a tier, not a vibe)
+
+Symmetric to the cheaper-capacity probe above: an unnecessary skip stalls the
+backlog exactly the way a wasteful frontier pickup burns credits. Before you
+classify yourself **underqualified**, check all four:
+
+1. **Only listed tiers set the floor.** `small | mid | reasoner | frontier` are
+   the gate. Product **names** in the list are *extra* good-fit hits, never a
+   raised floor — `**Preferred models:** mid, Claude Sonnet 5, Grok 4.5` is a
+   **good** fit for any `mid` worker, named or not.
+2. **Names-only lists do not gate.** A list of only names, none of them you, is
+   **unknown** — eligible after a one-line fit note. (`classify_fit` in
+   `scripts/plan_select.py` returns `unknown` here; a session that skips is
+   stricter than the harness, and wrong.)
+3. **A missing Preferred line does not gate.** Unlabeled work is unlabeled, not
+   reserved for a higher tier.
+4. **A hard step inside a good-fit plan is not a fit failure.** Difficulty you
+   find *after* claiming is a per-step **Route to** / `## Escalation triggers`
+   question, or a return-to-ready hand-back — not grounds to refuse the claim.
+   Claim it, run the steps you own, escalate the step.
+
+Escalate on your **weak column** (`.anchor/model-fitness.md`) and on
+orchestration-class work — not on the mere existence of a stronger model. "A
+better model could do this" is true of nearly every plan and is not a fit
+verdict.
 
 ### Rules
 
@@ -224,13 +277,22 @@ tiers / clearly in the same class.
    for you. Pick the highest-priority **good** fit instead. On good-fit
    `small`/`mid` work, still run the effort right-size note when the session is
    on high reasoning cost.
-2. **All ready plans are poor fit:** print a short table (path, Preferred
-   models, fit reason), the **cheaper-capacity probe** result (what you checked,
-   what is/isn't reachable), and **pasteable** effort/model or
-   `work_once.py --endpoint …` commands aimed at the highest-priority pending
-   plan. Then **stop**. Do not silently burn the wrong tier. Also mention
-   `/work --no-fit-check` (or a named slug) and a stronger/cheaper session when
-   relevant.
+2. **All ready plans are poor fit — keep the refusal short.** A skip is a
+   one-line verdict plus at most two `→` lines, then **stop**. Do not silently
+   burn the wrong tier — and do not pad the refusal either:
+
+   ```text
+   skip: features/<slug> — underqualified (Preferred: reasoner; you: Sonnet 5/mid)
+   → python scripts/work_once.py --once --endpoint h100-nemotron --registry scripts/endpoints.yaml
+   → /work --no-fit-check <slug> to run it here anyway
+   ```
+
+   One verdict line **per skipped plan** (a table only past ~4). The probe
+   appears *only* as the target in the `→` line — narrating what you checked and
+   what was unreachable is noise unless it changes the recommendation or the
+   user asks. Do **not** restate the plan's Goal, re-derive the fit rules, or
+   justify the tier call at length; the verdict line already says it. No
+   `## Result` footer on a turn that did no work.
 3. **`--no-fit-check`:** disable Preferred-models / tier filtering for this
    invocation only. Still pick **one** plan by normal lane/Value priority (or
    the named slug/path). Still **state fit in one line** before executing so the

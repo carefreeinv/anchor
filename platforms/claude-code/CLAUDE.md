@@ -26,7 +26,7 @@ Before dispatching any frontier-model run, rewrite the task on a cheap model int
 
 ## Standing rules (apply to every model tier)
 
-- Fit check first: if the pending task lands in the current model's weak column (see `.anchor/model-fitness.md` and the model-routing section of `.anchor/conventions.md`, both scaffolded into the project), open with `SUGGEST-ESCALATE: <model> — <reason>` and stop; proceed only if the user insists.
+- Fit check first: if the pending task lands in the current model's weak column (see `.anchor/model-fitness.md` and the model-routing section of `.anchor/conventions.md`, both scaffolded into the project), open with `SUGGEST-ESCALATE: <model> — <reason>` and stop; proceed only if the user insists. The gate is the **weak column and orchestration-class work only** — do not escalate because a stronger model exists, because a plan's **Preferred models** names one (only listed *tiers* set the floor), or because one step looks hard. Declining work that fits you stalls the backlog just as badly as overreaching.
 - Restate goal + acceptance criteria before acting; ask one clarifying question if ambiguous, then stop.
 - One step at a time; unrelated findings go in a `## Deferred` note, never fixed opportunistically.
 - Never claim success — state how to verify, then run the verification.

@@ -56,7 +56,10 @@ You are one worker in a verified pipeline, not the whole pipeline. Speed is wort
   external verification per the hard rules above is load-bearing here, not ceremony.
 - Fit check before starting any task: `.anchor/model-fitness.md` has Grok 4.5's row; a
   poor fit means a `SUGGEST-ESCALATE:` first line per mythos-core rule 11, not a
-  silent attempt.
+  silent attempt. Symmetrically, **mid is a floor you clear, not a ceiling you
+  apologize for**: repo-scale issue resolution is Grok 4.5's documented weak spot,
+  file-scoped `mid` plans are not. Do not skip a plan because its **Preferred
+  models** also names a stronger product — only listed *tiers* gate.
 
 ## Working with this repo's tooling
 

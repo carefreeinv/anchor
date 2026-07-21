@@ -291,6 +291,8 @@ def _record_to_dict(r: plan_select.PlanRecord) -> dict[str, Any]:
         "depends_on": list(r.depends_on),
         "deps_met": r.deps_met,
         "deps_unmet": list(r.deps_unmet),
+        "assignee": r.assignee,
+        "agent_assignable": r.agent_assignable,
     }
 
 
@@ -690,6 +692,19 @@ def plans_claim(
             )
     elif lane not in plan_select.READY_LANES:
         raise CoordinatorError(f"cannot claim from lane {lane}/")
+
+    # Assignee gate on ready plans: a plan assigned to a named human is theirs to
+    # complete — no agent claims it. (Editing its body for status/comments is a
+    # separate action and stays allowed.) No override here: MCP callers are agents.
+    if lane in plan_select.READY_LANES:
+        text = path.read_text(encoding="utf-8")
+        if not plan_select.is_agent_assignable(text):
+            who = plan_select.parse_assignee(text) or "a human"
+            raise CoordinatorError(
+                f"{rel} is assigned to {who} — agents do not complete it. "
+                f"A human completes it; agents may still edit its body for "
+                f"status/comments and commit that."
+            )
 
     # Dep check on ready plans
     if lane in plan_select.READY_LANES and not allow_unmet_deps:

@@ -57,7 +57,7 @@ The delegation arm of the orchestrator pattern:
 
 Toolsets are **role-scoped** (`scripts/roles.py`): start the server with `--role planner` or `--role critic` and the L1 lifecycle tools are never registered — the session cannot see them (deny by omission, not refusal). `--role executor` or no `--role` keeps the full surface. Role scoping hardens the orchestrated path only; a session without the server is bound by prompt doctrine alone.
 
-Uses the same `plan_select` / `plan_lease` rules as [`/work`](/skills/work) and `work_once`. Use a **distinct** `--agent-id` from fleet_watch timers. Full matrix and registration examples: `mcp/project-orchestrator/README.md`.
+Uses the same `plan_select` / `plan_lease` rules as [`/work`](/skills/work) and `work_once` — including auto-refusing a claim on a plan with a human **Assignee** (a person completes it; agents may still edit its body). Use a **distinct** `--agent-id` from fleet_watch timers. Full matrix and registration examples: `mcp/project-orchestrator/README.md`.
 
 ```bash
 claude mcp add anchor-prompts -- python /abs/path/mcp/anchor-prompts/server.py

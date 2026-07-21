@@ -83,12 +83,16 @@ Registry mapping (`endpoints.yaml` → fit tier), used when you pass `--endpoint
 | `reasoner` | `reasoner` |
 | `frontier` | `frontier` |
 
+Before claiming, a worker can triage read-only with `python plan_fit.py --endpoint <name> [--effort <current>]` — one `take:`/`skip:` line per ready plan with the reason, exit `1` when nothing fits it.
+
 **Bare pick behavior** (same as `/work`):
 
 - **good** / **unknown** fit → eligible (if **Depends on** met)  
 - **overqualified** (e.g. frontier on `small`-only) → skip; leave for cheaper workers  
-- **underqualified** (e.g. small on `reasoner`) → skip; leave for stronger workers  
+- **underqualified** (every **tier** the plan lists is above yours, e.g. small on `reasoner`) → skip; leave for stronger workers  
+  - Only listed *tiers* gate. A stronger model *name* in **Preferred models** does not raise the floor, and a names-only list you miss classifies as **unknown** → eligible  
 - **unmet Depends on** → skip; leave until dependency is completed  
+- **human Assignee** (a name/username/email, or `human`) → skip; a person completes it (`--allow-assigned` forces a named claim)  
 
 Override only when intentional: `--no-fit-check`, `--no-dep-check`, or a named `--slug` / `--path` (still **one** plan per pick; state mismatches).
 

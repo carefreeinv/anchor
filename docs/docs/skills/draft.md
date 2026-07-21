@@ -75,7 +75,7 @@ Inventory `.plans/drafts/*` (skip `.gitkeep`). Show path, tracked vs local, Goal
 Read the full draft. Restate Goal, Preferred models, Depends on, Done when, and Steps outline. Discuss gaps; edit the draft only when asked. Stay under `drafts/`.
 
 ### Create / refine
-Fill `.anchor/templates/plan.md` (Preferred models + Depends on after inventory). No `Lane:` / `Status:`. Path only under `drafts/`.
+Fill `.anchor/templates/plan.md` (Preferred models + Depends on after inventory). No `Lane:` / `Status:`. Path only under `drafts/`. For work a person must complete, set `- **Assignee:** <name|username|email>` (or `human`) — agents auto-skip claiming it but may still update status/comments; absent or `ai` = agent-eligible.
 
 ### Promote
 User passes `--promote <slug>` (or `promote <slug>`). Agent reads the plan and chooses:

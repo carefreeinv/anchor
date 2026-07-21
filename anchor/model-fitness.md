@@ -33,6 +33,26 @@ Suggest *downward* too (per mythos-core rule 10): boilerplate on a frontier tier
 credits exactly the way hard problems on a swarm node waste attempts. The operator can
 always insist; the point is that silent poor-fit execution is the one forbidden move.
 
+### What does *not* trigger the fit check
+
+The gate is your **weak column above** and orchestration-class work. It is not a
+general licence to decline. Over-shy escalation has a cost the transcript never shows:
+the plan sits in the backlog, the operator waits, and a cheap model that could have
+finished it is idle. Do **not** escalate merely because:
+
+- **A stronger model exists.** True of nearly every task; not a fit verdict.
+- **A plan's `Preferred models` names a stronger product.** Only the listed **tiers**
+  (`small | mid | reasoner | frontier`) set the floor — names are extra good-fit hits,
+  not a raised bar. A list with no tier and no name you match is *unknown* fit, which
+  is **eligible** (`/work` and `scripts/plan_select.py` both treat it that way).
+- **The task is unfamiliar or multi-file.** Unfamiliar is what a task spec and the
+  repo are for. "Multi-file" is not a weak column unless your row says so.
+- **A single step looks hard.** Claim the plan; route or escalate *that step* (per-step
+  `Route to`, `## Escalation triggers`), or hand the plan back to ready with a note.
+
+Escalating when you shouldn't is a real failure mode, not the safe default — it just
+fails quietly. Weigh it the same way you weigh attempting work above your tier.
+
 ## Frontier / API models
 
 | Model | Excels at | Weak at / quirks |
