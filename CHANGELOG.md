@@ -17,6 +17,10 @@ Newest first.
 - **Token-budget declaration + PRE-FLIGHT checklist** — task specs carry a `## Budget` section (context window, output ceiling), computed by `scripts/prompt_tuner.py --target <endpoint>` from the endpoint's registered `max_context` (or `unspecified` when unset — never guessed by the model). Mythos-core gains **rule 13 PRE-FLIGHT**: every executor prints a fixed 6-item pass/fail block (goal, acceptance criteria, files-in-scope, budget, tier fit, task size) before doing any work; any FAIL routes to that item's existing response and stops. `scripts/orchestrate.py` runs a matching **budget gate** before each dispatch attempt — an oversized prompt is rejected as `failed-budget` rather than truncated
 - **Claimed-vs-actual fleet metrics** — `scripts/fleet_metrics.py` parses executor `## Result` claims (`success` / `should-work` / `blocked` / `unparseable`) and appends metadata-only JSONL at `var/fleet-metrics/outcomes.jsonl`; `orchestrate.py` records one row per finished task (pair claim with verify exit + optional scope verdict); `scripts/fitness_report.py` prints per-model claim accuracy / verify pass-rate / unparseable rate (rates withheld when n < 5; `--json` available). Doctrine + model-fitness point at the report as preferred evidence over vendor claims; docs tooling page updated
 
+### Changed
+
+- **`/config` is no longer scaffolded into projects** — it sets the *operator's* Anchor defaults by running `./config.sh` from the Anchor checkout, so it has nothing to act on inside a scaffolded tree. It is now base-only for **both** platforms (Claude used to ship `.claude/commands/config.md` into projects; that is locked shut and covered by a `test_anchor.py` regression). `platforms/claude-code/CLAUDE.md` and `platforms/grok-build/GROK.md` now point operators to run `/config` from the Anchor checkout and to use `anchor <dir> --set-orchestrator <token>` for a single project's orchestrator
+
 ## [0.1.0] - 2026-07-19
 
 First tagged release. Anchor's doctrine, `.plans/` workflow, scaffold CLI, fleet

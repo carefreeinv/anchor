@@ -189,7 +189,10 @@ PLATFORMS: dict[str, dict] = {
         "label": "Claude Code",
         "files": [
             ("platforms/claude-code/CLAUDE.md", "CLAUDE.md"),
-            (".claude/commands/config.md", ".claude/commands/config.md"),
+            # NB: /config is deliberately NOT scaffolded (neither here nor for grok).
+            # It sets the *operator's* Anchor defaults (~/.config/anchor/defaults) and
+            # runs ./config.sh from the Anchor checkout — it has nothing to act on
+            # inside a scaffolded project.
             (".claude/commands/work.md", ".claude/commands/work.md"),
             (".claude/commands/draft.md", ".claude/commands/draft.md"),
             (".claude/commands/commit-prep.md", ".claude/commands/commit-prep.md"),
