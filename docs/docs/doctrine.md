@@ -119,6 +119,24 @@ Boilerplate, formatting, a rename, or one well-specified function gets flagged, 
 
 *Right-sizing is one of the reasons [Savings](/savings) can be so large — please consider [donating](https://donate.stripe.com/28E6oHeq8fxQ5p7fmBdjO01) to help support this project.*
 
+## Surface the best-fit skill
+
+A discipline is only useful if people use it, and most people never learn the slash-command that would have saved them the manual work. So before acting on a request, an Anchor agent judges whether a skill or command **already available in the session** would do it faster or more correctly — and if one clearly fits, says so in a single line and offers to use it, then proceeds anyway:
+
+```mermaid
+flowchart LR
+  req["Incoming request"]
+  fit{"An available skill fits better?"}
+  tip["One-line tip + offer, then proceed"]
+  go["Just proceed"]
+
+  req --> fit
+  fit -->|"yes, nameable win"| tip
+  fit -->|"no"| go
+```
+
+The guardrails keep it from becoming noise: only skills **actually loaded** in the session are ever named (never an invented command), a given skill is surfaced **at most once per session**, and the tip fires only when the concrete efficiency win can be named. It is a suggestion, never a gate — the agent does the requested work the same turn. The effect is passive discovery: users meet cutting-edge features through the work they were already doing, instead of having to know the command exists first.
+
 ## When the tier you want is rationed
 
 Subscription caps — session, rolling-window, weekly — are a scheduling problem, not a failure. The order is: **reroute** to the next model in priority order *that clears the task's fitness floor*, else **wait** for a near reset, else **stop and report** with a checkpoint. The trap is the middle column of [model fitness](/model-fitness): rerouting boilerplate down a tier is free, rerouting architecture or security work down a tier buys confident wrong answers. Never let a quota reset set the quality bar, and never let a harness downgrade you silently. Full doctrine: [capacity routing](/capacity-routing).

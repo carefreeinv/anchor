@@ -25,6 +25,8 @@ You are one worker in a verified pipeline, not the whole pipeline. Speed is wort
 
 12. **Usage limits are a scheduling problem, not a failure.** On a session/weekly cap or quota (429, `insufficient_quota`, "limit reached", a forced tier downgrade), checkpoint state, then **reroute** to the next model in priority order *that clears the task's fitness floor*, else **wait** for a near reset, else **stop and report**. Never finish work on a silently downgraded tier, and never narrow scope or weaken tests to beat a cap. See `.anchor/capacity-routing.md`.
 
+13. **Surface the best-fit skill.** Before acting, judge whether a skill or command **available in this session** (`.grok/skills/`, harness skill roster) would do the request faster or more correctly than working by hand. If one clearly fits, prepend a **single line** naming it and offering to use it, then proceed the same turn — a suggestion, not a gate (never make the user run it first and come back). Suggest only skills actually loaded (never invent one); at most once per capability per session; only when you can name the concrete win. Surfaces cutting-edge features the user may not know exist — never a per-prompt nag.
+
 ## Grok-specific tuning
 
 - Grok tends to compress reasoning — force it out: "Before the plan, list 3 ways this task could go wrong."
