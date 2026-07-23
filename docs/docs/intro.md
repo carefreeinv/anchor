@@ -73,20 +73,18 @@ cd anchor
 
 ## Quick start
 
-1. Read [the doctrine](/doctrine) — everything else implements it.
-2. Run `./config.sh` (or type `/config` in Claude Code / Grok Build) to pick your default platform(s), whether you want fleet tooling, **model priority**, and **preferred orchestrator** (who coordinates multi-step work and cross-plan **Depends on** analysis). It saves your answer and prints the exact `anchor <project-dir>` command to scaffold a project with it.
-3. Scaffold a project: `cd my-app && anchor` (uses the current directory and your saved defaults), or `anchor <project-dir> --platform claude,grok` (explicit path/platforms). See the [CLI reference](/tooling/cli) for `--fleet`, `--framework`, `--orchestrator` / `--set-orchestrator`, `--dry-run`, and `--check`.
-4. Draft with [`/draft`](/skills/draft) (`--list`, load existing, optional `--local`, `--promote <slug>` with inferred bugs/features). Execute ready plans with [`/work`](/skills/work). Always-on pullers: [`/fleet-watch`](/skills/fleet-watch). Architecture: [Fleet workers](/tooling/fleet-workers).
-5. Point `scripts/endpoints.yaml` at your endpoints; use `scripts/orchestrate.py` when you want the full plan→execute→critic loop — see [Hardware](/hardware/h100).
+Ready to try it? The **[Quick Start](/quick-start)** page has two tracks:
 
-Register the CLI with [**`/install-anchor`**](/skills/install-anchor) (user-local symlink, no sudo), or symlink `bin/anchor` onto your `PATH` yourself. `pip install -e .` from the repo root also works if you'd rather have a packaged `anchor` command.
+- **[For Non-Technical People](/quick-start#for-non-technical-people)** — plain-language setup with Claude Code or Grok Build (`/install-anchor`, `/config`, `/draft`, `/work`).
+- **[For Technical People](/quick-start#for-technical-people)** — CLI, defaults, scaffold flags, plans, and optional fleet endpoints.
 
 ## Start here
 
-1. [The Doctrine](/doctrine) — the behavioral contract everything implements
-2. [The Playbook](/playbook) — the economics that motivate it
-3. [Savings](/savings) — projected day/month/year inference savings + donate
-4. [Skills](/skills/overview) — where each skill is best used: [`/anchor`](/skills/anchor), [`/draft`](/skills/draft), [`/work`](/skills/work), [`/fleet-watch`](/skills/fleet-watch), [`/install-anchor`](/skills/install-anchor), [`/local-models`](/skills/local-models)
-5. [Platforms](/platforms/claude-code) — install instructions per agent/model
-6. [Hardware](/hardware/h100) — serve the fleet
-7. [Tooling](/tooling/scripts) — scripts, [fleet workers](/tooling/fleet-workers), MCP, and the [`anchor` CLI](/tooling/cli)
+1. [Quick Start](/quick-start) — non-technical and technical paths
+2. [The Doctrine](/doctrine) — the behavioral contract everything implements
+3. [The Playbook](/playbook) — the economics that motivate it
+4. [Savings](/savings) — projected day/month/year inference savings + donate
+5. [Skills](/skills/overview) — where each skill is best used: [`/anchor`](/skills/anchor), [`/draft`](/skills/draft), [`/work`](/skills/work), [`/fleet-watch`](/skills/fleet-watch), [`/install-anchor`](/skills/install-anchor), [`/local-models`](/skills/local-models)
+6. [Platforms](/platforms/claude-code) — install instructions per agent/model
+7. [Hardware](/hardware/h100) — serve the fleet
+8. [Tooling](/tooling/scripts) — scripts, [fleet workers](/tooling/fleet-workers), MCP, and the [`anchor` CLI](/tooling/cli)
