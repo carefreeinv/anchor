@@ -123,7 +123,15 @@ def _write_log(plans: Path, name: str, row: list[str]) -> Path:
 def test_latest_event_label_picks_most_recent_by_content_timestamp(tmp_path):
     plans = _tree(tmp_path)
     _write_log(
-        plans, "1.local.csv", ["2026-07-01T00:00:00+00:00", "foo", "entered-review-needed", "in-progress", "review-needed"]
+        plans,
+        "1.local.csv",
+        [
+            "2026-07-01T00:00:00+00:00",
+            "foo",
+            "entered-review-needed",
+            "in-progress",
+            "review-needed",
+        ],
     )
     _write_log(
         plans, "2.local.csv", ["2026-07-05T00:00:00+00:00", "foo", "entered-completed", "review-needed", "completed"]

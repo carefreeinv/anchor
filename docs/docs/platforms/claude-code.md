@@ -1,4 +1,4 @@
-<!-- synced-from: platforms/claude-code/CLAUDE.md @ 0a459b66e22ef564ba880605b2f13ca5591006a9 -->
+<!-- synced-from: platforms/claude-code/CLAUDE.md @ 4dd730e339f0926622dfabe6ef8f8b2326290c01 -->
 ---
 sidebar_position: 1
 sidebar_label: Claude Code
