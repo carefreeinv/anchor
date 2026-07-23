@@ -81,6 +81,13 @@ Needs Work → `bugs|features/`. Empty queue with `dev` ahead of `main` offers a
 **promotion** survey (**Promote** merges `dev` → `main`). Command:
 `.claude/commands/review.md`.
 
+## /audit
+
+Exhaustive **security audit** (first-party code + dependencies) that writes
+prioritized bug plans under `.plans/bugs/` (or `--to drafts`). **Frontier /
+reasoner only** by default (`--force-model` override). Plans only — no auto-fix,
+no exploit PoCs. Command: `.claude/commands/audit.md`.
+
 ## /fleet-watch
 
 Configure durable plan pollers for a project: `/fleet-watch` (CWD) or

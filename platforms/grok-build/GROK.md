@@ -101,6 +101,14 @@ Needs Work → `bugs|features/`. Empty queue with `dev` ahead of `main` offers a
 **promotion** survey (**Promote** merges `dev` → `main`). Skill:
 `.grok/skills/review/SKILL.md`.
 
+## /audit
+
+Exhaustive **security audit** (first-party code + dependencies) that writes
+prioritized bug plans under `.plans/bugs/` (or `--to drafts`). **Frontier /
+reasoner only** by default (`--force-model` override; Grok 4.5 is mid-class for
+this gate). Plans only — no auto-fix, no exploit PoCs. Skill:
+`.grok/skills/audit/SKILL.md`.
+
 ## /fleet-watch
 
 Configure durable plan pollers: `/fleet-watch` (this project) or
