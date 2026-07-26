@@ -169,6 +169,7 @@ Useful flags — full reference on [the CLI page](/tooling/cli):
 | [`/review`](/skills/review) | Human sign-off for `review-needed/` |
 | [`/fleet-watch`](/skills/fleet-watch) | Durable multi-tier pullers |
 | [`/audit`](/skills/audit) | Security audit → prioritized bug plans |
+| [`/deploy`](/skills/deploy) | Ship the project with the tooling it already uses |
 
 Architecture for always-on workers: [Fleet workers](/tooling/fleet-workers). Skills map: [Skills overview](/skills/overview).
 

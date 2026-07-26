@@ -109,6 +109,19 @@ reasoner only** by default (`--force-model` override; Grok 4.5 is mid-class for
 this gate). Plans only — no auto-fix, no exploit PoCs. Skill:
 `.grok/skills/audit/SKILL.md`.
 
+## /deploy
+
+Deploy this project with **the tooling it already uses** — CI push-to-deploy,
+platform CLI (Vercel/Netlify/Fly/DO/Cloudflare), a release framework
+(Deployer/Capistrano/Kamal/Fabric/Ansible), or a plain `production` git remote.
+Detect first; never scaffold over existing tooling. **Nothing detected** → ask
+where it should deploy, then set up the framework that fits the stack
+(`--setup` writes config + dry run and **stops**). Refuses a dirty tree
+(`--allow-dirty`), always prints the target and confirms before the first remote
+command, never commits/merges/force-pushes, never destroys infra, and verifies
+the deploy landed. `--dry-run`, `--status`, `--rollback`. Skill:
+`.grok/skills/deploy/SKILL.md`.
+
 ## /fleet-watch
 
 Configure durable plan pollers: `/fleet-watch` (this project) or
