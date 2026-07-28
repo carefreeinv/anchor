@@ -17,6 +17,23 @@
 - **Assignee:** ai                          <!-- optional; default ai. A person's name/username/email (or `human`) marks a plan agents must NOT auto-claim — a human completes it; agents may still edit its body for status/comments and commit that -->
 - **Depends on:** <comma-separated plan slugs, or `none`>  <!-- other .plans work that must be done first -->
 
+## Progress
+<!-- Populate LAST, after ## Steps and ## Done when are written below — this
+     section mirrors them, so draft it after they exist even though it's
+     placed first for visibility. One `- [ ] Step N: <short label>` bullet
+     per Steps-table row (reuse that row's Task text, shortened), plus
+     exactly one trailing `- [ ] Done when holds` bullet. All start `[ ]` at
+     draft time. As execution proceeds, check off a Step bullet once that
+     step's Verify by passes, and check off `Done when holds` at finish. On
+     a mid-plan pause, leave unfinished bullets `[ ]` — "resume from the
+     first incomplete step" means the first `[ ]` bullet here. Optional
+     freeform notes (why paused, next action) may follow the checklist,
+     exactly like today's freeform `## Progress` note. Advisory only — never
+     parsed or enforced by tooling; omit entirely on plans predating this
+     convention, no retrofit required. -->
+- [ ] Step 1: <short label>
+- [ ] Done when holds
+
 ## Goal
 <one sentence — the user-visible outcome>
 

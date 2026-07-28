@@ -93,11 +93,15 @@ only when no matching draft file exists.
 1. Ensure `.plans/drafts/` exists.
 2. Inventory `.plans/**` for **Depends on** / duplicates; read conventions + enough code.
 3. Write `.anchor/templates/plan.md` shape: Value, Priority, Slug, Preferred models,
-   Depends on, Goal, Context, Constraints, Steps, Risks, Done when. No `Lane:` / `Status:`.
-   **Human-owned work:** add `- **Assignee:** <name|username|email>` (or `human`)
-   for plans a person must complete — agents auto-skip claiming them but may still
-   update status/comments. Absent or `ai` = agent-eligible (default).
-4. Path only under `drafts/`. **Default filename `<slug>.local.md`** (private,
+   Depends on, Progress, Goal, Context, Constraints, Steps, Risks, Done when. No
+   `Lane:` / `Status:`. **Human-owned work:** add `- **Assignee:** <name|username|email>`
+   (or `human`) for plans a person must complete — agents auto-skip claiming them but
+   may still update status/comments. Absent or `ai` = agent-eligible (default).
+4. **Populate `## Progress` last**, after Steps/Done when exist — one
+   `- [ ] Step N: <short label>` bullet per Steps-table row plus a trailing
+   `- [ ] Done when holds` bullet, all `[ ]` at draft time. Advisory only;
+   `/work` keeps it in sync during execution.
+5. Path only under `drafts/`. **Default filename `<slug>.local.md`** (private,
    gitignored); `--shared`/`--tracked` writes a committable `<slug>.md`. Report
    path; do not promote unless asked.
 

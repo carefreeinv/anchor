@@ -51,6 +51,12 @@ gitignored — the user may not be ready to commit a fresh draft). Use `--shared
 (alias `--tracked`) to write a committable `<slug>.md` instead. When refining an
 existing draft, keep its current suffix.
 
+**Populate `## Progress` last**, after `## Steps` and `## Done when` exist —
+one `- [ ] Step N: <short label>` bullet per Steps-table row (reuse that
+row's Task text, shortened) plus a trailing `- [ ] Done when holds` bullet,
+all `[ ]` at draft time. Advisory only; `/work` keeps it in sync during
+execution.
+
 **Human-owned plans:** if the work must be completed by a person (release
 sign-off, manual QA, anything gated on human judgment/access), set
 `- **Assignee:** <name|username|email>` (or `human`) in the header. The plan

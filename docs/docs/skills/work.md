@@ -126,6 +126,8 @@ flowchart LR
 
 Mid-session stop: leave the file in **`in-progress/`** with a short `## Progress` note. Other agents must ignore it. Half-baked → `ambiguous/`; stuck → `blocked/` or return to ready. When Done when holds → **always** `review-needed/`; the human then runs [**`/review`**](/skills/review) (AI critic + survey) to **Approve** (merges `feature/<slug>` → dev, then → `completed/`), Needs Work → `bugs|features/`, or Skip. Agents never archive to `completed/` or merge from `/work`.
 
+**`## Progress` checklist (optional, template-recommended):** a `- [ ] Step N: <label>` bullet per Steps-table row plus a trailing `- [ ] Done when holds` bullet, populated by `/draft` after Steps/Done when exist. `/work` checks off a Step bullet once its Verify by passes and `Done when holds` at finish; "resume from the first incomplete step" means the first unchecked bullet. Advisory only, never enforced — most valuable for a human-assigned plan spanning multiple sessions.
+
 ## Install (platform wiring)
 
 The behavior above is identical everywhere. Only how the agent loads the skill differs:
