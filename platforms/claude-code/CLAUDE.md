@@ -60,11 +60,13 @@ not promote from `/work`. Command: `.claude/commands/draft.md`.
 ## /work
 
 Execute the next (or named) ready plan from **`.plans/`** (dotdir). Contract:
-resume own `in-progress/` first; bugs before features; honor **Preferred models**
+bare pick is **ready lanes only** (never scans `in-progress/`; resume is an
+explicit named claim you own); bugs before features; honor **Preferred models**
 and **Depends on** (skip unmet deps); never execute `drafts/` / `completed/` /
 `ambiguous/` / `blocked/`; ignore foreign `in-progress/`; claim ready →
-`in-progress/`; park half-baked → `ambiguous/` or stuck → `blocked/`; finish
-`in-progress/` → `review-needed/` (required; human **`/review`** → `completed/`).
+`in-progress/` (atomic move + required lease); park half-baked → `ambiguous/` or
+stuck → `blocked/`; finish `in-progress/` → `review-needed/` (required; human
+**`/review`** → `completed/`).
 Do not promote drafts from `/work` (use `/draft --promote`). If Preferred orchestrator is unset, frontier/near-frontier
 may act as temporary coordinator (`TEMPORARY-COORDINATOR:`). On Git projects: **worktree per agent**
 (`scripts/worktree_for_agent.py ensure --agent-id … --slug …`); feature-branch

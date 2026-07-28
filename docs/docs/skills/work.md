@@ -20,12 +20,13 @@ Plans are git-tracked markdown under the **`.plans/`** dotdir. Do not gitignore 
 
 | Invocation | Behavior |
 |------------|----------|
-| `/work` | Resume **your** `in-progress/` work if any; else pick highest-priority **model-fit** ready plan |
-| `/work --list` | List ready plans + your in-progress (Preferred models + fit); **do not** implement |
+| `/work` | Pick highest-priority **model-fit** ready plan and execute it (never scans `in-progress/`) |
+| `/work --list` | List ready plans (Preferred models + fit); **do not** implement |
 | `/work --no-fit-check` | Same priority as bare `/work`, skip model-fit filtering (still **one** plan) |
 | `/work --no-fit-check <slug>` | Execute that plan even if Preferred models say otherwise |
-| `/work <slug>` | Match `slug.md` or `slug.local.md` under ready lanes or **your** in-progress |
-| `/work .plans/features/foo.md` | Execute that path if ready (or your own in-progress) |
+| `/work <slug>` | Match `slug.md` or `slug.local.md` under ready lanes |
+| `/work .plans/features/foo.md` | Execute that path if it is a ready-lane file |
+| `/work in-progress/<slug>.md` | Explicit named resume of **your own** in-progress work (leased or your just-expired lease) |
 
 ## Lanes
 

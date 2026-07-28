@@ -154,6 +154,38 @@ def test_renew_extends_and_blocks_foreign(tmp_path):
         renew(plans, "in-progress/foo.md", "agent-b")
 
 
+def test_renew_refuses_unleased(tmp_path):
+    plans = _plans(tmp_path)
+    _write_plan(plans / "in-progress" / "foo.md")
+    with pytest.raises(ClaimError, match="no lease on file"):
+        renew(plans, "in-progress/foo.md", "agent-a")
+
+
+def test_renew_refuses_foreign_expired_no_steal(tmp_path):
+    plans = _plans(tmp_path)
+    _write_plan(plans / "features" / "foo.md")
+    claim_and_move(plans, "features/foo.md", "agent-a", ttl_seconds=1)
+    # Let agent-a's lease expire.
+    path = plans / ".leases" / "in-progress__foo.md.json"
+    lease_data = path.read_text(encoding="utf-8")
+    assert '"agent_id": "agent-a"' in lease_data
+    path.write_text(
+        lease_data.replace(
+            f'"expires_at": {active_lease(plans, "in-progress/foo.md").expires_at}',
+            '"expires_at": 1',
+        ),
+        encoding="utf-8",
+    )
+    assert active_lease(plans, "in-progress/foo.md") is None
+    # A different agent's heartbeat must not silently take over the expired
+    # lease — that is exclusively the explicit recover=True path.
+    with pytest.raises(ClaimError, match="agent-a"):
+        renew(plans, "in-progress/foo.md", "agent-b")
+    # The rightful owner may still renew their own just-expired lease.
+    lease = renew(plans, "in-progress/foo.md", "agent-a", ttl_seconds=60)
+    assert lease.agent_id == "agent-a"
+
+
 def test_no_silent_reclaim_of_unleased_in_progress(tmp_path):
     plans = _plans(tmp_path)
     _write_plan(plans / "features" / "foo.md")
