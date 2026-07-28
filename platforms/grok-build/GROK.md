@@ -122,6 +122,17 @@ command, never commits/merges/force-pushes, never destroys infra, and verifies
 the deploy landed. `--dry-run`, `--status`, `--rollback`. Skill:
 `.grok/skills/deploy/SKILL.md`.
 
+## /optimize
+
+Scan the project against **standards for its detected type** (web app: OG
+images, `robots.txt`, `llms.txt`, sitemap; CLI/library: `CODEOWNERS`,
+`SECURITY.md`, release config; any repo: dependency bot, `LICENSE`), propose
+**up to 10** ranked improvement candidates, and write only checkbox-picked
+ones as plans. Hygiene/DX, not security (`/audit`'s job) — soft `mid,
+reasoner` preference, no refuse gate. Default write lane `.plans/drafts/`;
+`--to features`/`--to bugs` opt in to a ready lane. `--dry-run`, `--write`,
+`--continue`. Skill: `.grok/skills/optimize/SKILL.md`.
+
 ## /fleet-watch
 
 Configure durable plan pollers: `/fleet-watch` (this project) or
