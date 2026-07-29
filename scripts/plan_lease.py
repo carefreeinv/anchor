@@ -290,23 +290,26 @@ def renew(
 
     A live agent calls this periodically so its in-progress plan never looks
     orphaned. Also lets an agent refresh its *own* just-expired lease (resume
-    after a pause). Raises :class:`ClaimError` if a **different** agent currently
-    holds an *active* lease on the plan.
+    after a pause). Refuses when there is no lease file at all, or when the
+    lease — active or expired — belongs to a **different** agent. Heartbeat
+    never takes over abandoned work; that is exclusively
+    ``claim_and_move(..., recover=True)``.
     """
     plan_rel = plan_rel.replace("\\", "/")
     existing = read_lease(plans_root, plan_rel)
-    if existing and not existing.expired and existing.agent_id != agent_id:
+    if existing is None:
+        raise ClaimError(f"cannot renew {plan_rel}: no lease on file")
+    if existing.agent_id != agent_id:
         raise ClaimError(
             f"cannot renew lease held by {existing.agent_id!r} as {agent_id!r} ({plan_rel})"
         )
     now = time.time()
-    same_owner = bool(existing and existing.agent_id == agent_id)
     lease = Lease(
         plan_rel=plan_rel,
         agent_id=agent_id,
-        claimed_at=existing.claimed_at if same_owner else now,
+        claimed_at=existing.claimed_at,
         expires_at=now + max(1, int(ttl_seconds)),
-        origin_rel=existing.origin_rel if existing else None,
+        origin_rel=existing.origin_rel,
     )
     _write_lease_force(lease_path(plans_root, plan_rel), lease)
     return lease
