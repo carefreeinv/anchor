@@ -77,6 +77,8 @@ Read the full draft. Restate Goal, Preferred models, Depends on, Done when, and 
 ### Create / refine
 Fill `.anchor/templates/plan.md` (Preferred models + Depends on after inventory). No `Lane:` / `Status:`. Path only under `drafts/`. For work a person must complete, set `- **Assignee:** <name|username|email>` (or `human`) — agents auto-skip claiming it but may still update status/comments; absent or `ai` = agent-eligible.
 
+Populate `## Progress` **last**, after `## Steps` and `## Done when` exist: one `- [ ] Step N: <short label>` bullet per Steps-table row, plus a trailing `- [ ] Done when holds` bullet, all `[ ]` at draft time. Advisory only — `/work` keeps it in sync as execution proceeds; optional and never retrofitted on plans that predate it.
+
 ### Promote
 User passes `--promote <slug>` (or `promote <slug>`). Agent reads the plan and chooses:
 

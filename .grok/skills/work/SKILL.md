@@ -350,7 +350,8 @@ the queue moving. Small models do not grab architecture plans to "try hard."
   lane). If unmet → **do not execute**; report which deps block and stop (or pick
   another plan). Optional sys checks: `ls .plans/*/<slug>*`, `git log -- .plans/completed/`.
 - Do **not** rewrite the plan unless a step is impossible (then stop and say why).
-- If a `## Progress` section exists, resume from the first incomplete step.
+- If a `## Progress` checklist exists, resume from its first unchecked
+  (`- [ ]`) bullet — that is what "first incomplete step" means concretely.
 
 ### 4. Mark in progress
 
@@ -369,6 +370,9 @@ the queue moving. Small models do not grab architecture plans to "try hard."
 - Walk **## Steps** in order (table rows or numbered list).
 - For each step: do the work; run its **Verify by** command when present.
 - One step at a time; no opportunistic drive-bys outside the plan’s file scope.
+- If the plan has a `## Progress` checklist, check off (`- [x]`) that step's
+  bullet once its Verify by passes. Advisory only — never required, never a
+  gate; skip silently if the plan predates the convention.
 - Two failed fix attempts on the same error → stop; summarize attempts +
   hypothesis; escalate (do not thrash).
 - Honor per-step **Route to** (fleet offload / escalate / downgrade) when present.
@@ -377,23 +381,27 @@ the queue moving. Small models do not grab architecture plans to "try hard."
 
 **Done when** all checklist items hold and verifications pass:
 
-1. **Always** `git mv` the file from `in-progress/` to `.plans/review-needed/`
+1. If the plan has a `## Progress` checklist, check off `Done when holds`
+   (and confirm every Step bullet is checked) before the move below.
+2. **Always** `git mv` the file from `in-progress/` to `.plans/review-needed/`
    (create the dir if needed). Drop any lease for the plan. That move means
    *agent asserts Done when* — it is **not** final archive. Do **not** set a
    Status field. Do **not** move to `completed/` from `/work` (no optional
    self-certify path).
-2. Tell the human to run **`/review`** (or `/review <slug>`) for sign-off: AI
+3. Tell the human to run **`/review`** (or `/review <slug>`) for sign-off: AI
    critic + survey — Approve merges `feature/<slug>` → dev then → `completed/`;
    Needs Work → `bugs|features/`; Skip. Never perform `review-needed/` →
    `completed/` or any branch merge yourself outside a human-confirmed
    `/review` Approve.
-3. Session footer: `## Result`, `## How to verify`, `## Deferred / concerns`,
+4. Session footer: `## Result`, `## How to verify`, `## Deferred / concerns`,
    including the new path under `review-needed/` and a one-line “run `/review`”
    reminder.
 
 **If the user stops mid-plan:** leave the file in **`in-progress/`** with a
-brief `## Progress` note. Do **not** move to `completed/` or `review-needed/`.
-Other agents must ignore it.
+brief `## Progress` note. If a checklist is present, leave unfinished bullets
+`- [ ]` — do **not** check off a step you didn't actually finish; an
+optional freeform line below the checklist may note why/next-action. Do
+**not** move to `completed/` or `review-needed/`. Other agents must ignore it.
 
 **If the plan is half-baked:** move to `.plans/ambiguous/` and note what is
 missing (acceptance criteria, scope, etc.).
