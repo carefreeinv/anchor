@@ -1,4 +1,4 @@
-<!-- synced-from: platforms/grok-build/GROK.md @ c958def01b23f870eb24d8d5a5b8f762916a822a -->
+<!-- synced-from: platforms/grok-build/GROK.md @ 7cc71c5ace84517871a54323b460812752194dbc -->
 ---
 sidebar_position: 2
 sidebar_label: Grok Build

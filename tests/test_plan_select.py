@@ -282,3 +282,37 @@ def test_resolve_foreign_in_progress_refuses(tmp_path):
             path=plans / "in-progress" / "x.md",
             agent_id="agent-b",
         )
+
+
+def test_next_main_exit_codes_and_claim_writes_lease(tmp_path, capsys):
+    root = tmp_path
+    plans = _tree(root)
+    _plan(plans / "features" / "ready.md", preferred="mid")
+
+    # Nothing ready in an empty backlog → exit 1.
+    empty_root = tmp_path / "empty"
+    _tree(empty_root)
+    rc = ps._next_main(["--next", "--root", str(empty_root), "--tier", "mid"])
+    assert rc == 1
+
+    # A ready plan present → exit 0, plan printed, not yet moved.
+    rc = ps._next_main(["--next", "--root", str(root), "--tier", "mid"])
+    assert rc == 0
+    out = capsys.readouterr().out
+    assert "features/ready.md" in out
+    assert (plans / "features" / "ready.md").is_file()
+
+    # --claim moves it to in-progress/ and writes a lease atomically.
+    rc = ps._next_main(
+        ["--next", "--claim", "--root", str(root), "--tier", "mid", "--agent-id", "w1"]
+    )
+    assert rc == 0
+    assert not (plans / "features" / "ready.md").exists()
+    assert (plans / "in-progress" / "ready.md").is_file()
+    lease_file = plans / ".leases" / "in-progress__ready.md.json"
+    assert lease_file.is_file()
+    assert '"agent_id": "w1"' in lease_file.read_text(encoding="utf-8")
+
+    # Backlog now empty → exit 1 again.
+    rc = ps._next_main(["--next", "--root", str(root), "--tier", "mid"])
+    assert rc == 1
