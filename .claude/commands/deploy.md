@@ -79,7 +79,7 @@ Flags may combine (e.g. `/deploy staging --dry-run`).
 ## Pipeline (hard order)
 
 ```text
-resolve project → tree + branch gate → integration-branch gap check → detect tooling
+resolve project → tree + branch gate → unreleased-work gap check → detect tooling
   → (none detected: interview → setup → stop)
   → resolve target/env → plan the exact commands
   → confirm (or --dry-run / --yes)
@@ -95,29 +95,47 @@ Note which branch the project deploys from if the tooling declares one (an Actio
 `on: push: branches:` list, `vercel.json` git config, a `production` remote). If
 HEAD is not on that branch, say so and confirm before proceeding.
 
-**Integration-branch gap check.** If the project has an integration branch
-(`dev`, else `develop` — same convention `/work` uses), compare it against the
-branch this deploy actually publishes from (usually `main`/`master`):
+**Unreleased-work gap check.** The deploy branch (usually `main`/`master`) can
+lag finished work at **two** stages of the pipeline — check both before
+shipping:
 
-```bash
-git rev-list --count <deploy-branch>..dev   # or develop
-```
+1. **Integration branch not promoted.** If the project has an integration
+   branch (`dev`, else `develop` — same convention `/work` uses):
 
-No such branch, or the count is `0` → nothing to report, continue silently. A
-non-zero count means `dev` has commits not yet promoted to the deploy branch —
-report the count and a short `git log <deploy-branch>..dev --oneline`, then
-**ask** (prefer platform ask UI):
+   ```bash
+   git rev-list --count <deploy-branch>..dev   # or develop
+   ```
+
+2. **Finished but unreviewed features.** Work that `/work` finished to the
+   review queue but `/review` never landed — plans still in
+   `.plans/review-needed/`, and `feature/*` branches carrying commits the
+   deploy branch doesn't have:
+
+   ```bash
+   ls .plans/review-needed/ 2>/dev/null   # ignore .gitkeep
+   git for-each-ref refs/heads/feature/ --format='%(refname:short)' \
+     | while read -r b; do
+         n=$(git rev-list --count <deploy-branch>.."$b")
+         [ "$n" -gt 0 ] && echo "$b: $n commit(s) not on <deploy-branch>"
+       done
+   ```
+
+Both empty/zero → nothing to report, continue silently. Otherwise report
+exactly what this deploy will **exclude**: the `dev` gap count with a short
+`git log <deploy-branch>..dev --oneline`, plus each review-needed plan and each
+unmerged `feature/*` branch (one line apiece). Then **ask** (prefer platform
+ask UI):
 
 | Option | Meaning |
 |--------|---------|
-| **Run `/review` first** (recommended) | Stop here; the human promotes `dev` → deploy branch via `/review`'s survey, then re-runs `/deploy` |
-| **Deploy `<deploy-branch>` as-is** | Proceed; `dev`'s unpromoted work stays unpublished (a normal, non-broken state) |
+| **Run `/review` first** (recommended) | Stop here; the human lands the work via `/review` (feature → `dev`, then `dev` → deploy branch), then re-runs `/deploy` |
+| **Deploy `<deploy-branch>` as-is** | Proceed; the unreleased work stays unpublished (a normal, non-broken state) |
 | **Cancel** | Stop, no deploy |
 
 Under `--yes` (non-interactive), default to **Deploy as-is** — note the gap in
 the footer rather than blocking on a question nothing can answer. **`/deploy`
 never merges or promotes branches itself** (Hard rule 3 / Out of scope) — this
-check only surfaces the gap; landing `dev` is always `/review`'s job.
+check only surfaces the gap; landing work is always `/review`'s job.
 
 ## 2. Detect deployment tooling
 
