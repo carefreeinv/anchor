@@ -139,6 +139,16 @@ Commit:   **/commit-prep** first (prep only: tests + CHANGELOG + blog); if green
 Mid-session stop: leave the file in **`in-progress/`** with a short `## Progress`
 note. Do **not** move to `completed/`. Other agents must ignore that file.
 
+`## Progress` (optional, template-recommended): a checklist — one
+`- [ ] Step N: <label>` bullet per Steps-table row, plus a trailing
+`- [ ] Done when holds` bullet — kept in sync during `/work` (a Step bullet
+checks off once its Verify by passes; `Done when holds` checks off at
+finish). Advisory only, never enforced by tooling; most valuable for a
+human-assigned plan spanning multiple sessions, where nothing else shows
+step-level progress in between. Optional freeform notes may follow the
+checklist. Omit entirely on plans that predate this convention — no retrofit
+required.
+
 Half-baked or stuck: move to **`ambiguous/`** or **`blocked/`** and note why in
 `## Progress` / session footer. Unparking back to ready is allowed when the
 blocker is cleared.
