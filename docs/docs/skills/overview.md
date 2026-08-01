@@ -20,6 +20,7 @@ and Grok Build; install paths differ.
 | [**`/audit`**](/skills/audit) | Exhaustive **security audit** (code + deps) → prioritized bug plans. **Frontier/reasoner only** by default. | Current project root / `.plans/bugs/` | Yes |
 | [**`/deploy`**](/skills/deploy) | When a project is ready to **ship** — runs the deploy tooling it already uses, or sets tooling up when it has none. | Current project root / its configured target | Yes |
 | [**`/optimize`**](/skills/optimize) | Check a project against **standards for its type** (sharing metadata, discoverability, repo hygiene) → checkbox-picked improvement plans. | Current project root / `.plans/drafts/` | Yes |
+| [**`/tag`**](/skills/tag) | Detect a repo's **version-tag scheme** and show/suggest/create the next local annotated tag. Never pushes; not a release. | Current repo's git tags | Yes |
 | [**`/fleet-watch`**](/skills/fleet-watch) | Turn on **background** pullers for a project’s `.plans/` (often from Anchor CWD with a sibling name, or from the project itself). | CWD if it has `.plans/`, else named path / `../app` | Yes |
 | [**`/install-anchor`**](/skills/install-anchor) | Anywhere `anchor` is missing or broken on **PATH** (first machine setup or new shell). | Locates Anchor checkout; not project-specific | Yes |
 | [**`/local-models`**](/skills/local-models) | **Inside a project** when choosing/installing a **lean local** executor for this machine. | This host + optional reconfigure draft for **this** project | Scaffolded only (`platforms/…`) |
@@ -36,6 +37,7 @@ flowchart TD
   q --> u["Security audit → bug plans"]
   q --> d["Ship this project somewhere"]
   q --> o["Standards check → improvement plans"]
+  q --> t["What version comes next / cut a tag"]
   q --> b["Always-on workers for .plans/"]
   q --> c["anchor command not on PATH"]
   q --> l["What local model fits this box?"]
@@ -46,6 +48,7 @@ flowchart TD
   u --> su["/audit"]
   d --> sp["/deploy"]
   o --> so["/optimize"]
+  t --> st["/tag"]
   b --> sf["/fleet-watch"]
   c --> si["/install-anchor"]
   l --> sl["/local-models"]
@@ -62,7 +65,7 @@ flowchart TD
 
 | Kind | Examples | Lives in |
 |------|----------|----------|
-| **Dual-use** (Anchor base **and** scaffolded into projects) | `/draft`, `/work`, `/review`, `/audit`, `/deploy`, `/optimize`, `/commit-prep`, `/fleet-watch`, `/install-anchor` | Anchor `.grok/skills` / `.claude/commands` (and scaffolded copies) |
+| **Dual-use** (Anchor base **and** scaffolded into projects) | `/draft`, `/work`, `/review`, `/audit`, `/deploy`, `/optimize`, `/commit-prep`, `/tag`, `/fleet-watch`, `/install-anchor` | Anchor `.grok/skills` / `.claude/commands` (and scaffolded copies) |
 | **Scaffolded into projects** (source under `platforms/`) | `/local-models`, project `/anchor` | `platforms/claude-code/…`, `platforms/grok-build/…` |
 | **Anchor base only** (path-required `/anchor`) | Anchor `/anchor` | Anchor checkout base skills — not the project CWD-default variant |
 

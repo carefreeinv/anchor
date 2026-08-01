@@ -211,7 +211,9 @@ def resolve_doctrine_path(rel: str, root: Path | None = None) -> Path:
     scaffolded projects (``.anchor/``) work.
     """
     base = root if root is not None else REPO_ROOT
-    rel_n = rel.replace("\\", "/").lstrip("./")
+    rel_n = rel.replace("\\", "/")
+    if rel_n.startswith("./"):
+        rel_n = rel_n[2:]
     candidates = [base / rel_n]
     if rel_n.startswith("anchor/"):
         candidates.append(base / (".anchor/" + rel_n[len("anchor/") :]))

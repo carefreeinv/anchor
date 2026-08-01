@@ -99,7 +99,9 @@ def doctrine_dest(src_rel: str) -> str:
 
 def fleet_dest(src_rel: str) -> str:
     """Map fleet source paths → project ``.anchor/scripts|mcp/…`` (never project root)."""
-    rel = src_rel.replace("\\", "/").lstrip("./")
+    rel = src_rel.replace("\\", "/")
+    if rel.startswith("./"):
+        rel = rel[2:]
     if rel.startswith("scripts/"):
         return ".anchor/" + rel
     if rel.startswith("mcp/"):
@@ -201,6 +203,7 @@ PLATFORMS: dict[str, dict] = {
             (".claude/commands/deploy.md", ".claude/commands/deploy.md"),
             (".claude/commands/optimize.md", ".claude/commands/optimize.md"),
             (".claude/commands/commit-prep.md", ".claude/commands/commit-prep.md"),
+            (".claude/commands/tag.md", ".claude/commands/tag.md"),
             (".claude/commands/fleet-watch.md", ".claude/commands/fleet-watch.md"),
             (".claude/commands/install-anchor.md", ".claude/commands/install-anchor.md"),
             # Scaffolded skills (source under platforms/; Anchor /anchor is path-required base)
@@ -219,6 +222,7 @@ PLATFORMS: dict[str, dict] = {
             (".grok/skills/deploy/SKILL.md", ".grok/skills/deploy/SKILL.md"),
             (".grok/skills/optimize/SKILL.md", ".grok/skills/optimize/SKILL.md"),
             (".grok/skills/commit-prep/SKILL.md", ".grok/skills/commit-prep/SKILL.md"),
+            (".grok/skills/tag/SKILL.md", ".grok/skills/tag/SKILL.md"),
             (".grok/skills/fleet-watch/SKILL.md", ".grok/skills/fleet-watch/SKILL.md"),
             (".grok/skills/install-anchor/SKILL.md", ".grok/skills/install-anchor/SKILL.md"),
             # Scaffolded skills (source under platforms/; Anchor /anchor is path-required base)
