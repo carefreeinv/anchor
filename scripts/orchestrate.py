@@ -17,6 +17,13 @@ never touch .plans/** or the task spec, and the critic phase may write nothing.
 Role transitions are logged as explicit orchestrator events; a role violation is a
 hard error — the run still emits its outputs (plan/review text and the run JSON),
 then exits 4.
+
+A task that outgrows one context window degrades into a planned continuation
+rather than a truncated answer: near its declared ceiling the executor is told to
+emit a structured handoff (`anchor/templates/handoff.md`, parsed by
+`scripts/handoff.py`), and the orchestrator respawns a *fresh* context seeded with
+it — up to `--max-respawns` (default 2), after which the task is reported back to
+the planner as a decomposition error rather than respawned again.
 """
 from __future__ import annotations
 
@@ -30,6 +37,14 @@ from pathlib import Path
 
 from anchor_client import Endpoint, Fleet, has_required_footer, load_prompt
 from fleet_metrics import record_task_outcome
+from handoff import (
+    Handoff,
+    HandoffError,
+    accumulate,
+    build_continuation,
+    looks_like_handoff,
+    parse_handoff,
+)
 from roles import CRITIC, EXECUTOR, PLANNER, RoleCapabilities, check_role_writes
 from scope_gate import (
     ScopeConfig,
@@ -44,6 +59,57 @@ ROLE_VIOLATION_EXIT = 4
 
 BUDGET_CHARS_PER_TOKEN = 4  # matches prompt_tuner's conservative estimate
 
+# Fraction of an endpoint's declared ceiling at which the executor is told to hand
+# off rather than start work it cannot finish. Below 100% because a handoff must
+# itself fit in the window that writes it.
+HANDOFF_THRESHOLD = 0.8
+# A task needing a fourth window is decomposed wrong, not merely large.
+MAX_RESPAWNS = 2
+
+
+def estimate_tokens(text: str) -> int:
+    """Conservative token estimate for budget accounting.
+
+    Provider-reported usage is preferable and is what the orchestrator would use
+    where an endpoint exposes it, but ``Endpoint.chat`` returns completion text
+    only — so accounting falls back to the same chars-per-token estimate the
+    prompt tuner uses. It runs deliberately high rather than low: the cost of
+    over-estimating is an early handoff, the cost of under-estimating is a
+    truncated task.
+    """
+    return len(text) // BUDGET_CHARS_PER_TOKEN + 1
+
+
+def budget_pressure(text: str, target: Endpoint) -> float | None:
+    """Fraction of ``target``'s declared ceiling that ``text`` already consumes.
+
+    ``None`` when the endpoint declares no ``max_context`` — pressure against an
+    unknown ceiling is not a number, and inventing one would trigger handoffs on
+    endpoints that never needed them.
+    """
+    ceiling = target.quirks.get("max_context")
+    if not ceiling:
+        return None
+    return estimate_tokens(text) / int(ceiling)
+
+
+def handoff_directive(pressure: float) -> str:
+    """Instruction appended when a dispatch is close to its ceiling.
+
+    The trigger is the orchestrator's token accounting, not the model's own sense
+    of how much room it has left — mythos-core tells the executor to hand off near
+    its budget, and this is the harness making that measurable rather than felt.
+    """
+    return (
+        f"\n\nBUDGET NOTICE: this prompt already uses ~{pressure:.0%} of your serving "
+        "context ceiling. If you cannot finish this task AND its verification within "
+        "what remains, do NOT truncate, guess, or stop silently — emit a structured "
+        "handoff instead, following anchor/templates/handoff.md exactly: "
+        "## Done / ## Remaining / ## Decisions made / ## Files touched / ## Open concerns. "
+        "Every ## Remaining item needs its own 'Verify by:' line, and its scope may only "
+        "shrink. A handoff is a successful outcome here; a partial answer is not."
+    )
+
 
 def check_budget(text: str, target: Endpoint) -> tuple[bool, str]:
     """Refuse dispatch when `text` already exceeds `target`'s serving ceiling.
@@ -55,7 +121,7 @@ def check_budget(text: str, target: Endpoint) -> tuple[bool, str]:
     ceiling = target.quirks.get("max_context")
     if not ceiling:
         return True, ""
-    tokens = len(text) // BUDGET_CHARS_PER_TOKEN + 1
+    tokens = estimate_tokens(text)
     if tokens > int(ceiling):
         return False, (
             f"BUDGET: task text (~{tokens} tokens) exceeds {target.name}'s max_context "
@@ -249,9 +315,33 @@ def execute_task(task: str, plan: str, fleet: Fleet, verify_cmd: str | None,
             return {"task": task, "status": "failed-budget", "attempts": attempt,
                     "message": budget_msg}
 
+        # Approaching (but not over) the ceiling: instruct a handoff rather than
+        # letting the executor discover mid-answer that it has no room left.
+        pressure = budget_pressure(system + prompt, ep)
+        if pressure is not None and pressure >= HANDOFF_THRESHOLD:
+            print(f"[budget] {ep.name} at ~{pressure:.0%} of ceiling — handoff directive attached",
+                  file=sys.stderr)
+            prompt += handoff_directive(pressure)
+
         out = ep.chat([{"role": "system", "content": system},
                        {"role": "user", "content": prompt}], max_tokens=8192)
         last_out = out
+
+        # A handoff is a planned outcome, not a malformed result — check for it
+        # before the footer gate, which a handoff deliberately does not satisfy.
+        # A handoff that is not dispatchable (vague Remaining, no Verify by) gets
+        # exactly one corrective retry via the normal attempt loop, then escalates.
+        if looks_like_handoff(out):
+            try:
+                parsed = parse_handoff(out)
+            except HandoffError as exc:
+                print(f"[handoff] rejected: {exc}", file=sys.stderr)
+                history.append(str(exc))
+                continue
+            print(f"[handoff] {ep.name}: {len(parsed.done)} done, "
+                  f"{len(parsed.remaining)} remaining", file=sys.stderr)
+            return {"task": task, "status": "handoff", "attempts": attempt,
+                    "handoff": parsed, "output": out}
 
         # Fit check (mythos-core rule 11): a worker that judges the task a poor fit
         # for its tier says so up front — honor it immediately instead of burning
@@ -353,6 +443,76 @@ def execute_task(task: str, plan: str, fleet: Fleet, verify_cmd: str | None,
     return {"task": task, "status": status, "attempts": MAX_ATTEMPTS, "history": history}
 
 
+def execute_with_continuations(task: str, plan: str, fleet: Fleet, verify_cmd: str | None,
+                               hold_on_fail: bool, insist: bool = False,
+                               scope: ScopeConfig | None = None,
+                               metrics_ledger: Path | None = None,
+                               task_slug: str | None = None,
+                               outcome_sink: dict | None = None,
+                               max_respawns: int = MAX_RESPAWNS,
+                               events: list[dict] | None = None) -> dict:
+    """Run one task, respawning fresh contexts from handoffs up to the cap.
+
+    Each continuation is a *new* context seeded with the handoff — never a longer
+    conversation, which is the failure this whole mechanism exists to avoid. The
+    cap is the orchestrator's, not the model's: a task that hands off more times
+    than ``max_respawns`` is reported as a decomposition error for the planner
+    rather than respawned again.
+    """
+    spec = task
+    in_scope = tuple(scope.in_scope) if scope is not None else ()
+    history: Handoff | None = None
+    windows: list[dict] = []
+
+    def log(event: str, **details) -> None:
+        if events is not None:
+            log_event(events, event, **details)
+
+    for window in range(max_respawns + 1):
+        result = execute_task(
+            spec, plan, fleet, verify_cmd, hold_on_fail, insist, scope,
+            metrics_ledger=metrics_ledger, task_slug=task_slug,
+            outcome_sink=outcome_sink,
+        )
+        if result["status"] != "handoff":
+            if windows:
+                result["windows"] = window + 1
+                result["handoffs"] = windows
+            return result
+
+        history = accumulate(history, result["handoff"])
+        windows.append({"window": window + 1,
+                        "done": list(result["handoff"].done),
+                        "remaining": [item.title for item in history.remaining]})
+        log("handoff", window=window + 1, remaining=len(history.remaining))
+
+        if window >= max_respawns:
+            message = (
+                f"HANDOFF CAP: task still incomplete after {window + 1} context windows "
+                f"({max_respawns} respawns, the maximum). A task that cannot finish in "
+                "this many windows is decomposed wrong — send it back to the planner to "
+                "split rather than respawning a third continuation."
+            )
+            print(f"[handoff] {message}", file=sys.stderr)
+            log("handoff-cap-reached", windows=window + 1)
+            return {"task": task, "status": "hold" if hold_on_fail else "escalate",
+                    "attempts": result["attempts"], "message": message,
+                    "windows": window + 1, "handoffs": windows}
+
+        try:
+            spec = build_continuation(task, history, window=window + 2, in_scope=in_scope)
+        except HandoffError as exc:
+            # Scope widening smuggled into remaining work: the planner owns that
+            # decision, so stop rather than dispatch a continuation that grew.
+            print(f"[handoff] {exc}", file=sys.stderr)
+            log("handoff-scope-refused", window=window + 1)
+            return {"task": task, "status": "hold" if hold_on_fail else "escalate",
+                    "attempts": result["attempts"], "message": str(exc),
+                    "windows": window + 1, "handoffs": windows}
+
+    raise AssertionError("unreachable: loop returns on every path")  # pragma: no cover
+
+
 def review(goal: str, plan: str, results: list[dict], fleet: Fleet) -> str:
     ep = fleet.pick("critic")
     print(f"[review] {ep.name}", file=sys.stderr)
@@ -392,6 +552,11 @@ def main() -> None:
         help="JSONL path for claimed-vs-actual outcomes "
              "(default: <worktree>/var/fleet-metrics/outcomes.jsonl; "
              "pass empty string to disable)",
+    )
+    ap.add_argument(
+        "--max-respawns", type=int, default=MAX_RESPAWNS,
+        help=f"continuation windows allowed after a handoff (default: {MAX_RESPAWNS}; "
+             "0 disables continuations and escalates on the first handoff)",
     )
     ap.add_argument(
         "--task-slug",
@@ -470,10 +635,10 @@ def main() -> None:
         # and still have written outside its role's allowed paths, and a row written
         # at the verify step would score that run as an accurate claim.
         outcome_sink: dict = {}
-        r = execute_task(
+        r = execute_with_continuations(
             t, plan, fleet, args.verify, args.hold_on_fail, args.insist, scope,
             metrics_ledger=metrics_ledger, task_slug=task_slug,
-            outcome_sink=outcome_sink,
+            outcome_sink=outcome_sink, max_respawns=args.max_respawns, events=events,
         )
         role_verdict = guard(EXECUTOR, before, spec_deny)
         if role_verdict is not None and not role_verdict.ok:

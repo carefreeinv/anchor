@@ -3,7 +3,7 @@ sidebar_position: 3
 sidebar_label: Doctrine
 ---
 
-<!-- synced-from: anchor/ANCHOR.md @ 511bc69012245cef48557ef8e2282ee35d3cbdd7 -->
+<!-- synced-from: anchor/ANCHOR.md @ 72abcb3e7bb21ee56bdc49180307b6711d69a081 -->
 
 # The Doctrine
 
@@ -60,12 +60,13 @@ flowchart TB
 - **One task per fresh context** — context rot hits small models hardest; never run task chains in one conversation.
 - **Declared budget + pre-flight gate** — every task spec's `## Budget` (context window, output ceiling) comes from tooling, not the model's guess; mythos-core rule 13 makes every executor print a fixed 6-item pass/fail block (goal, acceptance criteria, files-in-scope, budget, tier fit, task size) before doing any work, and stop on the first FAIL instead of plowing ahead.
 - **Role separation** — planner → executor → critic as three clean contexts outperforms one long chat, even on the same model. In the orchestrated path the split is harness-enforced by the `scripts/roles.py` capability map (planner writes only `.plans/**`; executor never `.plans/**` or its own spec; critic writes nothing), applied per phase by `orchestrate.py` and by the project-orchestrator MCP server's role-scoped toolsets. Role transitions are logged orchestrator events; single-model sessions keep the discipline by prompt alone.
+- **Planned continuation instead of context rot** — a task that outgrows its window degrades into a continuation, not a truncated answer. Near its declared ceiling the executor emits a structured handoff (`templates/handoff.md`: done + how each item was checked, remaining work as ready-to-dispatch sub-specs, decisions made, files touched, open concerns) and the orchestrator respawns a **fresh** context seeded with it — never a longer conversation. Mythos-core rule 15 requires the handoff; `orchestrate.py` decides when one is due from its own token accounting, rejects remaining work with no verify command, and refuses a continuation whose scope grew. Cap: 2 continuations, then back to the planner.
 - **External verification** — tests, linters, builds, and diff-scope checks decide done-ness. Fleet runs pair the model’s claim with actual verify exits in `var/fleet-metrics/outcomes.jsonl`; aggregate with `fitness_report.py` and prefer those rates when updating model-fitness prose.
 - **Escalation paths** — ambiguity, architecture, and twice-failed tasks go up a tier by rule, not by judgment.
 
 ## The templates
 
-Four files in `.anchor/templates/` (source: `anchor/templates/`) are the doctrine's working surface: `plan.md` (planner output; Value / Preferred models when using `./.plans` — lane/lifecycle from **path**, not in-file Status/Lane), `task-spec.md` (the unit of dispatched work; its `## Budget` section is what mythos-core rule 13's pre-flight check reads), `review.md` (critic pass), `verification.md` (tooling-filled done-ness table). The `mythos-core.md` system prompt binds any model to the six behaviors and the required output footer.
+Five files in `.anchor/templates/` (source: `anchor/templates/`) are the doctrine's working surface: `plan.md` (planner output; Value / Preferred models when using `./.plans` — lane/lifecycle from **path**, not in-file Status/Lane), `task-spec.md` (the unit of dispatched work; its `## Budget` section is what mythos-core rule 13's pre-flight check reads), `handoff.md` (what an executor emits instead of truncating when it approaches that budget — done / remaining sub-specs / decisions / files touched / open concerns, parsed by `scripts/handoff.py` into the next window's spec), `review.md` (critic pass), `verification.md` (tooling-filled done-ness table). The `mythos-core.md` system prompt binds any model to the six behaviors and the required output footer.
 
 ## Tracked plans (`./.plans`)
 
