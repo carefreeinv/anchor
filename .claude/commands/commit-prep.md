@@ -94,6 +94,32 @@ changes, state in one line why no post is needed and stop here.
   doesn't do, and do not source "coming soon" from `.plans/`. Mark anything
   unverified `(unverified)`.
 
+## Handoff — what is not yet on `dev` (advisory, **not** a gate)
+
+After Gate 3, show what finished work is still sitting outside integration. This is
+**information, not a fourth gate**: unmerged branches are the normal state of a
+healthy repo, they never make prep red, and prep still commits nothing.
+
+1. If `scripts/pending_merges.py` exists, run it:
+   `python scripts/pending_merges.py --root <repo>` (add `--brief` for the one-line
+   form). It shows each unmerged branch, its target, how far ahead it is, its
+   worktree, the plan's current lane, and whether the plan is **held**.
+2. If the project has no Anchor scripts, fall back to
+   `git branch --no-merged dev` (or `develop`/`main`), or skip with a one-line note
+   outside Git.
+3. Print the ladder so the next step is obvious:
+
+   ```text
+   feature/<slug>  →  (/review Approve  |  /work scoped merge)  →  dev  →  (/review Promote)  →  main
+   ```
+
+Both routes onto `dev` are legitimate: **`/review` Approve** (AI critic + human
+survey) and a **`/work` scoped merge** (the operator answers `/work`'s culmination
+question in-session, and the branch passes the scoped-merge gate). Only `/review`'s
+empty-queue promotion moves `dev` → `main`.
+
+`/commit-prep` itself never commits, pushes, or merges — it only reports.
+
 ## If you hit a usage limit mid-prep
 
 Test-fix loops are where prep burns the most capacity. If a session/weekly cap or
@@ -106,7 +132,9 @@ prepped tree reported honestly is fine; gates are red until they actually pass.
 
 Summarize: which checks ran (and which were skipped and why), changelog path +
 entries (or why the project's convention put them elsewhere), blog post path (or
-the one-line reason none was written), and whether gates are **green** or **red**.
+the one-line reason none was written), whether gates are **green** or **red**, and
+the handoff line (what is still unmerged) — the last of which is advisory and never
+changes the green/red verdict.
 
 **Do not** run `git commit`, push, or merge as part of this command. Report gate
 status and stop.

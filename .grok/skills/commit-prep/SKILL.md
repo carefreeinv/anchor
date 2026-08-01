@@ -63,6 +63,28 @@ no post is needed.
   use it. Ground every claim in the shipped diff; mark anything unverified
   `(unverified)`.
 
+## Handoff — what is not yet on `dev` (advisory, **not** a gate)
+
+After Gate 3, show what finished work is still outside integration. **Information,
+not a fourth gate**: unmerged branches never make prep red, and prep still commits
+nothing.
+
+1. `python scripts/pending_merges.py --root <repo>` when the script exists
+   (`--brief` for the one-line form) — branch, target, ahead-count, worktree, the
+   plan's current lane, and whether it is **held**.
+2. No Anchor scripts → `git branch --no-merged dev`; outside Git → skip with a note.
+3. Print the ladder:
+
+   ```text
+   feature/<slug>  →  (/review Approve  |  /work scoped merge)  →  dev  →  (/review Promote)  →  main
+   ```
+
+Both routes onto `dev` are legitimate: **`/review` Approve** (AI critic + survey)
+and a **`/work` scoped merge** (operator answers `/work`'s culmination question
+in-session and the branch passes the scoped-merge gate). Only `/review`'s
+empty-queue promotion moves `dev` → `main`. `/commit-prep` itself never commits,
+pushes, or merges.
+
 ## If you hit a usage limit mid-prep
 
 Test-fix loops burn capacity. On a session/weekly cap or quota, follow capacity
@@ -72,5 +94,6 @@ for reset. Never finish a gate by weakening it — gates stay red until they pas
 
 ## Finish
 
-Summarize checks run/skipped, changelog path + entries, blog path (or why none), and
-whether gates are **green** or **red**. Stop — do not commit.
+Summarize checks run/skipped, changelog path + entries, blog path (or why none),
+whether gates are **green** or **red**, and the handoff line (what is still
+unmerged — advisory, never changes the verdict). Stop — do not commit.

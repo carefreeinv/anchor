@@ -169,12 +169,42 @@ When the project uses Git and work needs a branch:
    ```
    Edit only under the printed `WORKTREE=` path.
 2. Integration branch: **`dev`**, else **`develop`**. **If neither exists, create `dev` from `main` (else `master`)** (the ensure helper does this).
-3. Feature branch `feature/<slug>` inside that worktree; **`/work` never merges**
-   to dev/main (human [**`/review` Approve**](/skills/review) merges feature → dev;
-   empty-queue **Promote** merges dev → main).
+3. Feature branch `feature/<slug>` inside that worktree. `/work` may land it on
+   **integration only**, and only through the culmination question below; it
+   **never** merges to `main`/`master` and never merges unasked (human
+   [**`/review` Approve**](/skills/review) also merges feature → dev; empty-queue
+   **Promote** merges dev → main).
 4. When plan work is complete: run **`/commit-prep`** (prep only). If gates are
    **green**, stage + commit on the feature branch; optional push of that branch
-   only — never merge from `/work`.
+   only. Record the commit SHA — the merge gate checks it.
+
+### The culmination question
+
+After a green prep and a successful feature-branch commit, an **interactive** `/work`
+asks once what should happen to the finished plan:
+
+| Answer | Outcome |
+|---|---|
+| **Review it now** (default) | Plan → `review-needed/`; run [`/review`](/skills/review) |
+| **Merge to `dev` now** | Scoped-merge gate runs; on pass the branch lands on `dev` and the plan goes to `completed/` with a `## Handoff` note recording the skipped review |
+| **Hold for testing** | Plan → `review-needed/` with a `## Handoff` hold note; branch and worktree left intact |
+
+The merge answer trades the AI critic for a narrower mandate — the operator watched
+the work happen — so a mechanical gate proves nothing else rode along:
+**provenance** (branch HEAD is the commit this run made), **clean tree**, **file
+scope** (every changed path inside the run's declared touched set), **mergeable**
+(fast-forward preferred), **target is integration only**, and the **human answer**
+itself. Any failure falls back to `/review` and says which check refused.
+
+```bash
+python scripts/merge_feature.py --root <worktree> --slug <slug> \
+  --touched touched.txt --expect-head <sha> --dry-run
+# 0 would merge · 3 scope violation · 4 precondition · 5 conflict · 2 git error
+```
+
+Unattended runs — `work_once.py`, fleet workers, the coordinator MCP — never ask and
+never merge; they finish to `review-needed/` exactly as before. `main` is reached
+only through `/review`'s promotion survey.
 
 See [Fleet workers — isolation](/tooling/fleet-workers#4-isolation-git-multi-writer).
 

@@ -9,6 +9,13 @@ work is an explicit --slug/--path claim you own; a stalled foreign lease is take
 over only with --recover. Live workers extend their lease with --heartbeat. Other
 agents ignore foreign in-progress plans. Not a daemon; not a central assigner.
 
+**Never merges, never asks.** Interactive `/work` may land a finished branch on the
+integration branch when the operator answers its end-of-run culmination question
+(see `.claude/commands/work.md` §6). That path requires a human answer in-session,
+so it does not exist here: a headless worker finishes to `.plans/review-needed/` and
+leaves integration to `/review`. Do not add a flag that stands in for the answer —
+an unattended merge is exactly what the gate is designed to prevent.
+
 Usage:
   python work_once.py --list
   python work_once.py --once --tier mid --agent-id worker-1

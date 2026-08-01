@@ -16,7 +16,11 @@ Conventions: Python 3.10+, OpenAI-compatible endpoints only, model quirks belong
 **All agents, every project using Git:** run **`/commit-prep`** (tests, CHANGELOG,
 blog-if-warranted) **before any commit**. `/commit-prep` is **prep only** — it
 does not commit. After a **green** prep, if plan work is complete, stage + commit
-on the **feature branch** (see `/work`); never on main/dev; never auto-merge.
+on the **feature branch** (see `/work`); never on main/dev. **Never merge on your
+own initiative** — a `/work` session may land a feature branch on **`dev` only**
+when the operator answers its culmination question in-session *and* the
+scoped-merge gate passes; unattended runs never ask and never merge, and `main` is
+reached solely through `/review`'s promotion survey.
 Optional push of that feature branch only. Do not skip prep for “small” changes.
 See `.claude/commands/commit-prep.md` / Grok `commit-prep` / chat in `CHAT.md`.
 
