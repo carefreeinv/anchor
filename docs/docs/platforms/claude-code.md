@@ -1,10 +1,8 @@
-<!-- synced-from: platforms/claude-code/CLAUDE.md @ c7a254fc54abebd387a4bb542fd8dab9f1b19845 -->
+<!-- synced-from: platforms/claude-code/CLAUDE.md @ 48ff11005e170ca5927418498cc5571f50c25e85 -->
 ---
 sidebar_position: 1
 sidebar_label: Claude Code
 ---
-
-<!-- synced-from: platforms/claude-code/CLAUDE.md @ PENDING -->
 
 # Claude Code
 

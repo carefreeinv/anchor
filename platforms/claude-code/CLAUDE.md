@@ -22,7 +22,7 @@ For any task exceeding one session or one file:
 
 ## Prompt tuning before expensive runs
 
-Before dispatching any frontier-model run, rewrite the task on a cheap model into the task-spec template (goal, files in scope, acceptance criteria, definition of done). Three attempts on credits is the silent budget killer; one tuned attempt is the fix. `scripts/prompt_tuner.py` automates this.
+Before dispatching any frontier-model run, rewrite the task on a cheap model into the task-spec template (goal, files in scope, acceptance criteria, definition of done). Three attempts on credits is the silent budget killer; one tuned attempt is the fix. `.anchor/scripts/prompt_tuner.py` automates this.
 
 ## Standing rules (apply to every model tier)
 
@@ -47,7 +47,7 @@ Before dispatching any frontier-model run, rewrite the task on a cheap model int
 
 ## MCP
 
-Connect `mcp/anchor-prompts` (templates + tune/critique tools) and `mcp/model-fleet` (delegate steps to local/NIM endpoints) from this repo. Prefer delegating mechanical steps to the local fleet before spending plan-limit tokens.
+Connect `.anchor/mcp/anchor-prompts` (templates + tune/critique tools) and `.anchor/mcp/model-fleet` (delegate steps to local/NIM endpoints) from this repo. Prefer delegating mechanical steps to the local fleet before spending plan-limit tokens.
 
 ## /draft
 
@@ -69,7 +69,7 @@ stuck → `blocked/`; finish `in-progress/` → `review-needed/` (required; huma
 **`/review`** → `completed/`).
 Do not promote drafts from `/work` (use `/draft --promote`). If Preferred orchestrator is unset, frontier/near-frontier
 may act as temporary coordinator (`TEMPORARY-COORDINATOR:`). On Git projects: **worktree per agent**
-(`scripts/worktree_for_agent.py ensure --agent-id … --slug …`); feature-branch
+(`.anchor/scripts/worktree_for_agent.py ensure --agent-id … --slug …`); feature-branch
 from **`dev`**/`develop` (**create `dev` from main/master if missing**);
 **`/commit-prep` before commit**; `/work` never merges (human `/review` does). Command:
 `.claude/commands/work.md`.
@@ -139,7 +139,7 @@ Anchor base skill (which requires a foreign project path). Command:
 Probe this machine for **lean local models**, recommend fits, install links, and
 optional reconfigure draft. Scaffolded into **projects** (not part of
 the Anchor base skill set). Command: `.claude/commands/local-models.md`
-(source: `platforms/claude-code/commands/`). Uses `scripts/fit_device.py --probe`
+(source: `platforms/claude-code/commands/`). Uses `.anchor/scripts/fit_device.py --probe`
 when available.
 
 ## /commit-prep

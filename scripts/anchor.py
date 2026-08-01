@@ -204,6 +204,8 @@ PLATFORMS: dict[str, dict] = {
             (".claude/commands/optimize.md", ".claude/commands/optimize.md"),
             (".claude/commands/commit-prep.md", ".claude/commands/commit-prep.md"),
             (".claude/commands/tag.md", ".claude/commands/tag.md"),
+            (".claude/commands/push.md", ".claude/commands/push.md"),
+            (".claude/commands/release.md", ".claude/commands/release.md"),
             (".claude/commands/fleet-watch.md", ".claude/commands/fleet-watch.md"),
             (".claude/commands/install-anchor.md", ".claude/commands/install-anchor.md"),
             # Scaffolded skills (source under platforms/; Anchor /anchor is path-required base)
@@ -223,6 +225,8 @@ PLATFORMS: dict[str, dict] = {
             (".grok/skills/optimize/SKILL.md", ".grok/skills/optimize/SKILL.md"),
             (".grok/skills/commit-prep/SKILL.md", ".grok/skills/commit-prep/SKILL.md"),
             (".grok/skills/tag/SKILL.md", ".grok/skills/tag/SKILL.md"),
+            (".grok/skills/push/SKILL.md", ".grok/skills/push/SKILL.md"),
+            (".grok/skills/release/SKILL.md", ".grok/skills/release/SKILL.md"),
             (".grok/skills/fleet-watch/SKILL.md", ".grok/skills/fleet-watch/SKILL.md"),
             (".grok/skills/install-anchor/SKILL.md", ".grok/skills/install-anchor/SKILL.md"),
             # Scaffolded skills (source under platforms/; Anchor /anchor is path-required base)

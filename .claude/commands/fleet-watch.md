@@ -30,7 +30,8 @@ Print the resolved absolute path.
 | `--install` | Status + install recommended timers (confirm if consent unclear) |
 | `--tiers mid,small` | Constrain proposed workers |
 
-Find `scripts/fleet_watch.py` (Anchor `scripts/` or project fleet copy). Example:
+Find `fleet_watch.py` (Anchor's own `scripts/`, or `.anchor/scripts/` in a
+fleet-scaffolded project). Example:
 
 ```bash
 python3 "$SCRIPTS/fleet_watch.py" --project "$PROJECT" --status

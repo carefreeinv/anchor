@@ -99,6 +99,24 @@ def test_plan_copy_scaffolds_tag_skill_for_both_platforms(tmp_path):
     assert ".grok/skills/tag/SKILL.md" in dests
 
 
+def test_plan_copy_scaffolds_push_skill_for_both_platforms(tmp_path):
+    # /push (branch-only publish) is part of the release-workflow trio
+    # (/tag, /push, /release) and must reach every scaffolded project.
+    plan = anchor.plan_copy(tmp_path, ["claude", "grok"], want_fleet=False)
+    dests = {str(dest.relative_to(tmp_path)) for _, dest in plan}
+    assert ".claude/commands/push.md" in dests
+    assert ".grok/skills/push/SKILL.md" in dests
+
+
+def test_plan_copy_scaffolds_release_skill_for_both_platforms(tmp_path):
+    # /release (branch intake, exclusion prompt, plan-diff review, merge/tag/push)
+    # completes the release-workflow trio (/tag, /push, /release).
+    plan = anchor.plan_copy(tmp_path, ["claude", "grok"], want_fleet=False)
+    dests = {str(dest.relative_to(tmp_path)) for _, dest in plan}
+    assert ".claude/commands/release.md" in dests
+    assert ".grok/skills/release/SKILL.md" in dests
+
+
 def test_plan_copy_never_scaffolds_config_for_either_platform(tmp_path):
     # /config sets the *operator's* Anchor defaults and runs ./config.sh from the
     # Anchor checkout — it has nothing to act on inside a scaffolded project, so it

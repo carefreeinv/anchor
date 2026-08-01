@@ -14,7 +14,10 @@ from pathlib import Path
 from mcp.server.fastmcp import FastMCP
 
 
-def _project_root() -> Path:
+def _bootstrap_root() -> Path:
+    """Minimal root guess used only to locate ``scripts/`` before anchor_client
+    is importable. Mirrors anchor_client.project_root_from's mcp/ case; REPO is
+    reassigned to the real resolver's output right after the import below."""
     here = Path(__file__).resolve().parent  # …/mcp/anchor-prompts or …/.anchor/mcp/anchor-prompts
     if here.parent.name == "mcp" and here.parent.parent.name == ".anchor":
         return here.parent.parent.parent
@@ -23,11 +26,15 @@ def _project_root() -> Path:
     return here.parents[2]
 
 
-REPO = _project_root()
+REPO = _bootstrap_root()
 for _scripts in (REPO / ".anchor" / "scripts", REPO / "scripts"):
     if _scripts.is_dir():
         sys.path.insert(0, str(_scripts))
         break
+
+from anchor_client import project_root_from  # noqa: E402
+
+REPO = project_root_from(Path(__file__))
 
 mcp = FastMCP("anchor-prompts")
 

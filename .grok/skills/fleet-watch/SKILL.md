@@ -62,7 +62,7 @@ the user wants only an install plan for after scaffold.
 Find a directory that contains `fleet_watch.py` and `work_once.py`:
 
 - `$(git rev-parse --show-toplevel)/scripts` when inside Anchor
-- or `scripts/` under the target project if fleet-scaffolded
+- or `.anchor/scripts/` under the target project if fleet-scaffolded
 - or absolute Anchor install the user already uses
 
 Do not dump a script tutorial in the reply unless something fails.

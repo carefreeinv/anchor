@@ -4,8 +4,6 @@ sidebar_position: 5
 sidebar_label: Generic Chat
 ---
 
-<!-- synced-from: platforms/chat/CHAT.md @ PENDING -->
-
 # Generic Chat
 
 Install: paste `platforms/chat/CHAT.md`'s session preamble into custom instructions

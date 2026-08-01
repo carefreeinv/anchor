@@ -50,7 +50,7 @@ You are one worker in a verified pipeline, not the whole pipeline. Speed is wort
   Preferred matching is **mid** (see plan template) — high effort does not promote
   you to frontier for `/work` fit.
 - **`/work` cost right-size:** before skipping `mid` plans or burning high effort on
-  them, probe for a cheaper local/fleet executor (`scripts/endpoints.yaml`); if none
+  them, probe for a cheaper local/fleet executor (`.anchor/scripts/endpoints.yaml`); if none
   are reachable, emit `/effort low` (or dispatch via `work_once.py --endpoint …`)
   rather than a dead stop. Full contract: `.grok/skills/work/SKILL.md` (Cheaper
   capacity probe + Reasoning effort).
@@ -66,7 +66,7 @@ You are one worker in a verified pipeline, not the whole pipeline. Speed is wort
 ## Working with this repo's tooling
 
 - Task specs come from `.anchor/templates/task-spec.md`; demand one if handed a vague task.
-- If MCP is supported in your Grok Build environment, connect `mcp/anchor-prompts` and call `tune_prompt` on any vague task before starting.
+- If MCP is supported in your Grok Build environment, connect `.anchor/mcp/anchor-prompts` and call `tune_prompt` on any vague task before starting.
 
 ## /draft
 
@@ -89,7 +89,7 @@ stuck → `blocked/`; finish `in-progress/` → `review-needed/` (required; huma
 Do not promote drafts from `/work` (use `/draft --promote`). If Preferred orchestrator is unset, frontier/near-frontier
 (including Grok 4.5 as session lead) may act as temporary coordinator
 (`TEMPORARY-COORDINATOR:`). On Git projects: **worktree per agent**
-(`scripts/worktree_for_agent.py ensure --agent-id … --slug …`); feature-branch
+(`.anchor/scripts/worktree_for_agent.py ensure --agent-id … --slug …`); feature-branch
 from **`dev`**/`develop` (**create `dev` from main/master if missing**);
 **`/commit-prep` before commit**; `/work` never merges (human `/review` does). Skill:
 `.grok/skills/work/SKILL.md`.
@@ -164,7 +164,7 @@ Probe this machine for **lean local models**, recommend fits, install links, and
 optional reconfigure draft. Scaffolded into **projects** (not part of
 the Anchor base skill set). Skill: `.grok/skills/local-models/SKILL.md`
 (source: `platforms/grok-build/skills/local-models/`). Uses
-`scripts/fit_device.py --probe` when fleet/scripts are available.
+`.anchor/scripts/fit_device.py --probe` when fleet/scripts are available.
 
 ## /commit-prep
 

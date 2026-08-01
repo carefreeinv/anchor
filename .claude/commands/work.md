@@ -11,6 +11,12 @@ markdown under **`.plans/`** (dotdir — use that path explicitly; many UIs hide
 If `.plans/README.md` exists, treat it as the process contract. This command is
 the entrypoint; do not re-derive priority rules from chat history alone.
 
+**Fleet script paths in this file assume the Anchor source tree's own
+`scripts/`.** This same file is also scaffolded verbatim into every dependent
+project, where fleet tooling lives under **`.anchor/scripts/`** instead —
+substitute that prefix throughout when `scripts/<name>.py` isn't at the
+project root but `.anchor/scripts/<name>.py` is.
+
 **Path is authoritative.** A plan’s lane and lifecycle are determined only by
 which directory it lives in — never by `Lane:` or `Status:` fields inside the
 file. Ignore those fields if present; do not write them.

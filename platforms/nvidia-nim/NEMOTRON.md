@@ -12,7 +12,7 @@ docker run --gpus all --rm -p 8000:8000 \
 # → OpenAI-compatible API at http://localhost:8000/v1
 ```
 
-Register the endpoint in `scripts/endpoints.yaml` under the `reasoner` tier.
+Register the endpoint in `.anchor/scripts/endpoints.yaml` under the `reasoner` tier.
 
 ## The reasoning toggle — the key Nemotron quirk
 
@@ -48,7 +48,7 @@ This gives you the orchestrator pattern on a single deployed model: expensive de
 
 - Nemotron Super/Ultra (thinking on) is a credible stand-in for the frontier planner/critic when Fable-class models are unavailable or credit-metered.
 - Nemotron Nano works as an executor on task specs; keep specs self-contained.
-- Behind NIM everything is OpenAI-compatible, so `scripts/orchestrate.py` and `mcp/model-fleet` work unchanged.
+- Behind NIM everything is OpenAI-compatible, so `.anchor/scripts/orchestrate.py` and `.anchor/mcp/model-fleet` work unchanged.
 
 ## Tracked plans (`./.plans`)
 

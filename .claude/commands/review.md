@@ -14,6 +14,12 @@ Two modes, **one decision per invocation**:
    and integration is **ahead of mainline**: evidence for `main`…`dev`, survey.
    **Promote** merges integration → **mainline** (`main` / `master`).
 
+**Fleet script paths in this file assume the Anchor source tree's own
+`scripts/`.** This same file is also scaffolded verbatim into every dependent
+project, where fleet tooling lives under **`.anchor/scripts/`** instead —
+substitute that prefix throughout when `scripts/<name>.py` isn't at the
+project root but `.anchor/scripts/<name>.py` is.
+
 This is **not** free-form “code review any PR.” Ad-hoc diffs belong to the
 platform’s code-review tools. This skill’s home is **`review-needed/`** plus
 the empty-queue promotion path.

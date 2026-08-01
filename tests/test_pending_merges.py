@@ -1,8 +1,10 @@
 """Tests for scripts/pending_merges.py."""
 from __future__ import annotations
 
+import os
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 import pytest
@@ -43,6 +45,18 @@ def _commit(root: Path, name: str, content: str = "x") -> None:
     (root / name).write_text(content, encoding="utf-8")
     _git(root, "add", name)
     _git(root, "commit", "-m", f"add {name}")
+
+
+def _commit_days_ago(root: Path, name: str, days: float, content: str = "x") -> None:
+    """Commit with both author and committer date backdated ``days`` ago."""
+    (root / name).write_text(content, encoding="utf-8")
+    _git(root, "add", name)
+    date = f"{int(time.time() - days * 86400)} +0000"
+    subprocess.run(
+        ["git", "commit", "-m", f"add {name}", f"--date={date}"],
+        cwd=str(root), check=True, capture_output=True, text=True,
+        env={**os.environ, "GIT_COMMITTER_DATE": date},
+    )
 
 
 def test_merge_target_routing():
@@ -132,3 +146,74 @@ def test_cli_json(git_repo: Path):
     )
     assert r.returncode == 1  # pending exists
     assert "feature/x" in r.stdout
+
+
+def test_since_days_excludes_old_branch(git_repo: Path):
+    _git(git_repo, "checkout", "-b", "dev")
+    _git(git_repo, "checkout", "-b", "feature/stale")
+    _commit_days_ago(git_repo, "old.txt", days=60)
+    _git(git_repo, "checkout", "dev")
+
+    pending = find_pending(git_repo, since_days=30)
+    assert {p.branch for p in pending} == set()
+
+    pending_all = find_pending(git_repo, since_days=None)
+    assert "feature/stale" in {p.branch for p in pending_all}
+
+
+def test_since_days_keeps_completed_plan_branch_regardless_of_age(git_repo: Path):
+    comp = git_repo / ".plans" / "completed"
+    comp.mkdir(parents=True)
+    (comp / "2026-07-09-cool-thing.md").write_text("# plan\n", encoding="utf-8")
+
+    _git(git_repo, "checkout", "-b", "dev")
+    _git(git_repo, "checkout", "-b", "feature/cool-thing")
+    _commit_days_ago(git_repo, "old.txt", days=60)
+    _git(git_repo, "checkout", "dev")
+
+    pending = find_pending(git_repo, since_days=30)
+    branches = {p.branch for p in pending}
+    assert "feature/cool-thing" in branches  # completed plan survives the recency filter
+
+
+def test_since_days_keeps_recent_branch(git_repo: Path):
+    _git(git_repo, "checkout", "-b", "dev")
+    _git(git_repo, "checkout", "-b", "feature/fresh")
+    _commit(git_repo, "new.txt")
+    _git(git_repo, "checkout", "dev")
+
+    pending = find_pending(git_repo, since_days=30)
+    assert "feature/fresh" in {p.branch for p in pending}
+
+
+def test_last_commit_epoch_populated(git_repo: Path):
+    _git(git_repo, "checkout", "-b", "dev")
+    _git(git_repo, "checkout", "-b", "feature/x")
+    before = time.time()
+    _commit(git_repo, "f.txt")
+    after = time.time()
+    _git(git_repo, "checkout", "dev")
+
+    pending = find_pending(git_repo)
+    feat = next(p for p in pending if p.branch == "feature/x")
+    assert before - 5 <= feat.last_commit_epoch <= after + 5
+
+
+def test_cli_since_and_all_pending_flags(git_repo: Path):
+    _git(git_repo, "checkout", "-b", "dev")
+    _git(git_repo, "checkout", "-b", "feature/stale")
+    _commit_days_ago(git_repo, "old.txt", days=60)
+    _git(git_repo, "checkout", "dev")
+    script = REPO / "scripts" / "pending_merges.py"
+
+    r = subprocess.run(
+        [sys.executable, str(script), "--root", str(git_repo), "--since", "30"],
+        capture_output=True, text=True, check=False,
+    )
+    assert "feature/stale" not in r.stdout
+
+    r = subprocess.run(
+        [sys.executable, str(script), "--root", str(git_repo), "--since", "30", "--all-pending"],
+        capture_output=True, text=True, check=False,
+    )
+    assert "feature/stale" in r.stdout

@@ -10,9 +10,9 @@ Qwen3 supports hybrid reasoning. Control per message:
 
 - Append `/think` for planner/critic roles — sampling: temp 0.6, top_p 0.95, top_k 20. **Never greedy in thinking mode** (causes repetition loops).
 - Append `/no_think` for executor steps — temp 0.7, top_p 0.8.
-- Do not include reasoning content from previous turns back into context (strip `<think>` blocks in multi-turn use; `scripts/` helpers do this).
+- Do not include reasoning content from previous turns back into context (strip `<think>` blocks in multi-turn use; `.anchor/scripts/` helpers do this).
 
-Registry mapping for the fleet scripts (`scripts/fit_device.py` emits this for you):
+Registry mapping for the fleet scripts (`.anchor/scripts/fit_device.py` emits this for you):
 
 ```yaml
 quirks:
