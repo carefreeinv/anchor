@@ -429,10 +429,15 @@ this run's touched set: plan `Touches` + the plan's own lane move + what
 **human answer in this session**.
 
 ```bash
-python scripts/merge_feature.py --root <worktree> --slug <slug> \
+python scripts/merge_feature.py --root <checkout> --slug <slug> \
   --touched <file-with-one-path-per-line> --expect-head <sha> --dry-run
 # 0 would merge · 3 scope · 4 precondition · 5 conflict · 2 git error
 ```
+
+`--expect-head` is **required** (provenance must hold). Point `--root` at a checkout
+where the integration branch is **free** — git will not check out a branch live in
+another worktree, so from `var/worktrees/<agent>` run it against the main checkout;
+the gate detects the conflict up front and names the path to use.
 
 Drop `--dry-run` to land it. Never pass the operator's answer to the helper — check
 6 is yours to hold. **Rejected by design:** landing only the in-scope paths when the

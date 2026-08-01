@@ -47,14 +47,16 @@ hold:
 `main`/`master` target aborts the path) · and the **human answer** itself.
 
 ```bash
-python scripts/merge_feature.py --root <worktree> --slug <slug> \
+python scripts/merge_feature.py --root <checkout> --slug <slug> \
   --touched touched.txt --expect-head <sha> --dry-run
 # 0 would merge · 3 scope violation · 4 precondition · 5 conflict · 2 git error
 ```
 
 Any failure falls back to `/review`, naming the check that refused. Refusing is
 always the safe outcome — the failure mode is a false refusal, never a silent
-over-merge.
+over-merge. That principle is why the gate refuses on *missing* facts too: an empty
+touched set, an absent `--expect-head`, or a `--base` that would narrow the diff are
+all refusals rather than checks quietly skipped.
 
 The helper has **no `--yes` flag**, on purpose. Five checks are mechanical; the
 sixth is the operator's answer, and a flag is exactly the inference this path

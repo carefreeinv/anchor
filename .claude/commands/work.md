@@ -446,10 +446,17 @@ All six must hold, else **refuse and fall back to `/review`**:
 Checks 1–5 are mechanical; run them with the helper rather than by eye:
 
 ```bash
-python scripts/merge_feature.py --root <worktree> --slug <slug> \
+python scripts/merge_feature.py --root <checkout> --slug <slug> \
   --touched <file-with-one-path-per-line> --expect-head <sha you committed> --dry-run
 # exit 0 would merge · 3 scope violation · 4 precondition · 5 conflict · 2 git error
 ```
+
+`--expect-head` is **required** — provenance is a must-hold condition, and without
+the SHA there is nothing to check the branch against. Point `--root` at a checkout
+where the integration branch is **free**: git refuses to check out a branch that is
+live in another worktree, so with `/work` in `var/worktrees/<agent>` and your main
+checkout on `dev`, run it against the main checkout. The gate detects that conflict
+up front and names the path to re-run against instead of failing mid-merge.
 
 Drop `--dry-run` to land it. The helper never pushes, never force-updates, never
 deletes a branch, and refuses mainline targets. **Do not** pass the operator's

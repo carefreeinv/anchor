@@ -41,7 +41,7 @@ import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from scope_gate import check_scope
+from scope_gate import check_scope, clean_entry
 
 EXIT_OK = 0
 EXIT_GIT = 2
@@ -86,6 +86,7 @@ def evaluate_gate(
     touched: tuple[str, ...],
     conflicts: tuple[str, ...] = (),
     ff_possible: bool = True,
+    target_worktree: str | None = None,
 ) -> MergeVerdict:
     """Pure gate: given the facts, may this branch land on ``target``?
 
@@ -108,7 +109,34 @@ def evaluate_gate(
             ok=False, code=EXIT_PRECONDITION, reason="no-target",
             message="refuse: no integration branch (dev/develop) resolved.",
         )
-    if expect_head and head != expect_head:
+    if target not in INTEGRATION_ORDER:
+        return MergeVerdict(
+            ok=False, code=EXIT_PRECONDITION, reason="target-not-integration",
+            message=(
+                f"refuse: '{target}' is not an integration branch. This path lands on "
+                f"{' or '.join(INTEGRATION_ORDER)} only — anything else is a merge the "
+                f"operator did not authorize by answering /work's question."
+            ),
+        )
+    if target_worktree:
+        return MergeVerdict(
+            ok=False, code=EXIT_PRECONDITION, reason="target-checked-out-elsewhere",
+            message=(
+                f"refuse: '{target}' is checked out at {target_worktree}, so the merge "
+                f"cannot run here. Re-run with --root {target_worktree}, or free that "
+                f"worktree first. (Reported now rather than after the gate passes.)"
+            ),
+        )
+    if not expect_head:
+        return MergeVerdict(
+            ok=False, code=EXIT_PRECONDITION, reason="provenance-missing",
+            message=(
+                "refuse: --expect-head is required. Provenance is a must-hold condition, "
+                "not an optional extra: without the SHA this run committed there is no "
+                "way to tell the branch has not moved since."
+            ),
+        )
+    if head != expect_head:
         return MergeVerdict(
             ok=False, code=EXIT_PRECONDITION, reason="provenance",
             message=(
@@ -124,6 +152,19 @@ def evaluate_gate(
             offending=dirty,
         )
 
+    # check_scope treats an empty scope as "gate inactive" — correct for its own
+    # CLI (specs predating ## Files in scope), wrong here: /work always has a
+    # touched set, so an empty one means the caller lost it. Refuse rather than
+    # silently pass every path.
+    if not [entry for entry in touched if entry.strip()]:
+        return MergeVerdict(
+            ok=False, code=EXIT_PRECONDITION, reason="no-touched-set",
+            message=(
+                "refuse: the touched set is empty, so there is nothing to check the "
+                "branch against. An empty set disables the scope check instead of "
+                "satisfying it — pass the paths this run declared it touched."
+            ),
+        )
     verdict = check_scope(list(changed), list(touched))
     if not verdict.ok:
         return MergeVerdict(
@@ -169,12 +210,20 @@ def local_branches(root: Path) -> set[str]:
 def resolve_target(root: Path, explicit: str | None = None) -> str:
     """The integration branch this merge would land on.
 
+    An explicit ``--target`` is *resolved through git* (``rev-parse
+    --abbrev-ref``) before it is trusted, so a ref spelling like
+    ``refs/heads/main`` cannot slip past a name comparison against ``MAINLINE``.
+    Whether the resolved name is actually allowed is :func:`evaluate_gate`'s
+    call, not this function's.
+
     Never creates a branch: creation belongs to ``worktree_for_agent.py`` at claim
     time, and a merge path that invents its own target is a merge path that can
     surprise you about where the code went.
     """
     if explicit:
-        return explicit
+        p = _git(root, "rev-parse", "--abbrev-ref", explicit, check=False)
+        resolved = p.stdout.strip() if p.returncode == 0 else ""
+        return resolved or explicit
     branches = local_branches(root)
     for name in INTEGRATION_ORDER:
         if name in branches:
@@ -196,8 +245,43 @@ def dirty_paths(root: Path) -> tuple[str, ...]:
 
 
 def changed_files(root: Path, base: str, head: str) -> tuple[str, ...]:
-    out = _git(root, "diff", "--name-only", f"{base}..{head}").stdout
+    """Every path the range touches, **including** the source side of a rename.
+
+    ``--no-renames`` is load-bearing, not a style choice: with rename detection on,
+    ``git mv secrets/creds.yml app/creds.yml`` reports only the destination, so a
+    branch can delete a file from an undeclared directory and pass a scope check
+    that never sees the path it removed.
+    """
+    out = _git(root, "diff", "--no-renames", "--name-only", f"{base}..{head}").stdout
     return tuple(p.strip() for p in out.splitlines() if p.strip())
+
+
+def target_worktree(root: Path, target: str) -> str | None:
+    """Path of another worktree holding ``target`` checked out, if any.
+
+    git refuses to check out a branch that is live in a second worktree — the
+    normal Anchor topology, where /work runs in ``var/worktrees/<agent>`` while the
+    operator's main checkout sits on ``dev``. Detecting it up front turns a bare
+    "git error" *after* a passing gate into a precondition refusal that names the
+    fix, and makes ``--dry-run`` tell the truth about whether a real run would work.
+    """
+    try:
+        text = _git(root, "worktree", "list", "--porcelain").stdout
+    except GitError:
+        return None
+    here = root.resolve()
+    path = ""
+    for line in text.splitlines():
+        if line.startswith("worktree "):
+            path = line[len("worktree "):].strip()
+        elif line.startswith("branch "):
+            if line[len("branch "):].strip().removeprefix("refs/heads/") == target:
+                try:
+                    if Path(path).resolve() != here:
+                        return path
+                except OSError:
+                    return path
+    return None
 
 
 def merge_base(root: Path, a: str, b: str) -> str:
@@ -209,6 +293,17 @@ def is_ancestor(root: Path, maybe_ancestor: str, ref: str) -> bool:
                 check=False).returncode == 0
 
 
+def _restore_point(root: Path) -> str:
+    """What to check out again afterwards — a branch name, or a SHA if detached.
+
+    ``rev-parse --abbrev-ref HEAD`` answers the literal string ``HEAD`` on a
+    detached head, and checking *that* out would strand the tree at the target's
+    tip instead of where it started.
+    """
+    name = current_branch(root)
+    return head_sha(root, "HEAD") if name == "HEAD" else name
+
+
 def probe_conflicts(root: Path, target: str, branch: str) -> tuple[str, ...]:
     """Conflicting paths for a non-fast-forward merge, leaving the tree as found.
 
@@ -217,7 +312,7 @@ def probe_conflicts(root: Path, target: str, branch: str) -> tuple[str, ...]:
     wrong guess here would either block a clean merge or promise one that fails
     halfway. Always restores the original branch.
     """
-    original = current_branch(root)
+    original = _restore_point(root)
     try:
         _git(root, "checkout", target)
         p = _git(root, "merge", "--no-commit", "--no-ff", branch, check=False)
@@ -240,7 +335,7 @@ def land(root: Path, branch: str, target: str, *, title: str = "") -> str:
     abort on conflict) so the two authorization paths cannot drift into different
     merge behavior. Never pushes.
     """
-    original = current_branch(root)
+    original = _restore_point(root)
     try:
         _git(root, "checkout", target)
         if _git(root, "merge", "--ff-only", branch, check=False).returncode != 0:
@@ -259,10 +354,13 @@ def read_touched(source: str) -> tuple[str, ...]:
     text = sys.stdin.read() if source == "-" else Path(source).read_text(encoding="utf-8")
     out: list[str] = []
     for line in text.splitlines():
-        # Order matters: a plan's Touches column yields "- `app/`", so the bullet
-        # comes off before the backticks.
-        entry = line.strip().lstrip("-* ").strip().strip("`").strip()
-        if entry and not entry.startswith("#"):
+        if not line.strip() or line.strip().startswith("#"):
+            continue
+        # scope_gate.clean_entry strips exactly one leading bullet plus backticks
+        # and trailing notes. Reused rather than re-derived: a naive lstrip("-* ")
+        # eats the leading glob of "*.md" and "**/tests/*.py".
+        entry = clean_entry(line)
+        if entry:
             out.append(entry)
     return tuple(out)
 
@@ -292,16 +390,33 @@ def run(root: Path, slug: str, touched: tuple[str, ...], *, base: str | None = N
         ), None
 
     head = head_sha(root, branch)
-    merge_from = base or merge_base(root, resolved, branch)
+    natural_base = merge_base(root, resolved, branch)
+    if base:
+        # A caller-supplied base narrows the diff the scope check sees, so an
+        # unvalidated one is a way to make that check vacuous — `--base <head>`
+        # yields an empty change set and everything "passes". It must be an
+        # ancestor of the branch head *and* no newer than the real merge-base.
+        if not is_ancestor(root, base, head) or not is_ancestor(root, base, natural_base):
+            return MergeVerdict(
+                ok=False, code=EXIT_PRECONDITION, reason="bad-base",
+                message=(
+                    f"refuse: --base {base[:12]} is not an ancestor of both {branch} and "
+                    f"the merge-base with {resolved} ({natural_base[:12]}). A base inside "
+                    f"the range hides the commits before it from the scope check."
+                ),
+            ), None
+    merge_from = base or natural_base
     ff = is_ancestor(root, resolved, branch)
     dirty = dirty_paths(root)
     changed = changed_files(root, merge_from, head)
+    blocking_worktree = target_worktree(root, resolved)
 
     # A conflict probe checks out branches; refuse first on anything cheaper so a
     # dirty tree is never disturbed by a probe it was going to fail anyway.
     verdict = evaluate_gate(
         slug=slug, branch=branch, target=resolved, head=head, expect_head=expect_head,
         dirty=dirty, changed=changed, touched=touched, ff_possible=ff,
+        target_worktree=blocking_worktree,
     )
     if not verdict.ok:
         return verdict, None
@@ -310,6 +425,7 @@ def run(root: Path, slug: str, touched: tuple[str, ...], *, base: str | None = N
     verdict = evaluate_gate(
         slug=slug, branch=branch, target=resolved, head=head, expect_head=expect_head,
         dirty=dirty, changed=changed, touched=touched, conflicts=conflicts, ff_possible=ff,
+        target_worktree=blocking_worktree,
     )
     if not verdict.ok or dry_run:
         return verdict, None
@@ -326,7 +442,7 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--touched", required=True,
                     help="file with one touched path/glob per line, or '-' for stdin")
     ap.add_argument("--base", help="merge-base recorded at claim time (default: computed)")
-    ap.add_argument("--expect-head",
+    ap.add_argument("--expect-head", required=True,
                     help="SHA this run committed; refuses if the branch moved since")
     ap.add_argument("--target", help="integration branch (default: dev, else develop)")
     ap.add_argument("--title", default="", help="plan title for the merge commit message")
@@ -344,8 +460,9 @@ def main(argv: list[str] | None = None) -> int:
         print(f"merge-feature: {exc}", file=sys.stderr)
         return EXIT_GIT
     except OSError as exc:
-        print(f"merge-feature: {exc}", file=sys.stderr)
-        return EXIT_GIT
+        # Unreadable --touched file: the caller's precondition, not git's fault.
+        print(f"merge-feature: cannot read --touched: {exc}", file=sys.stderr)
+        return EXIT_PRECONDITION
 
     print(verdict.report())
     if verdict.ok and args.dry_run:

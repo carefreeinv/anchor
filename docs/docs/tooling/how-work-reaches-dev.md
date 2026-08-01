@@ -49,10 +49,20 @@ proves the branch is exactly what the run thinks it is. All of it must hold:
    never a config default, never an earlier "yes".
 
 ```bash
-python scripts/merge_feature.py --root <worktree> --slug <slug> \
+python scripts/merge_feature.py --root <checkout> --slug <slug> \
   --touched touched.txt --expect-head <sha> --dry-run
 # 0 would merge · 3 scope violation · 4 precondition · 5 conflict · 2 git error
 ```
+
+`--expect-head` is **required**: without the SHA the run committed there is no way
+to tell the branch has not moved since, and provenance is a must-hold condition
+rather than an optional extra.
+
+Point `--root` at a checkout where the integration branch is **free**. Git will not
+check out a branch that is live in another worktree, which is the normal Anchor
+topology — `/work` in `var/worktrees/<agent>`, your main checkout sitting on `dev`.
+The gate detects that up front and refuses with the path to re-run against, rather
+than passing and then failing mid-merge.
 
 Any failure falls back to `/review`, naming the check that refused. Refusing is
 always the safe outcome: a scope violation in particular means the branch carries
@@ -76,7 +86,6 @@ python scripts/pending_merges.py --json     # machines
 
 A plan whose body carries a `## Handoff` hold note shows as **held** — finished work
 its operator deliberately parked for testing, which is visibly different from work
-nobody has looked at yet. [`/commit-prep`](/skills/work) prints this table after its
-three gates as **advisory** output: unmerged branches are the normal state of a
+nobody has looked at yet. `/commit-prep` prints this table after its three gates as **advisory** output: unmerged branches are the normal state of a
 healthy repo, they never make prep red, and prep itself never commits, pushes, or
 merges.

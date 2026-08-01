@@ -283,3 +283,23 @@ def test_cli_brief_prints_one_line(repo_with_feature: Path):
 
     assert r.returncode == 0
     assert len(r.stdout.strip().splitlines()) == 1
+
+
+def test_prose_mentioning_hold_is_not_a_held_plan(repo_with_feature: Path):
+    """'hold off on the follow-up' is discussion, not the documented hold note."""
+    _plan(repo_with_feature, "review-needed", "cool-thing.md",
+          "# plan\n\n## Handoff\n\nmerged to dev by /work 2026-08-01 — no /review sign-off\n"
+          "Decided to hold off on the follow-up refactor.\n")
+
+    feat = next(p for p in find_pending(repo_with_feature) if p.branch == "feature/cool-thing")
+
+    assert feat.held is False
+
+
+def test_held_note_written_as_held_is_detected(repo_with_feature: Path):
+    _plan(repo_with_feature, "review-needed", "cool-thing.md",
+          "# plan\n\n## Handoff\n\n- held — waiting on staging data — 2026-08-01\n")
+
+    feat = next(p for p in find_pending(repo_with_feature) if p.branch == "feature/cool-thing")
+
+    assert feat.held is True

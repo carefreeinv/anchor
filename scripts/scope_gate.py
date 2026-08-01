@@ -221,7 +221,14 @@ def enforce_config(cfg: ScopeConfig, *, changes: list[str] | None = None) -> Sco
     return enforce_scope(cfg.root, cfg.in_scope, cfg.allowed_generated, changes=changes)
 
 
-def _clean_entry(line: str) -> str:
+def clean_entry(line: str) -> str:
+    """Strip one leading bullet, backticks, and any trailing note from a scope line.
+
+    Public because every consumer of a hand-written path list needs exactly this
+    normalization (``merge_feature.py`` reads a touched-set file the same way),
+    and a second copy would drift — notably on entries that *start* with a glob
+    (``*.md``), where a naive ``lstrip("-* ")`` eats the pattern.
+    """
     line = re.sub(r"^\s*[-*]\s+", "", line.strip())
     line = line.strip().strip("`").strip()
     # a scope line may carry a trailing note: "path — why" / "path  (why)"
@@ -235,7 +242,7 @@ def parse_scope(spec_text: str) -> tuple[list[str], list[str]]:
     m = FILES_IN_SCOPE_RE.search(spec_text)
     if m:
         for raw in m.group(1).splitlines():
-            entry = _clean_entry(raw)
+            entry = clean_entry(raw)
             if not entry:
                 continue
             if entry.startswith(("<", "#", "(")) or entry.lower().startswith(

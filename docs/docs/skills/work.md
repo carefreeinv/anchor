@@ -68,7 +68,7 @@ stateDiagram-v2
   end note
 ```
 
-Agents must **never** promote drafts except via [**`/draft --promote`**](/skills/draft), move work into `drafts/`, move **`in-progress/` → `completed/`** (always finish to `review-needed/`), move `review-needed/` → `completed/` except under human-confirmed [**`/review` Approve**](/skills/review), or touch another agent’s `in-progress/` plan. **Preserve basename** on every lane move (including `.local.md`); only a human may rename for privacy/tracking.
+Agents must **never** promote drafts except via [**`/draft --promote`**](/skills/draft), move work into `drafts/`, move `review-needed/` → `completed/` except under human-confirmed [**`/review` Approve**](/skills/review), or touch another agent’s `in-progress/` plan. **Preserve basename** on every lane move (including `.local.md`); only a human may rename for privacy/tracking.
 
 ## Priority (bare `/work`)
 
@@ -125,7 +125,7 @@ flowchart LR
   release -.->|"another agent"| claim
 ```
 
-Mid-session stop: leave the file in **`in-progress/`** with a short `## Progress` note. Other agents must ignore it. Half-baked → `ambiguous/`; stuck → `blocked/` or return to ready. When Done when holds → **always** `review-needed/`; the human then runs [**`/review`**](/skills/review) (AI critic + survey) to **Approve** (merges `feature/<slug>` → dev, then → `completed/`), Needs Work → `bugs|features/`, or Skip. Agents never archive to `completed/` or merge from `/work`.
+Mid-session stop: leave the file in **`in-progress/`** with a short `## Progress` note. Other agents must ignore it. Half-baked → `ambiguous/`; stuck → `blocked/` or return to ready. When Done when holds → `review-needed/` by default; the human then runs [**`/review`**](/skills/review) (AI critic + survey) to **Approve** (merges `feature/<slug>` → dev, then → `completed/`), Needs Work → `bugs|features/`, or Skip. The one exception is the culmination question above: if the operator answers **merge to `dev` now** and the scoped gate passes, the plan goes straight to `completed/` with a `## Handoff` note. Agents never archive to `completed/` on their own judgment, and never merge unasked.
 
 **`## Progress` checklist (optional, template-recommended):** a `- [ ] Step N: <label>` bullet per Steps-table row plus a trailing `- [ ] Done when holds` bullet, populated by `/draft` after Steps/Done when exist. `/work` checks off a Step bullet once its Verify by passes and `Done when holds` at finish; "resume from the first incomplete step" means the first unchecked bullet. Advisory only, never enforced — most valuable for a human-assigned plan spanning multiple sessions.
 

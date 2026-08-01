@@ -46,12 +46,16 @@ def repo(git_repo: Path) -> Path:
 TOUCHED = ("app/",)
 
 
+def _head(root: Path, ref: str = "feature/my-plan") -> str:
+    return _git(root, "rev-parse", ref)
+
+
 # --- pure gate ----------------------------------------------------------------
 
 
 def _gate(**overrides):
     kwargs = dict(slug="my-plan", branch="feature/my-plan", target="dev", head="abc",
-                  expect_head=None, dirty=(), changed=("app/x.py",), touched=TOUCHED)
+                  expect_head="abc", dirty=(), changed=("app/x.py",), touched=TOUCHED)
     kwargs.update(overrides)
     return evaluate_gate(**kwargs)
 
@@ -109,7 +113,7 @@ def test_gate_reports_how_it_would_land():
 
 
 def test_fast_forward_merge_lands_on_dev(repo):
-    verdict, new_head = run(repo, "my-plan", TOUCHED)
+    verdict, new_head = run(repo, "my-plan", TOUCHED, expect_head=_head(repo))
 
     assert verdict.ok
     assert new_head == _git(repo, "rev-parse", "feature/my-plan")
@@ -123,7 +127,7 @@ def test_non_ff_clean_merge_creates_a_merge_commit(repo):
     _commit(repo, "app/other.py", "y = 2\n", "dev moved")
     _git(repo, "checkout", "feature/my-plan")
 
-    verdict, new_head = run(repo, "my-plan", TOUCHED)
+    verdict, new_head = run(repo, "my-plan", TOUCHED, expect_head=_head(repo))
 
     assert verdict.ok
     assert "no-ff" in verdict.message
@@ -136,7 +140,7 @@ def test_conflict_aborts_and_leaves_dev_untouched(repo):
     dev_before = _commit(repo, "app/x.py", "conflicting\n", "dev touched the same file")
     _git(repo, "checkout", "feature/my-plan")
 
-    verdict, new_head = run(repo, "my-plan", TOUCHED)
+    verdict, new_head = run(repo, "my-plan", TOUCHED, expect_head=_head(repo))
 
     assert verdict.code == EXIT_CONFLICT
     assert new_head is None
@@ -148,7 +152,7 @@ def test_conflict_aborts_and_leaves_dev_untouched(repo):
 def test_out_of_scope_file_refuses_with_exit_3_naming_the_path(repo):
     _commit(repo, "deploy/prod.yaml", "replicas: 99\n", "snuck in a deploy change")
 
-    verdict, new_head = run(repo, "my-plan", TOUCHED)
+    verdict, new_head = run(repo, "my-plan", TOUCHED, expect_head=_head(repo))
 
     assert verdict.code == EXIT_SCOPE
     assert "deploy/prod.yaml" in verdict.offending
@@ -159,7 +163,7 @@ def test_out_of_scope_file_refuses_with_exit_3_naming_the_path(repo):
 def test_dirty_tree_refuses_with_exit_4(repo):
     (repo / "scratch.txt").write_text("uncommitted\n", encoding="utf-8")
 
-    verdict, _ = run(repo, "my-plan", TOUCHED)
+    verdict, _ = run(repo, "my-plan", TOUCHED, expect_head=_head(repo))
 
     assert verdict.code == EXIT_PRECONDITION
     assert verdict.reason == "dirty-tree"
@@ -176,14 +180,14 @@ def test_head_moved_since_the_run_refuses_with_exit_4(repo):
 
 
 def test_target_resolving_to_mainline_is_refused(repo):
-    verdict, _ = run(repo, "my-plan", TOUCHED, target="main")
+    verdict, _ = run(repo, "my-plan", TOUCHED, target="main", expect_head=_head(repo))
 
     assert verdict.reason == "target-is-mainline"
     assert _git(repo, "rev-parse", "main") != _git(repo, "rev-parse", "feature/my-plan")
 
 
 def test_missing_branch_refuses(repo):
-    verdict, _ = run(repo, "no-such-plan", TOUCHED)
+    verdict, _ = run(repo, "no-such-plan", TOUCHED, expect_head=_head(repo))
 
     assert verdict.reason == "no-branch"
     assert verdict.code == EXIT_PRECONDITION
@@ -193,7 +197,7 @@ def test_dry_run_mutates_nothing(repo):
     dev_before = _git(repo, "rev-parse", "dev")
     head_before = _git(repo, "rev-parse", "HEAD")
 
-    verdict, new_head = run(repo, "my-plan", TOUCHED, dry_run=True)
+    verdict, new_head = run(repo, "my-plan", TOUCHED, dry_run=True, expect_head=_head(repo))
 
     assert verdict.ok  # would merge...
     assert new_head is None  # ...but did not
@@ -207,7 +211,7 @@ def test_dry_run_probes_a_non_ff_merge_without_leaving_state(repo):
     dev_before = _commit(repo, "app/other.py", "y = 2\n", "dev moved")
     _git(repo, "checkout", "feature/my-plan")
 
-    verdict, _ = run(repo, "my-plan", TOUCHED, dry_run=True)
+    verdict, _ = run(repo, "my-plan", TOUCHED, dry_run=True, expect_head=_head(repo))
 
     assert verdict.ok
     assert _git(repo, "rev-parse", "dev") == dev_before
@@ -230,8 +234,8 @@ def test_cli_dry_run_exits_zero_and_merges_nothing(repo, tmp_path, capsys):
     touched.write_text("app/\n", encoding="utf-8")
     dev_before = _git(repo, "rev-parse", "dev")
 
-    code = main(["--root", str(repo), "--slug", "my-plan",
-                 "--touched", str(touched), "--dry-run"])
+    code = main(["--root", str(repo), "--slug", "my-plan", "--touched", str(touched),
+                 "--expect-head", _head(repo), "--dry-run"])
 
     assert code == EXIT_OK
     assert "dry run" in capsys.readouterr().out
@@ -243,7 +247,144 @@ def test_cli_scope_violation_exits_three(repo, tmp_path, capsys):
     touched = tmp_path / "touched.txt"
     touched.write_text("app/\n", encoding="utf-8")
 
-    code = main(["--root", str(repo), "--slug", "my-plan", "--touched", str(touched)])
+    code = main(["--root", str(repo), "--slug", "my-plan", "--touched", str(touched),
+                 "--expect-head", _head(repo)])
 
     assert code == EXIT_SCOPE
     assert "deploy/prod.yaml" in capsys.readouterr().out
+
+
+# --- the ways a scope check can pass vacuously ---------------------------------
+# Each of these was a reproduced bypass: an undeclared change landing on dev with
+# exit 0. The scope check is only as strong as the facts it is handed.
+
+
+def test_empty_touched_set_refuses_instead_of_disabling_the_gate(repo):
+    """check_scope treats "no scope" as inactive; here that must be a refusal."""
+    _commit(repo, "deploy/prod.yaml", "replicas: 99\n", "undeclared change")
+
+    verdict, new_head = run(repo, "my-plan", (), expect_head=_head(repo))
+
+    assert verdict.code == EXIT_PRECONDITION
+    assert verdict.reason == "no-touched-set"
+    assert new_head is None
+    assert _git(repo, "rev-parse", "dev") != _git(repo, "rev-parse", "feature/my-plan")
+
+
+def test_comment_only_touched_file_reads_as_empty(tmp_path):
+    f = tmp_path / "touched.txt"
+    f.write_text("# what this run touched\n\n", encoding="utf-8")
+
+    assert read_touched(str(f)) == ()
+
+
+def test_rename_out_of_scope_is_caught_via_its_deleted_source(repo):
+    """A rename's source path must not vanish behind git's rename detection."""
+    (repo / "secrets").mkdir()
+    (repo / "secrets" / "creds.yml").write_text("token: hunter2\n", encoding="utf-8")
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-m", "add secrets")
+    _git(repo, "checkout", "dev")
+    _git(repo, "merge", "--ff-only", "feature/my-plan")
+    _git(repo, "checkout", "feature/my-plan")
+    _git(repo, "mv", "secrets/creds.yml", "app/creds.yml")
+    _git(repo, "commit", "-m", "move creds into app/")
+
+    verdict, new_head = run(repo, "my-plan", TOUCHED, expect_head=_head(repo))
+
+    assert verdict.code == EXIT_SCOPE
+    assert "secrets/creds.yml" in verdict.offending  # the deletion is visible
+    assert new_head is None
+
+
+def test_base_inside_the_range_is_refused(repo):
+    """--base <branch head> would empty the diff and pass everything."""
+    _commit(repo, "deploy/prod.yaml", "replicas: 99\n", "undeclared change")
+    head = _head(repo)
+
+    verdict, new_head = run(repo, "my-plan", TOUCHED, base=head, expect_head=head)
+
+    assert verdict.code == EXIT_PRECONDITION
+    assert verdict.reason == "bad-base"
+    assert new_head is None
+
+
+def test_a_legitimate_base_is_still_accepted(repo):
+    verdict, _ = run(repo, "my-plan", TOUCHED, base=_git(repo, "rev-parse", "dev"),
+                     expect_head=_head(repo), dry_run=True)
+
+    assert verdict.ok
+
+
+def test_missing_expect_head_refuses(repo):
+    """Provenance is a must-hold condition, not an optional extra."""
+    verdict, new_head = run(repo, "my-plan", TOUCHED)
+
+    assert verdict.code == EXIT_PRECONDITION
+    assert verdict.reason == "provenance-missing"
+    assert new_head is None
+
+
+def test_cli_requires_expect_head(repo, tmp_path):
+    touched = tmp_path / "touched.txt"
+    touched.write_text("app/\n", encoding="utf-8")
+
+    with pytest.raises(SystemExit):  # argparse: required argument
+        main(["--root", str(repo), "--slug", "my-plan", "--touched", str(touched)])
+
+
+# --- the target may only ever be integration -----------------------------------
+
+
+def test_non_integration_target_is_refused(repo):
+    _git(repo, "branch", "release", "dev")
+    release_before = _git(repo, "rev-parse", "release")
+
+    verdict, new_head = run(repo, "my-plan", TOUCHED, target="release",
+                            expect_head=_head(repo))
+
+    assert verdict.reason == "target-not-integration"
+    assert new_head is None
+    assert _git(repo, "rev-parse", "release") == release_before  # untouched
+
+
+def test_fully_qualified_mainline_ref_cannot_evade_the_guard(repo):
+    """'refs/heads/main' must resolve to 'main' before the mainline compare."""
+    verdict, new_head = run(repo, "my-plan", TOUCHED, target="refs/heads/main",
+                            expect_head=_head(repo))
+
+    assert verdict.reason == "target-is-mainline"
+    assert new_head is None
+
+
+def test_target_checked_out_in_another_worktree_refuses_before_the_gate_passes(
+    repo, tmp_path
+):
+    """The Anchor topology: /work in a worktree, dev checked out in the main repo."""
+    other = tmp_path / "elsewhere"
+    _git(repo, "worktree", "add", str(other), "dev")
+
+    verdict, new_head = run(repo, "my-plan", TOUCHED, expect_head=_head(repo),
+                            dry_run=True)
+
+    assert verdict.code == EXIT_PRECONDITION
+    assert verdict.reason == "target-checked-out-elsewhere"
+    assert "elsewhere" in verdict.message  # names where, and how to fix it
+    assert new_head is None
+
+
+# --- entry parsing keeps globs intact ------------------------------------------
+
+
+def test_read_touched_preserves_leading_globs(tmp_path):
+    f = tmp_path / "touched.txt"
+    f.write_text("*.md\n**/tests/*.py\n- `app/`\n", encoding="utf-8")
+
+    assert read_touched(str(f)) == ("*.md", "**/tests/*.py", "app/")
+
+
+def test_unreadable_touched_file_is_a_precondition_failure_not_a_git_error(repo):
+    code = main(["--root", str(repo), "--slug", "my-plan", "--touched", "/nope/missing.txt",
+                 "--expect-head", _head(repo)])
+
+    assert code == EXIT_PRECONDITION
