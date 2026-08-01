@@ -131,7 +131,9 @@ Branch:   from **dev** (else **develop**); if neither exists, **create dev**
           from **main** (else **master**) and push origin when possible
 Commit:   **/commit-prep** first (prep only: tests + CHANGELOG + blog); if green
           and plan complete, commit on feature branch (see /work); optional push
-          of that branch only. **Agents/`/work` never merge** to dev/main —
+          of that branch only. **Agents never merge on their own initiative**;
+          `/work` may land on **dev only** via the operator's in-session
+          culmination answer + scoped gate. **main is never reached from /work** —
           human **`/review` Approve** merges feature → dev; empty-queue
           **Promote** merges dev → main (survey-gated; no force-push).
 ```
