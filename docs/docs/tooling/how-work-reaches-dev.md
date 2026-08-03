@@ -58,6 +58,8 @@ python scripts/merge_feature.py --root <checkout> --slug <slug> \
 to tell the branch has not moved since, and provenance is a must-hold condition
 rather than an optional extra.
 
+The clean-tree check follows the **feature branch's** worktree, not `--root`, so
+pointing `--root` at the integration checkout still checks the tree that did the work.
 Point `--root` at a checkout where the integration branch is **free**. Git will not
 check out a branch that is live in another worktree, which is the normal Anchor
 topology — `/work` in `var/worktrees/<agent>`, your main checkout sitting on `dev`.

@@ -52,9 +52,9 @@ python scripts/merge_feature.py --root <checkout> --slug <slug> \
 # 0 would merge · 3 scope violation · 4 precondition · 5 conflict · 2 git error
 ```
 
-Any failure falls back to `/review`, naming the check that refused. Refusing is
-always the safe outcome — the failure mode is a false refusal, never a silent
-over-merge. That principle is why the gate refuses on *missing* facts too: an empty
+Any failure falls back to `/review`, naming the check that refused. Refusing is the
+safe outcome, and the checks are written to fail that way: a wrong answer costs you a
+re-run, not an unreviewed merge. That principle is why the gate refuses on *missing* facts too: an empty
 touched set, an absent `--expect-head`, or a `--base` that would narrow the diff are
 all refusals rather than checks quietly skipped.
 

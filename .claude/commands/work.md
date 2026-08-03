@@ -452,7 +452,9 @@ python scripts/merge_feature.py --root <checkout> --slug <slug> \
 ```
 
 `--expect-head` is **required** — provenance is a must-hold condition, and without
-the SHA there is nothing to check the branch against. Point `--root` at a checkout
+the SHA there is nothing to check the branch against. The clean-tree check follows the
+**feature branch's** worktree rather than `--root`, so it still inspects the tree that
+did the work. Point `--root` at a checkout
 where the integration branch is **free**: git refuses to check out a branch that is
 live in another worktree, so with `/work` in `var/worktrees/<agent>` and your main
 checkout on `dev`, run it against the main checkout. The gate detects that conflict

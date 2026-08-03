@@ -388,3 +388,83 @@ def test_unreadable_touched_file_is_a_precondition_failure_not_a_git_error(repo)
                  "--expect-head", _head(repo)])
 
     assert code == EXIT_PRECONDITION
+
+
+# --- clean tree means the tree that did the work -------------------------------
+# The gate's own remedy for a busy target ("re-run with --root <the dev checkout>")
+# used to move the dirty check onto the wrong tree, so the documented guarantee was
+# false on exactly the path the docs prescribe.
+
+
+def test_dirty_feature_worktree_is_caught_when_root_is_the_integration_checkout(
+    repo, tmp_path
+):
+    dev_tree = tmp_path / "dev-checkout"
+    _git(repo, "worktree", "add", str(dev_tree), "dev")
+    (repo / "app" / "x.py").write_text("x = 999  # uncommitted\n", encoding="utf-8")
+    (repo / ".env").write_text("SECRET=1\n", encoding="utf-8")
+
+    verdict, new_head = run(dev_tree, "my-plan", TOUCHED, expect_head=_head(repo))
+
+    assert verdict.code == EXIT_PRECONDITION
+    assert verdict.reason == "dirty-tree"
+    assert str(repo) in verdict.message          # names which tree it checked
+    assert new_head is None
+    assert _git(repo, "rev-parse", "dev") != _head(repo)
+
+
+def test_clean_feature_worktree_still_merges_from_the_integration_checkout(
+    repo, tmp_path
+):
+    dev_tree = tmp_path / "dev-checkout"
+    _git(repo, "worktree", "add", str(dev_tree), "dev")
+
+    verdict, new_head = run(dev_tree, "my-plan", TOUCHED, expect_head=_head(repo))
+
+    assert verdict.ok
+    assert _git(repo, "rev-parse", "dev") == new_head
+
+
+def test_subdirectory_root_does_not_false_refuse(repo):
+    """Every other call uses `git -C`, which works from a subdirectory."""
+    verdict, _ = run(repo / "app", "my-plan", TOUCHED, expect_head=_head(repo),
+                     dry_run=True)
+
+    assert verdict.ok
+
+
+def test_scope_violation_is_reported_before_run_it_elsewhere(repo, tmp_path):
+    """Content problems outrank 'run this somewhere else'."""
+    _commit(repo, "deploy/prod.yaml", "replicas: 99\n", "undeclared change")
+    dev_tree = tmp_path / "dev-checkout"
+    _git(repo, "worktree", "add", str(dev_tree), "dev")
+
+    verdict, _ = run(repo, "my-plan", TOUCHED, expect_head=_head(repo))
+
+    assert verdict.code == EXIT_SCOPE
+    assert "deploy/prod.yaml" in verdict.offending
+
+
+def test_abbreviated_expect_head_is_resolved_before_comparing(repo):
+    verdict, _ = run(repo, "my-plan", TOUCHED, expect_head=_head(repo)[:8],
+                     dry_run=True)
+
+    assert verdict.ok  # not a self-contradicting provenance refusal
+
+
+def test_unresolvable_target_is_a_precondition_not_a_git_error(repo):
+    verdict, _ = run(repo, "my-plan", TOUCHED, target="origin/dev",
+                     expect_head=_head(repo))
+
+    assert verdict.code == EXIT_PRECONDITION
+    assert verdict.reason == "no-such-target"
+
+
+def test_binary_touched_file_exits_four_not_one(repo, tmp_path):
+    blob = tmp_path / "touched.bin"
+    blob.write_bytes(b"\xff\xfe\x00binary\x00")
+
+    code = main(["--root", str(repo), "--slug", "my-plan", "--touched", str(blob),
+                 "--expect-head", _head(repo)])
+
+    assert code == EXIT_PRECONDITION

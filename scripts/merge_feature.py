@@ -82,6 +82,7 @@ def evaluate_gate(
     head: str,
     expect_head: str | None,
     dirty: tuple[str, ...],
+    work_root: str = "",
     changed: tuple[str, ...],
     touched: tuple[str, ...],
     conflicts: tuple[str, ...] = (),
@@ -118,15 +119,6 @@ def evaluate_gate(
                 f"operator did not authorize by answering /work's question."
             ),
         )
-    if target_worktree:
-        return MergeVerdict(
-            ok=False, code=EXIT_PRECONDITION, reason="target-checked-out-elsewhere",
-            message=(
-                f"refuse: '{target}' is checked out at {target_worktree}, so the merge "
-                f"cannot run here. Re-run with --root {target_worktree}, or free that "
-                f"worktree first. (Reported now rather than after the gate passes.)"
-            ),
-        )
     if not expect_head:
         return MergeVerdict(
             ok=False, code=EXIT_PRECONDITION, reason="provenance-missing",
@@ -146,9 +138,10 @@ def evaluate_gate(
             ),
         )
     if dirty:
+        where = f" in {work_root}" if work_root else ""
         return MergeVerdict(
             ok=False, code=EXIT_PRECONDITION, reason="dirty-tree",
-            message=f"refuse: worktree has {len(dirty)} uncommitted path(s).",
+            message=f"refuse: {len(dirty)} uncommitted path(s){where}.",
             offending=dirty,
         )
 
@@ -174,6 +167,18 @@ def evaluate_gate(
                 f"touched. The branch is not what /work thinks it is — routing to /review."
             ),
             offending=verdict.offending,
+        )
+    # Placed after the content checks on purpose: "your branch carries a file you
+    # never declared" is worth learning before "run this somewhere else", and in
+    # Anchor's own topology this condition is otherwise always the first refusal.
+    if target_worktree:
+        return MergeVerdict(
+            ok=False, code=EXIT_PRECONDITION, reason="target-checked-out-elsewhere",
+            message=(
+                f"refuse: '{target}' is checked out at {target_worktree}, so the merge "
+                f"cannot run here. Re-run with --root {target_worktree} (or "
+                f"`git worktree prune` if that path no longer exists)."
+            ),
         )
     if conflicts:
         return MergeVerdict(
@@ -256,32 +261,49 @@ def changed_files(root: Path, base: str, head: str) -> tuple[str, ...]:
     return tuple(p.strip() for p in out.splitlines() if p.strip())
 
 
-def target_worktree(root: Path, target: str) -> str | None:
-    """Path of another worktree holding ``target`` checked out, if any.
+def worktree_for_branch(root: Path, branch: str) -> str | None:
+    """Path of the worktree that has ``branch`` checked out, if any.
 
-    git refuses to check out a branch that is live in a second worktree — the
-    normal Anchor topology, where /work runs in ``var/worktrees/<agent>`` while the
-    operator's main checkout sits on ``dev``. Detecting it up front turns a bare
-    "git error" *after* a passing gate into a precondition refusal that names the
-    fix, and makes ``--dry-run`` tell the truth about whether a real run would work.
+    One lookup serving two questions the gate has to answer separately: *where is
+    the work* (the feature branch's tree, which is what "clean tree" must mean) and
+    *is the target blocked* (git refuses to check out a branch live in a second
+    worktree). Answering both from ``--root`` was the bug: on the topology this tool
+    itself recommends, they are different directories.
     """
     try:
         text = _git(root, "worktree", "list", "--porcelain").stdout
     except GitError:
         return None
-    here = root.resolve()
     path = ""
     for line in text.splitlines():
         if line.startswith("worktree "):
             path = line[len("worktree "):].strip()
         elif line.startswith("branch "):
-            if line[len("branch "):].strip().removeprefix("refs/heads/") == target:
-                try:
-                    if Path(path).resolve() != here:
-                        return path
-                except OSError:
-                    return path
+            if line[len("branch "):].strip().removeprefix("refs/heads/") == branch:
+                return path
     return None
+
+
+def toplevel(root: Path) -> Path:
+    """The worktree root containing ``root``.
+
+    Every other call goes through ``git -C``, which works from any subdirectory;
+    comparing a raw ``--root`` against worktree paths does not, and false-refused
+    whenever an operator passed a subdirectory.
+    """
+    out = _git(root, "rev-parse", "--show-toplevel", check=False).stdout.strip()
+    return Path(out) if out else root.resolve()
+
+
+def target_worktree(root: Path, target: str) -> str | None:
+    """Another worktree holding ``target`` — i.e. one that is not where we are."""
+    path = worktree_for_branch(root, target)
+    if path is None:
+        return None
+    try:
+        return None if Path(path).resolve() == toplevel(root).resolve() else path
+    except OSError:
+        return path
 
 
 def merge_base(root: Path, a: str, b: str) -> str:
@@ -375,6 +397,11 @@ def run(root: Path, slug: str, touched: tuple[str, ...], *, base: str | None = N
     """
     branch = branch or f"feature/{slug}"
     resolved = resolve_target(root, target)
+    if target and resolved not in local_branches(root):
+        return MergeVerdict(
+            ok=False, code=EXIT_PRECONDITION, reason="no-such-target",
+            message=f"refuse: --target '{target}' does not name a local branch.",
+        ), None
     if branch not in local_branches(root):
         return MergeVerdict(
             ok=False, code=EXIT_PRECONDITION, reason="no-branch",
@@ -390,13 +417,22 @@ def run(root: Path, slug: str, touched: tuple[str, ...], *, base: str | None = N
         ), None
 
     head = head_sha(root, branch)
+    if expect_head:
+        # Resolve before comparing: an abbreviated SHA otherwise fails closed with a
+        # message that truncates both sides to the same 12 characters and reads as a
+        # contradiction ("is at X, not the commit this run made (X)").
+        p = _git(root, "rev-parse", expect_head, check=False)
+        if p.returncode == 0:
+            expect_head = p.stdout.strip()
     natural_base = merge_base(root, resolved, branch)
     if base:
         # A caller-supplied base narrows the diff the scope check sees, so an
         # unvalidated one is a way to make that check vacuous — `--base <head>`
         # yields an empty change set and everything "passes". It must be an
         # ancestor of the branch head *and* no newer than the real merge-base.
-        if not is_ancestor(root, base, head) or not is_ancestor(root, base, natural_base):
+        # natural_base is by definition an ancestor of head, so this single check
+        # implies the head-side one too.
+        if not is_ancestor(root, base, natural_base):
             return MergeVerdict(
                 ok=False, code=EXIT_PRECONDITION, reason="bad-base",
                 message=(
@@ -407,7 +443,10 @@ def run(root: Path, slug: str, touched: tuple[str, ...], *, base: str | None = N
             ), None
     merge_from = base or natural_base
     ff = is_ancestor(root, resolved, branch)
-    dirty = dirty_paths(root)
+    # Clean-tree means the tree that did the work, which on the topology this tool
+    # recommends (--root = the integration checkout) is a different directory.
+    work_root = worktree_for_branch(root, branch) or str(toplevel(root))
+    dirty = dirty_paths(Path(work_root))
     changed = changed_files(root, merge_from, head)
     blocking_worktree = target_worktree(root, resolved)
 
@@ -416,7 +455,7 @@ def run(root: Path, slug: str, touched: tuple[str, ...], *, base: str | None = N
     verdict = evaluate_gate(
         slug=slug, branch=branch, target=resolved, head=head, expect_head=expect_head,
         dirty=dirty, changed=changed, touched=touched, ff_possible=ff,
-        target_worktree=blocking_worktree,
+        target_worktree=blocking_worktree, work_root=work_root,
     )
     if not verdict.ok:
         return verdict, None
@@ -425,7 +464,7 @@ def run(root: Path, slug: str, touched: tuple[str, ...], *, base: str | None = N
     verdict = evaluate_gate(
         slug=slug, branch=branch, target=resolved, head=head, expect_head=expect_head,
         dirty=dirty, changed=changed, touched=touched, conflicts=conflicts, ff_possible=ff,
-        target_worktree=blocking_worktree,
+        target_worktree=blocking_worktree, work_root=work_root,
     )
     if not verdict.ok or dry_run:
         return verdict, None
@@ -456,11 +495,13 @@ def main(argv: list[str] | None = None) -> int:
             base=args.base, expect_head=args.expect_head, target=args.target,
             branch=args.branch, dry_run=args.dry_run, title=args.title,
         )
+        landed_on = resolve_target(Path(args.root), args.target)
     except GitError as exc:
         print(f"merge-feature: {exc}", file=sys.stderr)
         return EXIT_GIT
-    except OSError as exc:
-        # Unreadable --touched file: the caller's precondition, not git's fault.
+    except (OSError, UnicodeDecodeError) as exc:
+        # Unreadable or non-text --touched file: the caller's precondition, not
+        # git's fault, and exit 1 from a traceback is outside the documented set.
         print(f"merge-feature: cannot read --touched: {exc}", file=sys.stderr)
         return EXIT_PRECONDITION
 
@@ -468,7 +509,7 @@ def main(argv: list[str] | None = None) -> int:
     if verdict.ok and args.dry_run:
         print("dry run: nothing merged.")
     elif verdict.ok:
-        print(f"merged; {args.target or resolve_target(Path(args.root))} is now {new_head[:12]}.")
+        print(f"merged; {landed_on} is now {new_head[:12]}.")
     return verdict.code
 
 

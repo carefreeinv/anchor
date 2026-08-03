@@ -303,3 +303,15 @@ def test_held_note_written_as_held_is_detected(repo_with_feature: Path):
     feat = next(p for p in find_pending(repo_with_feature) if p.branch == "feature/cool-thing")
 
     assert feat.held is True
+
+
+def test_emphasized_hold_notes_are_detected(repo_with_feature: Path):
+    """This repo's prose is bold-heavy; **hold** must not read as 'nobody looked'."""
+    for note in ("**hold** — waiting on staging data — 2026-08-02",
+                 "- **hold** — reason",
+                 "__held__ — reason"):
+        _plan(repo_with_feature, "review-needed", "cool-thing.md",
+              f"# plan\n\n## Handoff\n\n{note}\n")
+        feat = next(p for p in find_pending(repo_with_feature)
+                    if p.branch == "feature/cool-thing")
+        assert feat.held is True, note

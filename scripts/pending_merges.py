@@ -206,8 +206,11 @@ def is_held(path: Path | None) -> bool:
     # The documented note starts with the word itself ("hold — <reason> — <date>"),
     # so anchor to the start of a line: a prose "hold off on the follow-up" is not
     # a hold, and "held"/"holding" as an opener is.
-    return bool(section and re.search(r"^\s*[-*]?\s*(hold|held|holding)\b",
-                                      section.group(1), re.IGNORECASE | re.MULTILINE))
+    return bool(section and re.search(
+        # `(?![a-z])` rather than `\b`: underscore is a word character, so `\b`
+        # never fires on the closing delimiter of `__held__`.
+        r"^\s*(?:[-*]\s*)?(?:\*\*|__)?\s*(hold|held|holding)(?![a-z])",
+        section.group(1), re.IGNORECASE | re.MULTILINE))
 
 
 def find_pending(root: Path | str, *, worktrees: bool = True) -> list[PendingBranch]:
