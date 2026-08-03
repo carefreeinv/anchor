@@ -85,6 +85,7 @@ CORE_FILES: list[str] = [
     "anchor/system-prompts/mythos-core.md",
     "anchor/templates/plan.md",
     "anchor/templates/task-spec.md",
+    "anchor/templates/handoff.md",
     "anchor/templates/review.md",
     "anchor/templates/verification.md",
 ]
@@ -131,6 +132,7 @@ def conventions_path(project_dir: Path, *, for_write: bool = False) -> Path:
 FLEET_FILES: list[str] = [
     "scripts/anchor_client.py",
     "scripts/orchestrate.py",
+    "scripts/handoff.py",
     "scripts/work_once.py",
     "scripts/plan_select.py",
     "scripts/plan_lease.py",

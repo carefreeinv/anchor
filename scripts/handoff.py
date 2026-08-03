@@ -35,8 +35,13 @@ REQUIRED_SECTIONS: tuple[str, ...] = (
 
 _HEADING_RE = re.compile(r"^##\s+(?P<name>[^\n#][^\n]*?)\s*$", re.MULTILINE)
 _SUBSPEC_RE = re.compile(r"^###\s+(?P<title>[^\n]+?)\s*$", re.MULTILINE)
-_FIELD_RE = re.compile(r"^\s*[-*]\s*(?P<key>[A-Za-z][A-Za-z ]*?)\s*:\s*(?P<value>.+?)\s*$",
-                       re.MULTILINE)
+# Horizontal whitespace only: `\s` crosses newlines, so a field with an empty value
+# would absorb the following line as its value — `- Goal:\n- Files in scope: x` parsed
+# as goal="- Files in scope: x" with no files, which made check_scope_shrinks vacuous
+# while build_continuation still emitted the path into the fresh continuation.
+_FIELD_RE = re.compile(
+    r"^[ \t]*[-*][ \t]*(?P<key>[A-Za-z][A-Za-z ]*?)[ \t]*:[ \t]*(?P<value>\S.*?)[ \t]*$",
+    re.MULTILINE)
 _BULLET_RE = re.compile(r"^\s*[-*]\s+(?P<text>.+?)\s*$", re.MULTILINE)
 _COMMENT_RE = re.compile(r"<!--.*?-->", re.DOTALL)
 

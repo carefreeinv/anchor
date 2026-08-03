@@ -90,7 +90,13 @@ def budget_pressure(text: str, target: Endpoint) -> float | None:
     ceiling = target.quirks.get("max_context")
     if not ceiling:
         return None
-    return estimate_tokens(text) / int(ceiling)
+    try:
+        ceiling = int(ceiling)
+    except (TypeError, ValueError):
+        return None  # an unparseable ceiling is not a number to divide by
+    if ceiling <= 0:
+        return None
+    return estimate_tokens(text) / ceiling
 
 
 def handoff_directive(pressure: float) -> str:
@@ -308,8 +314,13 @@ def execute_task(task: str, plan: str, fleet: Fleet, verify_cmd: str | None,
 
         # Budget gate: refuse dispatch rather than truncate when the prompt already
         # exceeds this endpoint's serving ceiling — a decomposition error, not
-        # something a retry fixes.
-        ok, budget_msg = check_budget(system + prompt, ep)
+        # something a retry fixes. The handoff directive is measured here too: it is
+        # appended below, and sizing the check without it let a prompt that "fits"
+        # dispatch over the ceiling this module promises never to exceed.
+        pressure = budget_pressure(system + prompt, ep)
+        directive = (handoff_directive(pressure)
+                     if pressure is not None and pressure >= HANDOFF_THRESHOLD else "")
+        ok, budget_msg = check_budget(system + prompt + directive, ep)
         if not ok:
             print(f"[budget] rejected: {budget_msg}", file=sys.stderr)
             return {"task": task, "status": "failed-budget", "attempts": attempt,
@@ -317,11 +328,10 @@ def execute_task(task: str, plan: str, fleet: Fleet, verify_cmd: str | None,
 
         # Approaching (but not over) the ceiling: instruct a handoff rather than
         # letting the executor discover mid-answer that it has no room left.
-        pressure = budget_pressure(system + prompt, ep)
-        if pressure is not None and pressure >= HANDOFF_THRESHOLD:
+        if directive:
             print(f"[budget] {ep.name} at ~{pressure:.0%} of ceiling — handoff directive attached",
                   file=sys.stderr)
-            prompt += handoff_directive(pressure)
+            prompt += directive
 
         out = ep.chat([{"role": "system", "content": system},
                        {"role": "user", "content": prompt}], max_tokens=8192)
@@ -331,7 +341,11 @@ def execute_task(task: str, plan: str, fleet: Fleet, verify_cmd: str | None,
         # before the footer gate, which a handoff deliberately does not satisfy.
         # A handoff that is not dispatchable (vague Remaining, no Verify by) gets
         # exactly one corrective retry via the normal attempt loop, then escalates.
-        if looks_like_handoff(out):
+        # A handoff has no '## Result' footer by design, so output carrying both is a
+        # finished result that happens to quote the template (e.g. a task whose job is
+        # to edit it) — not a handoff. Without this guard such a task burns every
+        # window and escalates with its verify command never run.
+        if looks_like_handoff(out) and not has_required_footer(out):
             try:
                 parsed = parse_handoff(out)
             except HandoffError as exc:
@@ -554,7 +568,7 @@ def main() -> None:
              "pass empty string to disable)",
     )
     ap.add_argument(
-        "--max-respawns", type=int, default=MAX_RESPAWNS,
+        "--max-respawns", type=lambda v: max(0, int(v)), default=MAX_RESPAWNS,
         help=f"continuation windows allowed after a handoff (default: {MAX_RESPAWNS}; "
              "0 disables continuations and escalates on the first handoff)",
     )

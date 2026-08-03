@@ -617,3 +617,71 @@ def test_clean_task_records_role_verdict_pass(git_repo, monkeypatch):
     rows = _ledger_rows(ledger)
     assert len(rows) == 1
     assert rows[0].role_verdict == "pass"
+
+
+def test_a_conforming_result_quoting_the_template_is_not_a_handoff():
+    """A task whose job is to edit the handoff template must still finish."""
+    from orchestrate import execute_with_continuations
+
+    fleet = RecordingFleet([GOOD_OUTPUT + "\n" + HANDOFF_TEXT])
+    result = execute_with_continuations("edit the handoff template", "plan", fleet,
+                                        verify_cmd=None, hold_on_fail=False)
+
+    assert result["status"] == "ok"          # not spun into a continuation
+    assert fleet.ep.calls == 1
+
+
+def test_budget_check_accounts_for_the_directive_it_will_append(monkeypatch):
+    """The directive used to be added after the check that said the prompt fits."""
+    import orchestrate
+
+    monkeypatch.setattr(orchestrate, "HANDOFF_THRESHOLD", 0.0)
+    monkeypatch.setattr(orchestrate, "load_prompt", lambda p: "SYS")
+    # Ceiling sits between the bare prompt and the prompt+directive.
+    bare = orchestrate.estimate_tokens("SYS" + "PLAN (context only):\nplan\n\n"
+                                       "YOUR SINGLE TASK:\ntask")
+    ceiling = bare + 10
+    fleet = RecordingFleet([GOOD_OUTPUT], quirks={"max_context": ceiling})
+
+    result = orchestrate.execute_task("task", "plan", fleet, verify_cmd=None,
+                                      hold_on_fail=False)
+
+    assert result["status"] == "failed-budget"
+    assert fleet.ep.calls == 0  # refused rather than dispatched over the ceiling
+
+
+def test_budget_pressure_is_total_on_odd_ceilings():
+    from anchor_client import Endpoint
+    from orchestrate import budget_pressure
+
+    for ceiling in ("0", "abc", -5, 0):
+        ep = Endpoint(name="odd", tier="executor", base_url="http://x", model="m",
+                      quirks={"max_context": ceiling})
+        assert budget_pressure("x" * 100, ep) is None
+
+
+def test_zero_max_respawns_escalates_without_hitting_the_unreachable_assert():
+    import orchestrate
+
+    fleet = RecordingFleet([HANDOFF_TEXT, GOOD_OUTPUT])
+    result = orchestrate.execute_with_continuations(
+        "big task", "plan", fleet, verify_cmd=None, hold_on_fail=False, max_respawns=0)
+
+    assert result["status"] == "escalate"   # no AssertionError("unreachable")
+
+
+def test_continuation_completes_with_a_passing_verify_command(git_repo):
+    """The plan's Done when: handoff → continuation → verification actually green."""
+    from pathlib import Path
+
+    from orchestrate import execute_with_continuations
+
+    marker = git_repo / "verified.txt"
+    fleet = RecordingFleet([HANDOFF_TEXT, GOOD_OUTPUT])
+
+    result = execute_with_continuations("big task", "plan", fleet,
+                                        verify_cmd=f"touch {marker}", hold_on_fail=False)
+
+    assert result["status"] == "ok"
+    assert result["windows"] == 2
+    assert Path(marker).exists()   # the continuation's verify ran, and passed

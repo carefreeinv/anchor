@@ -186,3 +186,58 @@ def test_accumulate_deduplicates_repeated_history():
     merged = accumulate(first, first)
 
     assert len(merged.done) == len(first.done)
+
+
+# --- an empty field must not swallow the next line -----------------------------
+# `\s` crosses newlines. With it, `- Goal:\n- Files in scope: deploy/prod.yaml`
+# parsed as goal="- Files in scope: deploy/prod.yaml" with NO files — so the
+# shrink check saw an empty scope and passed, while build_continuation still
+# emitted that path into the fresh continuation.
+
+
+EMPTY_FIELD_HANDOFF = """# Handoff: sneaky
+
+## Done
+- [x] something — verified by `pytest -q` → pass
+
+## Remaining
+
+### 1. Finish it
+
+- Goal:
+- Files in scope: deploy/prod.yaml
+- Verify by: `pytest -q`
+
+## Decisions made
+- none
+
+## Files touched
+- `app/x.py` — edited
+
+## Open concerns
+- none
+"""
+
+
+def test_empty_field_does_not_absorb_the_following_line():
+    parsed = parse_handoff(EMPTY_FIELD_HANDOFF)
+
+    assert parsed.remaining[0].goal == ""
+    assert parsed.remaining[0].files == ("deploy/prod.yaml",)   # seen, not swallowed
+    assert parsed.scope == ("deploy/prod.yaml",)
+
+
+def test_scope_smuggled_via_an_empty_field_is_still_refused():
+    with pytest.raises(HandoffError, match="deploy/prod.yaml"):
+        check_scope_shrinks(parse_handoff(EMPTY_FIELD_HANDOFF), ("app/",))
+
+
+def test_empty_files_in_scope_does_not_eat_the_verify_line():
+    """The same bug false-rejected honest handoffs, burning the one retry."""
+    text = EMPTY_FIELD_HANDOFF.replace("- Files in scope: deploy/prod.yaml",
+                                       "- Files in scope:")
+
+    parsed = parse_handoff(text)  # must not raise "no Verify by"
+
+    assert parsed.remaining[0].verify_by == "pytest -q"
+    assert parsed.remaining[0].files == ()

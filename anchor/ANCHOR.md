@@ -86,6 +86,7 @@ Every tier defaults to these regardless of task size — they're cheap to apply 
 
 - `templates/plan.md` — planner output format (header: Value / Slug / Preferred models when using `./.plans`; **path** is lane/status — no in-file Lane/Status)
 - `templates/task-spec.md` — the unit of work handed to an executor; its `## Budget` section (context window / output ceiling) is what mythos-core rule 13's pre-flight check reads before work starts
+- `templates/handoff.md` — what an executor emits instead of truncating when it approaches its `## Budget`: done (with verification status) / remaining as ready-to-dispatch sub-specs / decisions made / files touched / open concerns. Parsed by `scripts/handoff.py` into the next window's spec (mythos-core rule 15)
 - `templates/review.md` — critic pass format
 - `templates/verification.md` — machine-checkable done-ness checklist
 
