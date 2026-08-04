@@ -12,6 +12,7 @@ from merge_feature import (
     EXIT_OK,
     EXIT_PRECONDITION,
     EXIT_SCOPE,
+    changed_files,
     evaluate_gate,
     main,
     read_touched,
@@ -295,6 +296,38 @@ def test_rename_out_of_scope_is_caught_via_its_deleted_source(repo):
     assert verdict.code == EXIT_SCOPE
     assert "secrets/creds.yml" in verdict.offending  # the deletion is visible
     assert new_head is None
+
+
+def test_add_then_delete_out_of_scope_path_is_caught(repo):
+    """Net two-dot diff is empty for the path; history union must still see it."""
+    _commit(repo, "secrets/creds.yml", "token: hunter2\n", "add secret")
+    # second commit removes it — git diff base..head --name-only is empty for it
+    _git(repo, "rm", "secrets/creds.yml")
+    _git(repo, "commit", "-m", "remove secret again")
+    base = _git(repo, "rev-parse", "dev")
+    head = _head(repo)
+    net = _git(repo, "diff", "--no-renames", "--name-only", f"{base}..{head}")
+    assert "secrets/creds.yml" not in net.splitlines()
+    assert "secrets/creds.yml" in changed_files(repo, base, head)
+
+    verdict, new_head = run(repo, "my-plan", TOUCHED, expect_head=head)
+
+    assert verdict.code == EXIT_SCOPE
+    assert "secrets/creds.yml" in verdict.offending
+    assert new_head is None
+
+
+def test_add_then_delete_in_scope_path_still_passes_scope(repo):
+    """History names the path; if it is inside --touched, the scope check allows it."""
+    _commit(repo, "app/tmp.flag", "1\n", "add in-scope temp")
+    _git(repo, "rm", "app/tmp.flag")
+    _git(repo, "commit", "-m", "drop temp")
+    head = _head(repo)
+
+    verdict, new_head = run(repo, "my-plan", TOUCHED, expect_head=head, dry_run=True)
+
+    assert verdict.ok
+    assert new_head is None  # dry-run
 
 
 def test_base_inside_the_range_is_refused(repo):

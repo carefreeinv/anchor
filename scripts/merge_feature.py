@@ -9,8 +9,11 @@ happen, so the gate's job is to prove nothing *else* rode along:
 
 1. **Provenance** — the branch head is the commit the caller just made.
 2. **Clean tree** — nothing staged, unstaged, or untracked.
-3. **File scope** — every path the branch changes is inside the caller's declared
-   touched set (evaluated with ``scope_gate.check_scope``, one glob implementation).
+3. **File scope** — every path named **anywhere in the range history**
+   (``base..head``, not just the net tree-to-tree diff) is inside the caller's
+   declared touched set (evaluated with ``scope_gate.check_scope``, one glob
+   implementation). A path added and then deleted still counts — net two-dot
+   ``git diff`` cannot see it, but the blob would still land in history.
 4. **Mergeable** — fast-forward preferred; otherwise a conflict-free merge.
 5. **Target** — the integration branch only. A target resolving to ``main``/
    ``master`` aborts the merge path rather than landing on mainline.
@@ -250,16 +253,38 @@ def dirty_paths(root: Path) -> tuple[str, ...]:
 
 
 def changed_files(root: Path, base: str, head: str) -> tuple[str, ...]:
-    """Every path the range touches, **including** the source side of a rename.
+    """Union of every path named on any commit in ``base..head``.
 
-    ``--no-renames`` is load-bearing, not a style choice: with rename detection on,
+    **Not** a net tree-to-tree ``git diff base..head --name-only``: that view is
+    blind to a path that is added *and* deleted within the range, so a branch
+    could smuggle a blob into the merge target's history without the scope check
+    ever naming the path. ``git log --name-only --pretty=format:`` is the
+    per-commit union that closes that hole.
+
+    ``--no-renames`` is also load-bearing: with rename detection on,
     ``git mv secrets/creds.yml app/creds.yml`` reports only the destination, so a
     branch can delete a file from an undeclared directory and pass a scope check
-    that never sees the path it removed.
-    """
-    out = _git(root, "diff", "--no-renames", "--name-only", f"{base}..{head}").stdout
-    return tuple(p.strip() for p in out.splitlines() if p.strip())
+    that never sees the path it removed. With ``--no-renames``, both sides appear.
 
+    Paths are de-duplicated while preserving first-seen order.
+    """
+    out = _git(
+        root,
+        "log",
+        "--name-only",
+        "--pretty=format:",
+        "--no-renames",
+        f"{base}..{head}",
+    ).stdout
+    seen: set[str] = set()
+    paths: list[str] = []
+    for line in out.splitlines():
+        p = line.strip()
+        if not p or p in seen:
+            continue
+        seen.add(p)
+        paths.append(p)
+    return tuple(paths)
 
 def worktree_for_branch(root: Path, branch: str) -> str | None:
     """Path of the worktree that has ``branch`` checked out, if any.

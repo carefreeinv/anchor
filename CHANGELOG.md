@@ -24,6 +24,7 @@ Newest first.
 
 ### Fixed
 
+- **Scoped-merge file scope uses range history, not net two-dot diff** — `merge_feature.changed_files` now unions every path from `git log --name-only --pretty=format: --no-renames base..head`. A path added and then deleted within the range is still named (net `git diff base..head --name-only` is empty for it), so an undeclared blob cannot ride into `dev` history without a scope refusal. Docs/skills describe the history-union contract. Covered in `tests/test_merge_feature.py`.
 - **Scoped-merge doctrine docs no longer contradict the culmination path** — `docs/docs/skills/review.md` Related bullet said agents finish to `review-needed/` and **never** merge (markdown emphasis hid it from a literal `never merge` grep). It now states the shipped contract: default finish is still `review-needed/`; interactive `/work` may land on **`dev` only** via the operator answer + scoped gate; unattended never merges; `/review` remains the only route to `main`. `docs/docs/skills/work.md` diagrams and Chat dictate rule now show the optional `in-progress/` → `completed/` edge after that answer.
 - **`scope_gate.clean_entry` unwraps markdown bold around paths** — a touched line written as `**app/secret.py**` no longer becomes a glob that also matches `myapp/secret.py`. Real globs like `**/*.py` are unchanged. Covered in `tests/test_scope_gate.py` and `tests/test_merge_feature.py`.
 
