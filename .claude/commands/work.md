@@ -56,7 +56,10 @@ Agents may relocate plan files **only** as:
 
 ```text
 bugs|features/     →  in-progress/     (start work + lease)
-in-progress/       →  review-needed/   (Done when holds — required agent finish)
+in-progress/       →  review-needed/   (Done when holds — default agent finish)
+in-progress/       →  completed/       (ONLY after the operator answers "merge to dev
+                                        now" at culmination AND the scoped-merge gate
+                                        passes — see §6. Never self-certified.)
 review-needed/     →  completed/       (HUMAN ONLY via /review Approve)
 review-needed/     →  in-progress/     (human requested changes; agent resumes)
 review-needed/     →  bugs|features/   (release/return; also /review Needs Work)
@@ -70,9 +73,14 @@ ambiguous|blocked/ →  bugs|features/   (return when unblocked)
 drop or add the `.local` suffix; only a human may rename for privacy/tracking.
 
 Agents must **never** promote drafts except via **`/draft --promote`**, move work
-into `drafts/`, move **`in-progress/` → `completed/`** (forbidden — always finish
-to `review-needed/`), move `review-needed/` → `completed/` except under a
-human-confirmed **`/review` Approve**, or touch another agent's `in-progress/` plan.
+into `drafts/`, move `review-needed/` → `completed/` except under a human-confirmed
+**`/review` Approve**, or touch another agent's `in-progress/` plan.
+
+`in-progress/` → `completed/` is **not** an agent self-certify path. It happens only
+as the tail of a merge the **operator** authorized in-session (§6): question asked,
+answer given, scoped-merge gate passed. Unattended runs — `work_once.py`, fleet
+workers, the coordinator MCP — never ask, never merge, and always finish to
+`review-needed/`.
 
 ## Priority (when no target is given)
 
@@ -384,20 +392,112 @@ the queue moving. Small models do not grab architecture plans to "try hard."
 **Done when** all checklist items hold and verifications pass:
 
 1. If the plan has a `## Progress` checklist, check off `Done when holds`
-   (and confirm every Step bullet is checked) before the move below.
-2. **Always** `git mv` the file from `in-progress/` to `.plans/review-needed/`
-   (create the dir if needed). Drop any lease for the plan. That move means
-   *agent asserts Done when* — it is **not** final archive. Do **not** set a
-   Status field. Do **not** move to `completed/` from `/work` (no optional
-   self-certify path).
-3. Tell the human to run **`/review`** (or `/review <slug>`) for sign-off: AI
-   critic + survey — Approve merges `feature/<slug>` → dev then → `completed/`;
-   Needs Work → `bugs|features/`; Skip. Never perform `review-needed/` →
-   `completed/` or any branch merge yourself outside a human-confirmed
-   `/review` Approve.
+   (and confirm every Step bullet is checked).
+2. Run **`/commit-prep`**, then commit on `feature/<slug>` (see the Git section).
+   **Record the SHA you just committed** — the merge gate below needs it.
+3. Ask the **culmination question** (below), then follow the answer.
 4. Session footer: `## Result`, `## How to verify`, `## Deferred / concerns`,
-   including the new path under `review-needed/` and a one-line “run `/review`”
-   reminder.
+   including the plan's new path, the chosen handoff outcome, and the
+   `pending_merges.py --brief` line.
+
+#### The culmination question
+
+Ask it **once**, and only when **all** of these hold:
+
+- `/commit-prep` gates are **green**
+- the `feature/<slug>` commit succeeded (the plan produced actual commits)
+- the session is **interactive** (a human can answer right now)
+- the project uses Git
+
+Otherwise skip it entirely — red gates, unattended runs, and no-op plans go
+straight to `review-needed/` as before, with a one-line note saying why no
+question was asked.
+
+```text
+Plan '<slug>' is done and committed on feature/<slug>. What now?
+  1. Review it now (default) — /review does an AI critic pass, then you sign off
+  2. Merge to dev now — I checked the work; land it without a review cycle
+  3. Hold for testing — leave the branch and worktree; I'll come back to it
+```
+
+| Answer | What `/work` does |
+|--------|-------------------|
+| **1. Review it now** | Plan → `review-needed/`; hand off to `/review <slug>` |
+| **2. Merge to `dev` now** | Run the scoped-merge gate. **Pass** → merge, plan → `completed/` with a `## Handoff` note. **Any failure** → fall back to answer 1 and say which check refused |
+| **3. Hold for testing** | Plan → `review-needed/` with a `## Handoff` hold note; leave branch + worktree intact |
+
+Never infer the answer. Not from an earlier "yes", not from a flag, not from a
+config default, not from "the operator usually merges". No answer → answer 1.
+
+#### The scoped-merge gate (answer 2 only)
+
+All six must hold, else **refuse and fall back to `/review`**:
+
+1. **Provenance** — `feature/<slug>` HEAD is exactly the commit this run made.
+2. **Clean tree** — nothing staged, unstaged, or untracked.
+3. **File scope** — every path the branch changed is inside this run's **touched
+   set**: the plan's Steps `Touches` column, the plan file's own lane move, and the
+   paths `/commit-prep` reported (CHANGELOG, blog, docs).
+4. **Mergeable** — fast-forward preferred; otherwise a conflict-free merge.
+5. **Target** — the integration branch (`dev`, else `develop`) **only**. A target
+   resolving to `main`/`master` aborts the merge path.
+6. **Human answer** — given in this session, in direct response to the question.
+
+Checks 1–5 are mechanical; run them with the helper rather than by eye:
+
+```bash
+python scripts/merge_feature.py --root <checkout> --slug <slug> \
+  --touched <file-with-one-path-per-line> --expect-head <sha you committed> --dry-run
+# exit 0 would merge · 3 scope violation · 4 precondition · 5 conflict · 2 git error
+```
+
+`--expect-head` is **required** — provenance is a must-hold condition, and without
+the SHA there is nothing to check the branch against. The clean-tree check follows the
+**feature branch's** worktree rather than `--root`, so it still inspects the tree that
+did the work. Point `--root` at a checkout
+where the integration branch is **free**: git refuses to check out a branch that is
+live in another worktree, so with `/work` in `var/worktrees/<agent>` and your main
+checkout on `dev`, run it against the main checkout. The gate detects that conflict
+up front and names the path to re-run against instead of failing mid-merge.
+
+Drop `--dry-run` to land it. The helper never pushes, never force-updates, never
+deletes a branch, and refuses mainline targets. **Do not** pass the operator's
+answer to it — check 6 is yours to hold, and a flag would be exactly the inference
+this path forbids.
+
+**Rejected by design:** landing only the in-scope paths
+(`git checkout feature/<slug> -- <paths>`) when the scope check fails. That
+fabricates a commit matching no branch state and hides the out-of-scope change. A
+scope violation means the branch is not what `/work` thinks it is — precisely when
+a human review is warranted.
+
+#### `## Handoff` note formats
+
+Append to the plan body (never a `Status:`/`Lane:` field — path stays authoritative):
+
+```markdown
+## Handoff
+merged to dev by /work 2026-08-01 — no /review sign-off
+```
+```markdown
+## Handoff
+hold — waiting on staging data — 2026-08-01
+```
+```markdown
+## Handoff
+handed to /review 2026-08-01
+```
+
+The merged form is what makes a skipped review **auditable** — `/review --list` and
+`pending_merges.py` both surface it later.
+
+#### Answers 1 and 3
+
+`git mv` the plan from `in-progress/` to `.plans/review-needed/` (create the dir if
+needed) and drop its lease. That move means *agent asserts Done when* — it is not a
+final archive. Tell the human to run **`/review`** (or `/review <slug>`): AI critic
++ survey — Approve merges `feature/<slug>` → `dev` then → `completed/`; Needs Work →
+`bugs|features/`; Skip. Never move `review-needed/` → `completed/` yourself.
 
 **If the user stops mid-plan:** leave the file in **`in-progress/`** with a
 brief `## Progress` note. If a checklist is present, leave unfinished bullets
@@ -418,6 +518,14 @@ End every substantive `/work` turn with:
 ## Result
 ## How to verify
 ## Deferred / concerns
+```
+
+On a turn that finished a plan, `## Result` also carries the handoff outcome
+(reviewed / merged to `dev` / held) and the one-line unmerged summary:
+
+```bash
+python scripts/pending_merges.py --root <repo> --brief
+# handoff: 3 branch(es) ahead of dev · 1 completed awaiting merge · 1 held
 ```
 
 ## Git worktrees + branches + commits (when the project uses Git)
@@ -443,17 +551,21 @@ missing). Optional `--slug` checks out `feature/<slug>` inside the worktree.
 
 1. Prefer **`dev`**, else **`develop`**; create **`dev` from main/master** if neither
    exists (report creation; push `origin dev` when allowed).
-2. Feature branch `feature/<slug>` **in your worktree** — **`/work` never
-   merges** to `dev`/`main`/`master` (human **`/review` Approve** lands the
-   feature on integration; empty-queue **Promote** lands integration on mainline).
+2. Feature branch `feature/<slug>` **in your worktree**. `/work` may land it on
+   **integration only** (`dev`/`develop`), and only through §6's culmination
+   question + scoped-merge gate. `/work` **never** merges to `main`/`master` and
+   never merges on its own initiative — mainline is reached solely through
+   `/review`'s empty-queue **Promote**.
 3. When plan work is complete (Done when holds / finishing `/work`):
    - Run **`/commit-prep`** first (**prep only** — tests, CHANGELOG, blog).
    - If gates are **green**: **stage + commit on the feature branch** (HEREDOC
      message). Optional `git push -u origin HEAD` when a remote feature branch is
-     expected. Report branch + commit SHA.
-   - If gates are **red**: do not commit; fix or stop per stop rules.
-   - **Never** commit on `main`/`master`/`dev`/`develop`; **never** merge from
-     `/work`. Tell the human to run **`/review`** for sign-off + integrate.
+     expected. Report branch + commit SHA — §6's provenance check needs it.
+   - If gates are **red**: do not commit; fix or stop per stop rules. No commit
+     means no culmination question.
+   - **Never** commit on `main`/`master`/`dev`/`develop`. Merging happens only as
+     §6 describes: operator asked, operator answered, gate passed. Unattended runs
+     hand off to **`/review`** instead.
 
 ## Out of scope
 
@@ -463,6 +575,11 @@ missing). Optional `--slug` checks out `feature/<slug>` inside the worktree.
   continue to the next after finishing one
 - Running `git commit` **without** `/commit-prep`, or committing when the user did
   not ask and the plan does not require it
+- **Merging on your own initiative** — the culmination merge needs the operator's
+  in-session answer *and* a passing scoped-merge gate. Unattended paths
+  (`work_once.py`, fleet workers, the coordinator MCP) never ask and never merge;
+  they finish to `review-needed/`
+- Merging to `main`/`master` under any answer — that is `/review`'s promotion survey
 - **Documenting plan backlog** as product docs (hard rule: docs describe **current
   shipped state**, not `.plans/` contents). When work ships, document the code —
   not this plan file.

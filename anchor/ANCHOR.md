@@ -114,7 +114,10 @@ authoritative:** `bugs/` and `features/` are ready; agents move claimed work to
 `in-progress/` (only the claimer continues — others **ignore**); may park to
 `ambiguous/` (half-baked) or `blocked/` (cannot fix), or return in-progress to
 ready; agents finish claimed work to `review-needed/` (human sign-off via
-**`/review`** → `completed/`); never execute `drafts/` / `ambiguous/` /
+**`/review`** → `completed/`) — or, when the operator answers `/work`'s end-of-run
+culmination question with **merge to `dev` now** and the branch passes the
+scoped-merge gate, straight to `completed/` with a `## Handoff` note recording the
+skipped review; never execute `drafts/` / `ambiguous/` /
 `blocked/` / `review-needed/`. Do not put `Lane:` or `Status:` inside plan files.
 **Promotion** from `drafts/` → ready is via explicit **`/draft --promote <slug>`**
 (user-authorized; agent infers `bugs/` vs `features/` from the plan; **keeps**

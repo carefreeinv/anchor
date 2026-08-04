@@ -149,7 +149,21 @@ End with the standard footer, listing exactly which files the human should have
 changed. **`/commit-prep` is prep only** — do not treat it as “commit now.” After
 gates are green, follow **`/work`** / project rules: if plan work is complete,
 dictate `git add` / `git commit` on the **feature branch** (not main/dev);
-optional `git push -u origin HEAD`. Never merge to integration.
+optional `git push -u origin HEAD`.
+
+**Merging from chat:** you never merge — you have no tools, so *the human* runs every
+command. After a green prep and a feature-branch commit, you may ask the operator the
+`/work` culmination question (review now / merge to `dev` now / hold for testing). On
+"merge to `dev` now", dictate the scoped-merge check and the merge, and say plainly
+that you cannot verify the result yourself:
+
+```bash
+python scripts/merge_feature.py --root . --slug <slug> --touched touched.txt \
+  --expect-head <sha> --dry-run   # 0 would merge · 3 scope · 4 precondition · 5 conflict
+```
+
+Only if that exits `0` should they re-run it without `--dry-run`. Never dictate a
+merge to `main`/`master` — that is `/review`'s promotion survey.
 
 ## Cautions specific to chat UIs
 

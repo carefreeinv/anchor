@@ -562,3 +562,41 @@ def test_load_orchestrator_from_defaults(tmp_path, monkeypatch):
     defaults_file.write_text("PLATFORMS=chat\nORCHESTRATOR=Claude:Fable\n")
     monkeypatch.setattr(anchor, "DEFAULTS_FILE", defaults_file)
     assert anchor.load_orchestrator() == "claude:fable"
+
+
+def test_every_script_a_scaffolded_skill_names_is_shipped_to_consumers():
+    """A skill that tells a consumer agent to run `scripts/x.py` must ship `x.py`.
+
+    `FLEET_FILES` is a hand-maintained allowlist, so a new script referenced from a
+    scaffolded skill reaches consumer projects only if someone remembers to add it.
+    Nothing errors when they forget — the file simply never appears in the scaffolded
+    tree and the skill fails at use time, in someone else's repo.
+    """
+    import re
+    from pathlib import Path
+
+    import anchor
+
+    repo = Path(anchor.__file__).resolve().parent.parent
+    shipped = {Path(f).name for f in anchor.FLEET_FILES}
+    on_disk = {p.name for p in (repo / "scripts").glob("*.py")}
+
+    # Scripts that deliberately live only in the Anchor checkout. A consumer runs
+    # these *from* Anchor (via the `anchor` CLI), never from its own tree, so a skill
+    # naming them is correct and shipping them would be wrong. Explicit so the
+    # exception is reviewable rather than silent.
+    anchor_only = {"anchor.py"}
+
+    missing: dict[str, set[str]] = {}
+    for skill_dir, pattern in ((".claude/commands", "*.md"), (".grok/skills", "*/SKILL.md")):
+        for skill in (repo / skill_dir).glob(pattern):
+            named = set(re.findall(r"scripts/([a-z_]+\.py)", skill.read_text(encoding="utf-8")))
+            gap = {n for n in named if n in on_disk and n not in shipped
+                   and n not in anchor_only}
+            if gap:
+                missing[skill.name] = gap
+
+    assert not missing, (
+        "scaffolded skills name scripts that FLEET_FILES does not ship to consumer "
+        f"projects: {missing}"
+    )

@@ -260,7 +260,7 @@ python scripts/worktree_for_agent.py remove --project /srv/myapp --agent-id mid-
 python scripts/work_once.py --once --tier mid --agent-id mid-1 --ensure-worktree
 ```
 
-**Rules:** edit code **only** in your worktree path; `/commit-prep` before commit; push the **feature branch** only; never auto-merge to `dev`/`main`. Plan leases stay under the project’s `.plans/` (shared); the worktree is for the *code* tree only.
+**Rules:** edit code **only** in your worktree path; `/commit-prep` before commit; push the **feature branch** only; **never merge** — the operator-answered culmination merge in interactive `/work` does not exist for unattended workers, which always finish to `review-needed/`. Plan leases stay under the project’s `.plans/` (shared); the worktree is for the *code* tree only.
 
 ## Leases and claims
 

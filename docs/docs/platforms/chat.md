@@ -1,4 +1,4 @@
-<!-- synced-from: platforms/chat/CHAT.md @ 20ffb0c2746b9fae55bdebbd54196c440e0cb746 -->
+<!-- synced-from: platforms/chat/CHAT.md @ 7c6f494f37baea82b121219382bdec4899667e26 -->
 ---
 sidebar_position: 5
 sidebar_label: Generic Chat
@@ -52,4 +52,4 @@ the model does the judgment. **Project-agnostic** (no Docusaurus required). Thre
 gates — (1) this project’s tests/CI, (2) changelog, (3) blog under `docs/blog/`
 if warranted. **`/commit-prep` is prep only.** After green gates, follow
 [**`/work`**](/skills/work) for feature-branch commit (dictate `git add` /
-commit / optional push); never merge to dev/main.
+commit / optional push). Chat has no tools, so the human runs every command: you may relay `/work`'s culmination question and dictate the scoped-merge check, but never a merge to `main`.
