@@ -50,7 +50,8 @@ stateDiagram-v2
   [*] --> drafts: write plan
   drafts --> ready: human promote only
   ready --> in_progress: start work + lease
-  in_progress --> review_needed: Done when holds (required)
+  in_progress --> review_needed: Done when holds (default)
+  in_progress --> completed: operator merge answer + scoped gate
   review_needed --> completed: human /review Approve
   review_needed --> in_progress: human requested changes
   review_needed --> ready: Needs Work or release/return
@@ -66,9 +67,13 @@ stateDiagram-v2
   note right of ready
     bugs/ or features/
   end note
+  note right of completed
+    in-progress → completed only after
+    operator-authorized /work merge
+  end note
 ```
 
-Agents must **never** promote drafts except via [**`/draft --promote`**](/skills/draft), move work into `drafts/`, move `review-needed/` → `completed/` except under human-confirmed [**`/review` Approve**](/skills/review), or touch another agent’s `in-progress/` plan. **Preserve basename** on every lane move (including `.local.md`); only a human may rename for privacy/tracking.
+Agents must **never** promote drafts except via [**`/draft --promote`**](/skills/draft), move work into `drafts/`, move `review-needed/` → `completed/` except under human-confirmed [**`/review` Approve**](/skills/review), self-certify `in-progress/` → `completed/` without the operator's in-session merge answer and a passing scoped-merge gate, or touch another agent’s `in-progress/` plan. **Preserve basename** on every lane move (including `.local.md`); only a human may rename for privacy/tracking.
 
 ## Priority (bare `/work`)
 
@@ -110,13 +115,15 @@ flowchart LR
   exec["Execute<br/>/work steps"]
   park["Park<br/>ambiguous/ or blocked/"]
   release["Release<br/>back to bugs|features"]
-  review["Finish agent work<br/>review-needed/"]
-  finish["Archive<br/>completed/ (human /review Approve)"]
+  review["Finish agent work<br/>review-needed/ (default)"]
+  finish["Archive<br/>completed/ (/review Approve)"]
+  mergeDone["Archive<br/>completed/ (operator merge answer)"]
 
   write --> promote
   promote --> claim
   claim --> exec
   exec --> review
+  exec --> mergeDone
   exec --> park
   exec --> release
   review --> finish
@@ -144,7 +151,7 @@ Scaffold always creates the empty `.plans/` tree + README. Process contract also
 
 ### Chat / no shell
 
-When the user types `/work` without tool access: ask them to `ls .plans/bugs .plans/features .plans/in-progress` and paste output; pick by the same priority and model-fit rules; dictate `git mv` into `in-progress/` when starting and into **`review-needed/`** when Done when holds. Never dictate a promote move, an `in-progress/` → `completed/` move, or a `review-needed/` → `completed/` move (use [**`/review`**](/skills/review)). Never work a foreign in-progress path.
+When the user types `/work` without tool access: ask them to `ls .plans/bugs .plans/features .plans/in-progress` and paste output; pick by the same priority and model-fit rules; dictate `git mv` into `in-progress/` when starting and into **`review-needed/`** when Done when holds (default). After a green prep and feature-branch commit you may ask the culmination question; on **merge to `dev` now**, dictate the scoped-merge check and merge (see [How work reaches `dev`](/tooling/how-work-reaches-dev) and `platforms/chat/CHAT.md`) and only then dictate `in-progress/` → `completed/` with a `## Handoff` note. Never dictate a promote move, a self-certified `in-progress/` → `completed/` without that operator answer + gate, a merge to `main`/`master`, or a `review-needed/` → `completed/` move (use [**`/review`**](/skills/review)). Never work a foreign in-progress path.
 
 ### Headless / fleet
 

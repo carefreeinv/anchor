@@ -221,19 +221,41 @@ def enforce_config(cfg: ScopeConfig, *, changes: list[str] | None = None) -> Sco
     return enforce_scope(cfg.root, cfg.in_scope, cfg.allowed_generated, changes=changes)
 
 
+def _unwrap_md_emphasis(entry: str) -> str:
+    """Unwrap a whole-entry ``**path**`` / ``__path__`` wrapper only.
+
+    Markdown bold around a path (common in this repo's prose) must not become a
+    glob: ``**app/secret.py**`` would otherwise match ``myapp/secret.py`` because
+    ``*`` triggers glob mode in :func:`path_matches`. Real gitignore globs such as
+    ``**/*.py`` are left alone — they are not a closed bold pair around a
+    ``*``/``?``-free interior.
+    """
+    m = re.fullmatch(r"\*\*([^*?]+)\*\*", entry)
+    if m:
+        return m.group(1)
+    m = re.fullmatch(r"__([^_?]+)__", entry)
+    if m:
+        return m.group(1)
+    return entry
+
+
 def clean_entry(line: str) -> str:
     """Strip one leading bullet, backticks, and any trailing note from a scope line.
 
     Public because every consumer of a hand-written path list needs exactly this
     normalization (``merge_feature.py`` reads a touched-set file the same way),
     and a second copy would drift — notably on entries that *start* with a glob
-    (``*.md``), where a naive ``lstrip("-* ")`` eats the pattern.
+    (``*.md``), where a naive ``lstrip("-* ")`` eats the pattern. Also unwraps
+    whole-entry markdown bold/italic so ``**app/x.py**`` does not become an
+    over-broad glob (see :func:`_unwrap_md_emphasis`).
     """
     line = re.sub(r"^\s*[-*]\s+", "", line.strip())
     line = line.strip().strip("`").strip()
+    line = _unwrap_md_emphasis(line)
     # a scope line may carry a trailing note: "path — why" / "path  (why)"
     line = re.split(r"\s+[—–]\s+|\s+-\s+|\s{2,}|\s+\(", line, maxsplit=1)[0]
-    return line.strip().strip("`").strip()
+    line = line.strip().strip("`").strip()
+    return _unwrap_md_emphasis(line)
 
 
 def parse_scope(spec_text: str) -> tuple[list[str], list[str]]:

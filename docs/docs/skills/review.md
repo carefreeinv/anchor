@@ -108,6 +108,10 @@ Process contract also lives in `.plans/README.md` once scaffolded.
 
 ## Related
 
-- [**`/work`**](/skills/work) — agents finish to `review-needed/`; **never** merge
+- [**`/work`**](/skills/work) — default finish is `review-needed/`; interactive
+  sessions may also land `feature/<slug>` on **`dev` only** when the operator
+  answers the culmination question and the scoped-merge gate passes. Unattended
+  runs never merge. `/review` remains the only route to `main`.
 - [`pending_merges.py`](/tooling/scripts) — advisory table of unmerged branches
+- [How work reaches `dev`](/tooling/how-work-reaches-dev) — the two routes onto integration
 - [Doctrine — tracked plans](/doctrine)

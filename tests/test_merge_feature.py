@@ -376,6 +376,13 @@ def test_target_checked_out_in_another_worktree_refuses_before_the_gate_passes(
 # --- entry parsing keeps globs intact ------------------------------------------
 
 
+def test_read_touched_unwraps_markdown_bold(tmp_path):
+    f = tmp_path / "touched.txt"
+    f.write_text("**app/secret.py**\n- **scripts/**\n**/*.py\n", encoding="utf-8")
+
+    assert read_touched(str(f)) == ("app/secret.py", "scripts/", "**/*.py")
+
+
 def test_read_touched_preserves_leading_globs(tmp_path):
     f = tmp_path / "touched.txt"
     f.write_text("*.md\n**/tests/*.py\n- `app/`\n", encoding="utf-8")
