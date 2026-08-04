@@ -199,7 +199,8 @@ asks once what should happen to the finished plan:
 The merge answer trades the AI critic for a narrower mandate — the operator watched
 the work happen — so a mechanical gate proves nothing else rode along:
 **provenance** (branch HEAD is the commit this run made), **clean tree**, **file
-scope** (every changed path inside the run's declared touched set), **mergeable**
+scope** (every path named in range history `base..head`, not only the net
+two-dot diff), **mergeable**
 (fast-forward preferred), **target is integration only**, and the **human answer**
 itself. Any failure falls back to `/review` and says which check refused.
 

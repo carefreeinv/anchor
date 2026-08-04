@@ -422,11 +422,12 @@ No answer → answer 1.
 #### Scoped-merge gate (answer 2 only)
 
 All six, else refuse and fall back to `/review`: **provenance** (branch HEAD is the
-commit this run made) · **clean tree** · **file scope** (every changed path inside
-this run's touched set: plan `Touches` + the plan's own lane move + what
-`/commit-prep` reported) · **mergeable** (ff preferred, else conflict-free) ·
-**target is integration only** (`dev`/`develop`; mainline aborts the path) ·
-**human answer in this session**.
+commit this run made) · **clean tree** · **file scope** (every path named
+**anywhere in the range history** `base..head` — not only the net tree-to-tree
+diff — is inside this run's touched set: plan `Touches` + the plan's own lane
+move + what `/commit-prep` reported; add-then-delete still counts) · **mergeable**
+(ff preferred, else conflict-free) · **target is integration only**
+(`dev`/`develop`; mainline aborts the path) · **human answer in this session**.
 
 ```bash
 python scripts/merge_feature.py --root <checkout> --slug <slug> \

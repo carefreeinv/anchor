@@ -435,9 +435,11 @@ All six must hold, else **refuse and fall back to `/review`**:
 
 1. **Provenance** — `feature/<slug>` HEAD is exactly the commit this run made.
 2. **Clean tree** — nothing staged, unstaged, or untracked.
-3. **File scope** — every path the branch changed is inside this run's **touched
-   set**: the plan's Steps `Touches` column, the plan file's own lane move, and the
-   paths `/commit-prep` reported (CHANGELOG, blog, docs).
+3. **File scope** — every path named **anywhere in the range history**
+   (`base..head`), not only the net tree-to-tree diff, is inside this run's
+   **touched set**: the plan's Steps `Touches` column, the plan file's own lane
+   move, and the paths `/commit-prep` reported (CHANGELOG, blog, docs). A path
+   added and then deleted still counts.
 4. **Mergeable** — fast-forward preferred; otherwise a conflict-free merge.
 5. **Target** — the integration branch (`dev`, else `develop`) **only**. A target
    resolving to `main`/`master` aborts the merge path.

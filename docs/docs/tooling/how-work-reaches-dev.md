@@ -41,8 +41,10 @@ proves the branch is exactly what the run thinks it is. All of it must hold:
 
 1. **Provenance** — the branch head is the commit that run just made.
 2. **Clean tree** — nothing staged, unstaged, or untracked.
-3. **File scope** — every changed path is inside the run's declared touched set
-   (plan `Touches`, the plan's own lane move, what `/commit-prep` reported).
+3. **File scope** — every path named **anywhere in the range history**
+   (`base..head`), not only the net tree-to-tree diff, is inside the run's
+   declared touched set (plan `Touches`, the plan's own lane move, what
+   `/commit-prep` reported). A path added and then deleted still counts.
 4. **Mergeable** — fast-forward preferred; otherwise a conflict-free merge.
 5. **Target** — integration only; a mainline target aborts the merge path.
 6. **Human answer** — in this session, in response to the question. Never a flag,
