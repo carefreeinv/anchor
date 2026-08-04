@@ -248,12 +248,23 @@ def clean_entry(line: str) -> str:
     (``*.md``), where a naive ``lstrip("-* ")`` eats the pattern. Also unwraps
     whole-entry markdown bold/italic so ``**app/x.py**`` does not become an
     over-broad glob (see :func:`_unwrap_md_emphasis`).
+
+    Trailing notes (stripped) use explicit delimiters only:
+
+    * ``path — why`` / ``path – why`` (em/en dash)
+    * ``path - why`` (space-hyphen-space)
+    * ``path (why)`` / ``path  (why)`` (whitespace then open paren)
+
+    Internal double spaces in a path (``path with  double space.py``) are
+    preserved — they must not be treated as note delimiters (false-refusal on
+    legal paths). Freeform notes after bare double spaces without a delimiter
+    above are **not** stripped.
     """
     line = re.sub(r"^\s*[-*]\s+", "", line.strip())
     line = line.strip().strip("`").strip()
     line = _unwrap_md_emphasis(line)
-    # a scope line may carry a trailing note: "path — why" / "path  (why)"
-    line = re.split(r"\s+[—–]\s+|\s+-\s+|\s{2,}|\s+\(", line, maxsplit=1)[0]
+    # Delimiters only — do not split on arbitrary ``\s{2,}`` (N11).
+    line = re.split(r"\s+[—–]\s+|\s+-\s+|\s+\(", line, maxsplit=1)[0]
     line = line.strip().strip("`").strip()
     return _unwrap_md_emphasis(line)
 

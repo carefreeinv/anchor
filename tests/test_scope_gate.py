@@ -40,6 +40,20 @@ def test_clean_entry_bold_path_does_not_match_sibling_prefix():
     assert path_matches("myapp/secret.py", "**app/secret.py**")
 
 
+def test_clean_entry_preserves_internal_double_spaces():
+    """N11: double spaces inside a path are not a trailing-note delimiter."""
+    assert clean_entry("path with  double space.py") == "path with  double space.py"
+    assert clean_entry("- `path with  double space.py`") == "path with  double space.py"
+    assert clean_entry("**path with  double space.py**") == "path with  double space.py"
+
+
+def test_clean_entry_still_strips_explicit_trailing_notes():
+    assert clean_entry("app/x.py — why this is in scope") == "app/x.py"
+    assert clean_entry("app/x.py - why this is in scope") == "app/x.py"
+    assert clean_entry("app/x.py  (why this is in scope)") == "app/x.py"
+    assert clean_entry("app/x.py (note)") == "app/x.py"
+
+
 def test_path_matches_exact_and_dir_prefix():
     assert path_matches("scripts/foo.py", "scripts/foo.py")
     assert path_matches("scripts/foo.py", "scripts/")  # directory subtree
