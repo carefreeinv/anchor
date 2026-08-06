@@ -3,7 +3,7 @@ sidebar_position: 3
 sidebar_label: Doctrine
 ---
 
-<!-- synced-from: anchor/ANCHOR.md @ 511bc69012245cef48557ef8e2282ee35d3cbdd7 -->
+<!-- synced-from: anchor/ANCHOR.md @ f0aa97d19d80bd6942479f603f31a0171694a94b -->
 
 # The Doctrine
 
@@ -60,12 +60,13 @@ flowchart TB
 - **One task per fresh context** — context rot hits small models hardest; never run task chains in one conversation.
 - **Declared budget + pre-flight gate** — every task spec's `## Budget` (context window, output ceiling) comes from tooling, not the model's guess; mythos-core rule 13 makes every executor print a fixed 6-item pass/fail block (goal, acceptance criteria, files-in-scope, budget, tier fit, task size) before doing any work, and stop on the first FAIL instead of plowing ahead.
 - **Role separation** — planner → executor → critic as three clean contexts outperforms one long chat, even on the same model. In the orchestrated path the split is harness-enforced by the `scripts/roles.py` capability map (planner writes only `.plans/**`; executor never `.plans/**` or its own spec; critic writes nothing), applied per phase by `orchestrate.py` and by the project-orchestrator MCP server's role-scoped toolsets. Role transitions are logged orchestrator events; single-model sessions keep the discipline by prompt alone.
+- **Planned continuation instead of context rot** — a task that outgrows its window degrades into a continuation, not a truncated answer. Near its declared ceiling the executor emits a structured handoff (`templates/handoff.md`: done + how each item was checked, remaining work as ready-to-dispatch sub-specs, decisions made, files touched, open concerns) and the orchestrator respawns a **fresh** context seeded with it — never a longer conversation. Mythos-core rule 15 requires the handoff; `orchestrate.py` decides when one is due from its own token accounting, rejects remaining work with no verify command, and refuses a continuation whose scope grew. Cap: 2 continuations, then back to the planner.
 - **External verification** — tests, linters, builds, and diff-scope checks decide done-ness. Fleet runs pair the model’s claim with actual verify exits in `var/fleet-metrics/outcomes.jsonl`; aggregate with `fitness_report.py` and prefer those rates when updating model-fitness prose.
 - **Escalation paths** — ambiguity, architecture, and twice-failed tasks go up a tier by rule, not by judgment.
 
 ## The templates
 
-Four files in `.anchor/templates/` (source: `anchor/templates/`) are the doctrine's working surface: `plan.md` (planner output; Value / Preferred models when using `./.plans` — lane/lifecycle from **path**, not in-file Status/Lane), `task-spec.md` (the unit of dispatched work; its `## Budget` section is what mythos-core rule 13's pre-flight check reads), `review.md` (critic pass), `verification.md` (tooling-filled done-ness table). The `mythos-core.md` system prompt binds any model to the six behaviors and the required output footer.
+Five files in `.anchor/templates/` (source: `anchor/templates/`) are the doctrine's working surface: `plan.md` (planner output; Value / Preferred models when using `./.plans` — lane/lifecycle from **path**, not in-file Status/Lane), `task-spec.md` (the unit of dispatched work; its `## Budget` section is what mythos-core rule 13's pre-flight check reads), `handoff.md` (what an executor emits instead of truncating when it approaches that budget — done / remaining sub-specs / decisions / files touched / open concerns, parsed by `scripts/handoff.py` into the next window's spec), `review.md` (critic pass), `verification.md` (tooling-filled done-ness table). The `mythos-core.md` system prompt binds any model to the six behaviors and the required output footer.
 
 ## Tracked plans (`./.plans`)
 
@@ -86,8 +87,8 @@ flowchart LR
 
   drafts -->|"/draft --promote slug<br/>infer bugs|features"| ready
   ready -->|"claim"| prog
-  prog -->|"Done when"| done
-  prog -->|"Done when,<br/>wants sign-off"| review
+  prog -->|"Done when +<br/>operator merge answer"| done
+  prog -->|"Done when<br/>(default)"| review
   review -->|"human only"| done
   review -.->|"human: changes requested"| prog
   ready --> park
@@ -95,7 +96,7 @@ flowchart LR
   park -->|"return"| ready
 ```
 
-Ready lanes are `bugs/` then `features/` (within a lane by `Priority` P1→P2→P3, default P2, then Value, then oldest first); agents move claimed work to `in-progress/` (only the claimer may continue — others ignore); may park half-baked or stuck work in `ambiguous/` or `blocked/`; when Done when holds agents **always** move work to `review-needed/` for human sign-off (human runs [**`/review`**](/skills/review): AI critic + survey — Approve → `completed/`, Needs Work → `bugs|features/`; agents must not archive to `completed/` from `/work`); never execute `drafts/`, `ambiguous/`, `blocked/`, or `review-needed/`. Do not put `Lane:` or `Status:` inside plan files. **Promotion** from drafts: [**`/draft --promote <slug>`**](/skills/draft) (user-authorized; agent infers bugs vs features from the plan) or a human move — never from `/work` or fleet pullers. Prefer [**`/draft`**](/skills/draft) to create/list/load drafts, [**`/work`**](/skills/work) to execute ready plans, and [**`/review`**](/skills/review) for `review-needed/` sign-off. Headless: `scripts/work_once.py --once --tier mid --agent-id …`. Multi-tier pollers: [Fleet workers](/tooling/fleet-workers). Preferred orchestrator: `anchor <dir> --set-orchestrator …` (if unset, frontier/near-frontier may act as temporary coordinator; lesser models escalate).
+Ready lanes are `bugs/` then `features/` (within a lane by `Priority` P1→P2→P3, default P2, then Value, then oldest first); agents move claimed work to `in-progress/` (only the claimer may continue — others ignore); may park half-baked or stuck work in `ambiguous/` or `blocked/`; when Done when holds agents move work to `review-needed/` for human sign-off (human runs [**`/review`**](/skills/review): AI critic + survey — Approve merges `feature/<slug>` → `dev` then → `completed/`, Needs Work → `bugs|features/`) — **or**, when the operator answers `/work`'s end-of-run culmination question with *merge to `dev` now* and the branch clears the scoped-merge gate, straight to `completed/` with a `## Handoff` note recording the skipped review. Agents never self-certify to `completed/` and never merge unasked; unattended runs always finish to `review-needed/`, and `main` is reached only through `/review`'s promotion survey (see [How work reaches `dev`](/tooling/how-work-reaches-dev)); never execute `drafts/`, `ambiguous/`, `blocked/`, or `review-needed/`. Do not put `Lane:` or `Status:` inside plan files. **Promotion** from drafts: [**`/draft --promote <slug>`**](/skills/draft) (user-authorized; agent infers bugs vs features from the plan) or a human move — never from `/work` or fleet pullers. Prefer [**`/draft`**](/skills/draft) to create/list/load drafts, [**`/work`**](/skills/work) to execute ready plans, and [**`/review`**](/skills/review) for `review-needed/` sign-off. Headless: `scripts/work_once.py --once --tier mid --agent-id …`. Multi-tier pollers: [Fleet workers](/tooling/fleet-workers). Preferred orchestrator: `anchor <dir> --set-orchestrator …` (if unset, frontier/near-frontier may act as temporary coordinator; lesser models escalate).
 
 ## Right-size before you start
 

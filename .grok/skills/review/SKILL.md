@@ -83,7 +83,13 @@ Flags may combine with a slug: `/review --no-launch my-slug`.
    `origin` only** with confirm after local success, or when `--push` was set
    (still confirm once). Default is **local merge only**.
 7. Preserve basenames (including `.local.md`) on every move.
-8. **`/work` and executors never merge.** Only this skill after survey may land
+8. **Executors never merge; `/work` may land only what its operator just watched.**
+   A `/work` session may merge `feature/<slug>` → **integration only**, and only
+   when the operator answers its end-of-run culmination question in-session *and*
+   the branch passes the scoped-merge gate (`scripts/merge_feature.py`). Unattended
+   and fleet runs never merge, and **this skill is the only route to `main`** —
+   a plan arriving in `review-needed/` was not merged by `/work`. Only this skill
+   after survey may land
    branches on integration/mainline.
 
 ## Integration / mainline resolution
@@ -206,10 +212,13 @@ On spawn/empty failure: “AI pass skipped/failed: …” then continue.
 ## 8. Present package (plan mode)
 
 1. Plan identity (path, slug, Goal)
-2. Evidence (diff, Done when, PR/URLs, commits ahead of integration)
-3. AI verdict + top findings (or skip/fail)
-4. How to exercise the system
-5. Note: **Approve will merge `feature/<slug>` → integration, then archive**
+2. **`## Handoff` note, when the plan body has one** — a `hold — <reason> — <date>`
+   line means the operator parked this deliberately for testing; lead with it, since
+   the reason is usually what to check before approving
+3. Evidence (diff, Done when, PR/URLs, commits ahead of integration)
+4. AI verdict + top findings (or skip/fail)
+5. How to exercise the system
+6. Note: **Approve will merge `feature/<slug>` → integration, then archive**
 
 ## 9. Survey (plan mode)
 

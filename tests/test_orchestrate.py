@@ -399,6 +399,207 @@ def test_role_violating_task_is_not_recorded_as_a_clean_claim(git_repo, monkeypa
     assert rows[0].role_verdict == "fail"    # ...but the harness caught the write
 
 
+# --- handoff → continuation --------------------------------------------------
+# A task that outgrows its window becomes a planned continuation, not a truncated
+# answer. The orchestrator (not the model) decides how many windows are allowed.
+
+
+HANDOFF_TEXT = """# Handoff: big task
+
+## Done
+- [x] Wrote the parser — verified by `pytest -q` → pass
+
+## Remaining
+
+### 1. Serialize the rows
+
+- Goal: stream report rows as CSV
+- Files in scope: app/export.py
+- Verify by: `pytest tests/test_export.py -q`
+
+## Decisions made
+- Streamed rather than buffered — reports can exceed memory
+
+## Files touched
+- `app/parse.py` — added the row parser
+
+## Open concerns
+- none
+"""
+
+
+class RecordingEndpoint(FakeEndpoint):
+    """FakeEndpoint that keeps every user prompt it was dispatched."""
+
+    def __init__(self, replies, quirks=None):
+        super().__init__(replies, quirks=quirks)
+        self.prompts: list[str] = []
+
+    def chat(self, messages, **kwargs):
+        self.prompts.append(messages[-1]["content"])
+        return super().chat(messages, **kwargs)
+
+
+class RecordingFleet:
+    def __init__(self, replies, quirks=None):
+        self.ep = RecordingEndpoint(replies, quirks=quirks)
+
+    def pick(self, role):
+        return self.ep
+
+
+def test_handoff_output_is_not_treated_as_a_format_failure():
+    """A handoff has no '## Result' footer on purpose — it must not be retried."""
+    from orchestrate import execute_task
+
+    fleet = RecordingFleet([HANDOFF_TEXT])
+    result = execute_task("big task", "plan", fleet, verify_cmd=None, hold_on_fail=False)
+
+    assert result["status"] == "handoff"
+    assert result["attempts"] == 1
+    assert fleet.ep.calls == 1  # no retry burned on a deliberate handoff
+    assert result["handoff"].remaining[0].verify_by == "pytest tests/test_export.py -q"
+
+
+def test_undispatchable_handoff_gets_one_corrective_retry_then_escalates():
+    """Remaining work with no Verify by is rejected — one retry, never a third."""
+    from orchestrate import execute_task
+
+    vague = HANDOFF_TEXT.replace("- Verify by: `pytest tests/test_export.py -q`\n", "")
+    fleet = RecordingFleet([vague, vague])
+    result = execute_task("big task", "plan", fleet, verify_cmd=None, hold_on_fail=False)
+
+    assert result["status"] == "escalate"
+    assert fleet.ep.calls == 2  # MAX_ATTEMPTS: one corrective retry, then stop
+    assert "Verify by" in fleet.ep.prompts[1]  # the retry carried the correction
+
+
+def test_handoff_respawns_a_fresh_continuation_that_completes():
+    """The oversized-task path: one handoff, one continuation, task completes."""
+    from orchestrate import execute_with_continuations
+
+    fleet = RecordingFleet([HANDOFF_TEXT, GOOD_OUTPUT])
+    result = execute_with_continuations("big task", "plan", fleet,
+                                        verify_cmd=None, hold_on_fail=False)
+
+    assert result["status"] == "ok"
+    assert result["windows"] == 2
+    assert [h["window"] for h in result["handoffs"]] == [1]
+
+    continuation = fleet.ep.prompts[1]
+    assert "CONTINUATION (window 2)" in continuation
+    assert "big task" in continuation                    # original task restated
+    assert "do NOT redo" in continuation
+    assert "Wrote the parser" in continuation            # done work carried forward
+    assert "Streamed rather than buffered" in continuation  # decisions carried forward
+    assert "Serialize the rows" in continuation          # only remaining work dispatched
+
+
+def test_third_respawn_is_refused_with_an_escalation_report():
+    """Two respawns is the cap: a task still handing off is a decomposition error."""
+    from orchestrate import execute_with_continuations
+
+    fleet = RecordingFleet([HANDOFF_TEXT, HANDOFF_TEXT, HANDOFF_TEXT])
+    result = execute_with_continuations("big task", "plan", fleet,
+                                        verify_cmd=None, hold_on_fail=False)
+
+    assert result["status"] == "escalate"
+    assert result["windows"] == 3
+    assert "decomposed wrong" in result["message"]
+    assert "back to the planner" in result["message"]
+    assert fleet.ep.calls == 3  # no fourth window dispatched
+
+
+def test_handoff_cap_holds_in_detached_mode():
+    from orchestrate import execute_with_continuations
+
+    fleet = RecordingFleet([HANDOFF_TEXT, HANDOFF_TEXT, HANDOFF_TEXT])
+    result = execute_with_continuations("big task", "plan", fleet,
+                                        verify_cmd=None, hold_on_fail=True)
+
+    assert result["status"] == "hold"
+
+
+def test_max_respawns_zero_escalates_on_the_first_handoff():
+    from orchestrate import execute_with_continuations
+
+    fleet = RecordingFleet([HANDOFF_TEXT, GOOD_OUTPUT])
+    result = execute_with_continuations("big task", "plan", fleet, verify_cmd=None,
+                                        hold_on_fail=False, max_respawns=0)
+
+    assert result["status"] == "escalate"
+    assert fleet.ep.calls == 1
+
+
+def test_continuation_refusing_to_widen_scope_escalates_instead_of_dispatching(git_repo):
+    """Scope smuggled into remaining work goes back to the planner, not to a worker."""
+    from orchestrate import execute_with_continuations
+    from scope_gate import ScopeConfig
+
+    fleet = RecordingFleet([HANDOFF_TEXT, GOOD_OUTPUT])
+    scope = ScopeConfig(root=git_repo, in_scope=("docs/",))  # app/export.py is outside it
+
+    result = execute_with_continuations("big task", "plan", fleet, verify_cmd=None,
+                                        hold_on_fail=False, scope=scope)
+
+    assert result["status"] == "escalate"
+    assert "app/export.py" in result["message"]
+    assert "only shrink" in result["message"]
+    assert fleet.ep.calls == 1  # continuation never dispatched
+
+
+def test_handoff_events_are_logged_for_the_run_record():
+    from orchestrate import execute_with_continuations
+
+    events: list[dict] = []
+    fleet = RecordingFleet([HANDOFF_TEXT, GOOD_OUTPUT])
+    execute_with_continuations("big task", "plan", fleet, verify_cmd=None,
+                               hold_on_fail=False, events=events)
+
+    assert [e["event"] for e in events] == ["handoff"]
+    assert events[0]["window"] == 1
+
+
+# --- budget accounting drives the handoff, the model does not ----------------
+
+
+def test_budget_pressure_is_none_without_a_declared_ceiling():
+    from anchor_client import Endpoint
+    from orchestrate import budget_pressure
+
+    ep = Endpoint(name="unspecified-ep", tier="executor", base_url="http://x", model="m")
+    assert budget_pressure("x" * 1000, ep) is None
+
+
+def test_budget_pressure_is_the_fraction_of_the_declared_ceiling():
+    from anchor_client import Endpoint
+    from orchestrate import budget_pressure
+
+    ep = Endpoint(name="ep", tier="executor", base_url="http://x", model="m",
+                  quirks={"max_context": 100})
+    assert budget_pressure("x" * 320, ep) == pytest.approx(0.81, abs=0.02)
+
+
+def test_dispatch_near_the_ceiling_attaches_the_handoff_directive(monkeypatch):
+    import orchestrate
+
+    monkeypatch.setattr(orchestrate, "HANDOFF_THRESHOLD", 0.0)
+    fleet = RecordingFleet([GOOD_OUTPUT], quirks={"max_context": 1_000_000})
+    orchestrate.execute_task("small task", "plan", fleet, verify_cmd=None, hold_on_fail=False)
+
+    assert "BUDGET NOTICE" in fleet.ep.prompts[0]
+    assert "anchor/templates/handoff.md" in fleet.ep.prompts[0]
+
+
+def test_dispatch_below_the_threshold_attaches_nothing():
+    from orchestrate import execute_task
+
+    fleet = RecordingFleet([GOOD_OUTPUT], quirks={"max_context": 1_000_000})
+    execute_task("small task", "plan", fleet, verify_cmd=None, hold_on_fail=False)
+
+    assert "BUDGET NOTICE" not in fleet.ep.prompts[0]
+
+
 def test_clean_task_records_role_verdict_pass(git_repo, monkeypatch):
     import orchestrate
 
@@ -416,3 +617,71 @@ def test_clean_task_records_role_verdict_pass(git_repo, monkeypatch):
     rows = _ledger_rows(ledger)
     assert len(rows) == 1
     assert rows[0].role_verdict == "pass"
+
+
+def test_a_conforming_result_quoting_the_template_is_not_a_handoff():
+    """A task whose job is to edit the handoff template must still finish."""
+    from orchestrate import execute_with_continuations
+
+    fleet = RecordingFleet([GOOD_OUTPUT + "\n" + HANDOFF_TEXT])
+    result = execute_with_continuations("edit the handoff template", "plan", fleet,
+                                        verify_cmd=None, hold_on_fail=False)
+
+    assert result["status"] == "ok"          # not spun into a continuation
+    assert fleet.ep.calls == 1
+
+
+def test_budget_check_accounts_for_the_directive_it_will_append(monkeypatch):
+    """The directive used to be added after the check that said the prompt fits."""
+    import orchestrate
+
+    monkeypatch.setattr(orchestrate, "HANDOFF_THRESHOLD", 0.0)
+    monkeypatch.setattr(orchestrate, "load_prompt", lambda p: "SYS")
+    # Ceiling sits between the bare prompt and the prompt+directive.
+    bare = orchestrate.estimate_tokens("SYS" + "PLAN (context only):\nplan\n\n"
+                                       "YOUR SINGLE TASK:\ntask")
+    ceiling = bare + 10
+    fleet = RecordingFleet([GOOD_OUTPUT], quirks={"max_context": ceiling})
+
+    result = orchestrate.execute_task("task", "plan", fleet, verify_cmd=None,
+                                      hold_on_fail=False)
+
+    assert result["status"] == "failed-budget"
+    assert fleet.ep.calls == 0  # refused rather than dispatched over the ceiling
+
+
+def test_budget_pressure_is_total_on_odd_ceilings():
+    from anchor_client import Endpoint
+    from orchestrate import budget_pressure
+
+    for ceiling in ("0", "abc", -5, 0):
+        ep = Endpoint(name="odd", tier="executor", base_url="http://x", model="m",
+                      quirks={"max_context": ceiling})
+        assert budget_pressure("x" * 100, ep) is None
+
+
+def test_zero_max_respawns_escalates_without_hitting_the_unreachable_assert():
+    import orchestrate
+
+    fleet = RecordingFleet([HANDOFF_TEXT, GOOD_OUTPUT])
+    result = orchestrate.execute_with_continuations(
+        "big task", "plan", fleet, verify_cmd=None, hold_on_fail=False, max_respawns=0)
+
+    assert result["status"] == "escalate"   # no AssertionError("unreachable")
+
+
+def test_continuation_completes_with_a_passing_verify_command(git_repo):
+    """The plan's Done when: handoff → continuation → verification actually green."""
+    from pathlib import Path
+
+    from orchestrate import execute_with_continuations
+
+    marker = git_repo / "verified.txt"
+    fleet = RecordingFleet([HANDOFF_TEXT, GOOD_OUTPUT])
+
+    result = execute_with_continuations("big task", "plan", fleet,
+                                        verify_cmd=f"touch {marker}", hold_on_fail=False)
+
+    assert result["status"] == "ok"
+    assert result["windows"] == 2
+    assert Path(marker).exists()   # the continuation's verify ran, and passed

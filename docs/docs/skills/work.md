@@ -50,7 +50,8 @@ stateDiagram-v2
   [*] --> drafts: write plan
   drafts --> ready: human promote only
   ready --> in_progress: start work + lease
-  in_progress --> review_needed: Done when holds (required)
+  in_progress --> review_needed: Done when holds (default)
+  in_progress --> completed: operator merge answer + scoped gate
   review_needed --> completed: human /review Approve
   review_needed --> in_progress: human requested changes
   review_needed --> ready: Needs Work or release/return
@@ -66,9 +67,13 @@ stateDiagram-v2
   note right of ready
     bugs/ or features/
   end note
+  note right of completed
+    in-progress → completed only after
+    operator-authorized /work merge
+  end note
 ```
 
-Agents must **never** promote drafts except via [**`/draft --promote`**](/skills/draft), move work into `drafts/`, move **`in-progress/` → `completed/`** (always finish to `review-needed/`), move `review-needed/` → `completed/` except under human-confirmed [**`/review` Approve**](/skills/review), or touch another agent’s `in-progress/` plan. **Preserve basename** on every lane move (including `.local.md`); only a human may rename for privacy/tracking.
+Agents must **never** promote drafts except via [**`/draft --promote`**](/skills/draft), move work into `drafts/`, move `review-needed/` → `completed/` except under human-confirmed [**`/review` Approve**](/skills/review), self-certify `in-progress/` → `completed/` without the operator's in-session merge answer and a passing scoped-merge gate, or touch another agent’s `in-progress/` plan. **Preserve basename** on every lane move (including `.local.md`); only a human may rename for privacy/tracking.
 
 ## Priority (bare `/work`)
 
@@ -110,13 +115,15 @@ flowchart LR
   exec["Execute<br/>/work steps"]
   park["Park<br/>ambiguous/ or blocked/"]
   release["Release<br/>back to bugs|features"]
-  review["Finish agent work<br/>review-needed/"]
-  finish["Archive<br/>completed/ (human /review Approve)"]
+  review["Finish agent work<br/>review-needed/ (default)"]
+  finish["Archive<br/>completed/ (/review Approve)"]
+  mergeDone["Archive<br/>completed/ (operator merge answer)"]
 
   write --> promote
   promote --> claim
   claim --> exec
   exec --> review
+  exec --> mergeDone
   exec --> park
   exec --> release
   review --> finish
@@ -125,7 +132,7 @@ flowchart LR
   release -.->|"another agent"| claim
 ```
 
-Mid-session stop: leave the file in **`in-progress/`** with a short `## Progress` note. Other agents must ignore it. Half-baked → `ambiguous/`; stuck → `blocked/` or return to ready. When Done when holds → **always** `review-needed/`; the human then runs [**`/review`**](/skills/review) (AI critic + survey) to **Approve** (merges `feature/<slug>` → dev, then → `completed/`), Needs Work → `bugs|features/`, or Skip. Agents never archive to `completed/` or merge from `/work`.
+Mid-session stop: leave the file in **`in-progress/`** with a short `## Progress` note. Other agents must ignore it. Half-baked → `ambiguous/`; stuck → `blocked/` or return to ready. When Done when holds → `review-needed/` by default; the human then runs [**`/review`**](/skills/review) (AI critic + survey) to **Approve** (merges `feature/<slug>` → dev, then → `completed/`), Needs Work → `bugs|features/`, or Skip. The one exception is the culmination question above: if the operator answers **merge to `dev` now** and the scoped gate passes, the plan goes straight to `completed/` with a `## Handoff` note. Agents never archive to `completed/` on their own judgment, and never merge unasked.
 
 **`## Progress` checklist (optional, template-recommended):** a `- [ ] Step N: <label>` bullet per Steps-table row plus a trailing `- [ ] Done when holds` bullet, populated by `/draft` after Steps/Done when exist. `/work` checks off a Step bullet once its Verify by passes and `Done when holds` at finish; "resume from the first incomplete step" means the first unchecked bullet. Advisory only, never enforced — most valuable for a human-assigned plan spanning multiple sessions.
 
@@ -144,7 +151,7 @@ Scaffold always creates the empty `.plans/` tree + README. Process contract also
 
 ### Chat / no shell
 
-When the user types `/work` without tool access: ask them to `ls .plans/bugs .plans/features .plans/in-progress` and paste output; pick by the same priority and model-fit rules; dictate `git mv` into `in-progress/` when starting and into **`review-needed/`** when Done when holds. Never dictate a promote move, an `in-progress/` → `completed/` move, or a `review-needed/` → `completed/` move (use [**`/review`**](/skills/review)). Never work a foreign in-progress path.
+When the user types `/work` without tool access: ask them to `ls .plans/bugs .plans/features .plans/in-progress` and paste output; pick by the same priority and model-fit rules; dictate `git mv` into `in-progress/` when starting and into **`review-needed/`** when Done when holds (default). After a green prep and feature-branch commit you may ask the culmination question; on **merge to `dev` now**, dictate the scoped-merge check and merge (see [How work reaches `dev`](/tooling/how-work-reaches-dev) and `platforms/chat/CHAT.md`) and only then dictate `in-progress/` → `completed/` with a `## Handoff` note. Never dictate a promote move, a self-certified `in-progress/` → `completed/` without that operator answer + gate, a merge to `main`/`master`, or a `review-needed/` → `completed/` move (use [**`/review`**](/skills/review)). Never work a foreign in-progress path.
 
 ### Headless / fleet
 
@@ -169,12 +176,43 @@ When the project uses Git and work needs a branch:
    ```
    Edit only under the printed `WORKTREE=` path.
 2. Integration branch: **`dev`**, else **`develop`**. **If neither exists, create `dev` from `main` (else `master`)** (the ensure helper does this).
-3. Feature branch `feature/<slug>` inside that worktree; **`/work` never merges**
-   to dev/main (human [**`/review` Approve**](/skills/review) merges feature → dev;
-   empty-queue **Promote** merges dev → main).
+3. Feature branch `feature/<slug>` inside that worktree. `/work` may land it on
+   **integration only**, and only through the culmination question below; it
+   **never** merges to `main`/`master` and never merges unasked (human
+   [**`/review` Approve**](/skills/review) also merges feature → dev; empty-queue
+   **Promote** merges dev → main).
 4. When plan work is complete: run **`/commit-prep`** (prep only). If gates are
    **green**, stage + commit on the feature branch; optional push of that branch
-   only — never merge from `/work`.
+   only. Record the commit SHA — the merge gate checks it.
+
+### The culmination question
+
+After a green prep and a successful feature-branch commit, an **interactive** `/work`
+asks once what should happen to the finished plan:
+
+| Answer | Outcome |
+|---|---|
+| **Review it now** (default) | Plan → `review-needed/`; run [`/review`](/skills/review) |
+| **Merge to `dev` now** | Scoped-merge gate runs; on pass the branch lands on `dev` and the plan goes to `completed/` with a `## Handoff` note recording the skipped review |
+| **Hold for testing** | Plan → `review-needed/` with a `## Handoff` hold note; branch and worktree left intact |
+
+The merge answer trades the AI critic for a narrower mandate — the operator watched
+the work happen — so a mechanical gate proves nothing else rode along:
+**provenance** (branch HEAD is the commit this run made), **clean tree**, **file
+scope** (every path named in range history `base..head`, not only the net
+two-dot diff), **mergeable**
+(fast-forward preferred), **target is integration only**, and the **human answer**
+itself. Any failure falls back to `/review` and says which check refused.
+
+```bash
+python scripts/merge_feature.py --root <worktree> --slug <slug> \
+  --touched touched.txt --expect-head <sha> --dry-run
+# 0 would merge · 3 scope violation · 4 precondition · 5 conflict · 2 git error
+```
+
+Unattended runs — `work_once.py`, fleet workers, the coordinator MCP — never ask and
+never merge; they finish to `review-needed/` exactly as before. `main` is reached
+only through `/review`'s promotion survey.
 
 See [Fleet workers — isolation](/tooling/fleet-workers#4-isolation-git-multi-writer).
 

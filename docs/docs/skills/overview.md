@@ -16,7 +16,7 @@ and Grok Build; install paths differ.
 | [**`/anchor`**](/skills/anchor) | **In a project:** keep this tree current. **In Anchor:** scaffold/reconfigure **another** project (path required). | Project: CWD/git root. Anchor base: explicit path. | Scaffolded: yes (`claude`/`grok`). Anchor: base skill only. |
 | [**`/draft`**](/skills/draft) | Any project with **`.plans/`** when you are **planning**, not implementing. | Current repo’s `.plans/drafts/` | Yes (dual-use base + scaffold) |
 | [**`/work`**](/skills/work) | Any project with ready plans under **`.plans/bugs/`** or **`features/`** when you want interactive **execution**. | Current repo’s `.plans/` | Yes |
-| [**`/review`**](/skills/review) | When plans sit in **`.plans/review-needed/`** and a human should sign off (AI critic + survey). | Current repo’s `.plans/review-needed/` | Yes |
+| [**`/review`**](/skills/review) | When plans sit in **`.plans/review-needed/`** and a human should sign off (AI critic + survey). The only route to `main`. See [How work reaches `dev`](/tooling/how-work-reaches-dev). | Current repo’s `.plans/review-needed/` | Yes |
 | [**`/audit`**](/skills/audit) | Exhaustive **security audit** (code + deps) → prioritized bug plans. **Frontier/reasoner only** by default. | Current project root / `.plans/bugs/` | Yes |
 | [**`/deploy`**](/skills/deploy) | When a project is ready to **ship** — runs the deploy tooling it already uses, or sets tooling up when it has none. | Current project root / its configured target | Yes |
 | [**`/optimize`**](/skills/optimize) | Check a project against **standards for its type** (sharing metadata, discoverability, repo hygiene) → checkbox-picked improvement plans. | Current project root / `.plans/drafts/` | Yes |

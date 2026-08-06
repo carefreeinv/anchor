@@ -39,7 +39,10 @@ Agents may relocate plan files **only** as follows:
 
 ```text
 bugs|features/<slug>.md     ──mv──►  in-progress/     (starting work + lease)
-in-progress/<slug>.md       ──mv──►  review-needed/   (Done when holds — required)
+in-progress/<slug>.md       ──mv──►  review-needed/   (Done when holds — default)
+in-progress/<slug>.md       ──mv──►  completed/       (ONLY via /work culmination
+                                                      merge: operator answers in
+                                                      session + scoped gate passes)
 review-needed/<slug>.md     ──mv──►  completed/       (HUMAN ONLY via /review Approve)
 review-needed/<slug>.md     ──mv──►  bugs|features/   (Needs Work / release)
 bugs|features|in-progress/  ──mv──►  ambiguous/       (half-baked / underspecified)
@@ -65,7 +68,8 @@ Agents must **never**:
 - Move ready/in-progress → `drafts/`
 - Swap `bugs/` ↔ `features/` except via explicit return targeting a lane
 - Move anything out of `completed/`
-- **Move `in-progress/` → `completed/`** (always finish to `review-needed/`)
+- **Move `in-progress/` → `completed/`** on your own judgment — that transition
+  exists only as the tail of an operator-authorized `/work` culmination merge
 - **Move `review-needed/` → `completed/`** except under human **`/review` Approve**
 - **Touch another agent’s `in-progress/` plan** (ignore it)
 
@@ -130,15 +134,20 @@ Park:     agent → ambiguous/ (half-baked) or blocked/ (cannot fix)
 Release:  agent → bugs|features/ (give up claim; still ready for others)
 Finish:   agent: git mv in-progress/ → review-needed/; human /review Approve
           merges feature → dev then → completed/; empty queue may Promote dev → main
+          — OR the operator answers /work's culmination question with "merge to dev
+          now": scoped gate runs, branch lands on dev, plan → completed/ with a
+          ## Handoff note recording the skipped review
 Worktree: parallel agents use scripts/worktree_for_agent.py ensure
           --agent-id … [--slug …] (var/worktrees/<id>/); or work_once --ensure-worktree
 Branch:   from **dev** (else **develop**); if neither exists, **create dev**
           from **main** (else **master**) and push origin when possible
 Commit:   **/commit-prep** first (prep only: tests + CHANGELOG + blog); if green
           and plan complete, commit on feature branch (see /work); optional push
-          of that branch only. **Agents/`/work` never merge** to dev/main —
-          human **`/review` Approve** merges feature → dev; empty-queue
-          **Promote** merges dev → main (survey-gated; no force-push).
+          of that branch only. **Agents never merge on their own initiative**;
+          `/work` may land on **dev only** via the operator's in-session answer +
+          scoped gate. Human **`/review` Approve** merges feature → dev; empty-queue
+          **Promote** merges dev → main (survey-gated; no force-push). **main is
+          never reached from `/work`.**
 ```
 
 Mid-session stop: leave the file in **`in-progress/`** with a short `## Progress`
