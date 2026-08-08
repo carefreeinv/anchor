@@ -35,7 +35,7 @@ the empty-queue **dev → main** gate.
 
 | Invocation | Behavior |
 |------------|----------|
-| `/review` | Plan mode if queue non-empty; else promotion mode if `dev` ahead of `main` |
+| `/review` | On `main`/`dev` with both a queue **and** `dev` ahead of `main`: asks which to review. Else plan mode if queue non-empty; else promotion mode if `dev` ahead of `main` |
 | `/review <slug>` | Session for that plan only (must be under `review-needed/`) |
 | `/review --list` | Inventory queue + ahead-of-mainline advisory; no merge |
 | `/review --skip-ai` | Evidence + survey only (still one decision) |
@@ -59,7 +59,10 @@ select → checkout (if safe) → evidence + optional launch
        → lane move to completed/ (after merge success or nothing to merge)
 ```
 
-1. **Select** — bare pick uses Priority → Value → oldest mtime → filename.
+1. **Select** — run from `main`/`dev` while a review queue coexists with an
+   unpromoted `dev`, the skill first asks whether to review `dev` for promotion
+   or pick a feature branch from the queue. Otherwise the bare pick uses
+   Priority → Value → oldest mtime → filename.
 2. **Checkout** — `feature/<slug>` only when the tree is clean (or after confirm);
    dirty trees get a worktree offer, not a silent switch.
 3. **Launch** — low-risk local servers only; confirm Docker/migrations/deploy.

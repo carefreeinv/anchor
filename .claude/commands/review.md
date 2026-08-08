@@ -24,7 +24,7 @@ the empty-queue promotion path.
 
 | Invocation | Behavior |
 |------------|----------|
-| `/review` | Plan mode if queue non-empty; else promotion mode if integration ahead of mainline; else stop |
+| `/review` | On `main`/`dev` with both a queue **and** integration ahead: ask which to review. Else plan mode if queue non-empty; else promotion mode if integration ahead of mainline; else stop |
 | `/review <slug>` | Plan session for that `review-needed/` plan |
 | `/review --list` | Inventory queue + one-line “integration ahead of mainline: N” if any; no merge |
 | `/review --skip-ai` | Evidence + survey only (still one decision) |
@@ -119,13 +119,29 @@ command (`/work`, `/draft`, …). Plan mode.
 
 **Bare `/review`:**
 
-1. If any `review-needed` plans: pick **one** by Priority (P1→P3, default P2) →
-   Value (high→low, default medium) → oldest mtime → filename. State why it won.
-   Other queued plans: **one line** only. Plan mode.
-2. Else if `--no-promote`: report empty queue; stop.
-3. Else if integration is ahead of mainline: **promotion mode**.
-4. Else: report empty queue + nothing to promote; optional `pending_merges.py`
+1. **Branch-aware ask.** If HEAD is on mainline or integration (`main`/`master`
+   or `dev`/`develop`) **and both review paths are live** — a non-empty
+   `review-needed/` queue **and** integration ahead of mainline — don't
+   silently pick a direction; **ask** (platform ask UI when available):
+
+   | Option | Meaning |
+   |--------|---------|
+   | **Review `dev` for promotion** | Promotion mode on `<mainline>..<integration>`; Promote merges integration → mainline |
+   | **Review a feature branch** | List each `review-needed/` plan (slug, Priority, Value, whether `feature/<slug>` has commits not in integration); the human picks **one** → plan mode for that pick |
+
+   One entry in a list of one is not a choice — a single queued plan is picked
+   without a sub-menu. Hard rule 1 stands: **one decision per invocation**;
+   reviewing more means re-running `/review`.
+2. If only the queue is live (or HEAD is on some other branch): pick **one** by
+   Priority (P1→P3, default P2) → Value (high→low, default medium) → oldest
+   mtime → filename. State why it won. Other queued plans: **one line** only.
+   Plan mode.
+3. Else if `--no-promote`: report empty queue; stop.
+4. Else if integration is ahead of mainline: **promotion mode**.
+5. Else: report empty queue + nothing to promote; optional `pending_merges.py`
    one-liner; stop.
+
+A named slug or `--promote` is already an explicit direction — no ask.
 
 ## 3. Load plan (plan mode)
 

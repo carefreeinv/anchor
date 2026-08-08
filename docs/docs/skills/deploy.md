@@ -43,19 +43,22 @@ where the project should live and set the tooling up.
 ## Pipeline
 
 ```text
-resolve project → tree + branch gate → integration-branch gap check → detect tooling
+resolve project → tree + branch gate → unreleased-work gap check → detect tooling
   → (none detected: interview → setup → stop)
   → resolve target/env → plan commands
   → confirm (or --dry-run / --yes)
   → deploy → verify → footer
 ```
 
-If the project has an integration branch (`dev`, else `develop`) with commits
-not yet promoted to the branch this deploy publishes from, `/deploy` reports
-the gap and asks whether to run [`/review`](/skills/review) first, deploy the
-current branch as-is, or cancel — under `--yes` it defaults to deploying
-as-is. `/deploy` never merges or promotes branches itself; landing `dev` stays
-`/review`'s job.
+Before detecting tooling, `/deploy` looks for finished work the deploy would
+**exclude**, at both stages of the pipeline: an integration branch (`dev`, else
+`develop`) with commits not yet promoted to the branch this deploy publishes
+from, and features finished but never reviewed — plans still in
+`.plans/review-needed/` or `feature/*` branches with commits the deploy branch
+doesn't have. If it finds any, it lists them and asks whether to run
+[`/review`](/skills/review) first, deploy the current branch as-is, or cancel —
+under `--yes` it defaults to deploying as-is. `/deploy` never merges or
+promotes branches itself; landing work stays `/review`'s job.
 
 ## Detection bands
 
