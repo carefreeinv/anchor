@@ -13,9 +13,14 @@ git commit time (tracked ``.md``) or filesystem mtime (``.local.md``) when the
 log is absent or empty. Each card also shows a brief label for the most recent
 logged event on record for its slug, if any.
 
+``--json`` emits a stable schema_version-1 board dump (columns, cards,
+throughput) for CI/dashboards and other non-AI consumers — same membership and
+sort as the terminal view; single frame (auto-once).
+
 Usage:
   python3 scripts/plan_board.py               # live, redraws every 60s
   python3 scripts/plan_board.py --once         # single frame, for piping/CI
+  python3 scripts/plan_board.py --json         # machine-readable board dump
   python3 scripts/plan_board.py --interval 5
   python3 scripts/plan_board.py --include-parked
   python3 scripts/plan_board.py --no-color
@@ -25,6 +30,7 @@ from __future__ import annotations
 import argparse
 import csv
 import datetime
+import json
 import os
 import re
 import shutil
@@ -33,17 +39,24 @@ import sys
 import time
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from plan_select import (  # noqa: E402
     PlanRecord,
+    is_agent_assignable,
+    parse_assignee,
+    parse_depends_on,
+    parse_preferred,
     parse_priority,
     parse_title,
     parse_value,
     plan_slug,
     plan_sort_key,
 )
+
+SCHEMA_VERSION = 1
 
 READY_LANES = ("bugs", "features")
 COLUMN_LANES: list[tuple[str, tuple[str, ...]]] = [
@@ -270,8 +283,11 @@ def scan_lane(plans_root: Path, lane: str) -> list[PlanRecord]:
                 slug=plan_slug(path),
                 value=parse_value(text),
                 priority=parse_priority(text),
-                preferred=None,
+                preferred=parse_preferred(text),
                 title=parse_title(text, path.name),
+                depends_on=tuple(parse_depends_on(text)),
+                assignee=parse_assignee(text),
+                agent_assignable=is_agent_assignable(text),
             )
         )
     return records
@@ -287,6 +303,76 @@ def build_columns(plans_root: Path, *, include_parked: bool) -> list[tuple[str, 
         records.sort(key=plan_sort_key)
         columns.append((name, records))
     return columns
+
+
+def record_to_status_dict(rec: PlanRecord, last_event: str | None) -> dict[str, Any]:
+    """Serialize one board card for schema_version-1 JSON export."""
+    return {
+        "slug": rec.slug,
+        "rel": rec.rel,
+        "lane": rec.lane,
+        "title": rec.title,
+        "priority": rec.priority,
+        "value": rec.value,
+        "preferred": rec.preferred,
+        "assignee": rec.assignee,
+        "agent_assignable": rec.agent_assignable,
+        "depends_on": list(rec.depends_on),
+        "path": str(rec.path),
+        "last_event": last_event,
+    }
+
+
+def board_status_payload(
+    plans_root: Path,
+    project_root: Path,
+    *,
+    include_parked: bool = False,
+    now: datetime.datetime | None = None,
+) -> dict[str, Any]:
+    """Build a stable, machine-readable dump of the kanban board.
+
+    Column membership and sort match the terminal board. Read-only.
+    """
+    when = now or now_utc()
+    if when.tzinfo is None:
+        when = when.replace(tzinfo=datetime.timezone.utc)
+    spec = COLUMN_LANES + (PARKED_COLUMN_LANES if include_parked else [])
+    columns = build_columns(plans_root, include_parked=include_parked)
+    log_events = load_log_events(plans_root)
+    completed_n, processed_n = compute_throughput(
+        plans_root, project_root, log_events, now=when
+    )
+    labels = {
+        slug: humanize_event(ev.event)
+        for slug, ev in latest_events_by_slug(log_events).items()
+    }
+    col_out: list[dict[str, Any]] = []
+    for (name, lanes), (_, records) in zip(spec, columns, strict=True):
+        col_out.append(
+            {
+                "name": name,
+                "lanes": list(lanes),
+                "count": len(records),
+                "plans": [
+                    record_to_status_dict(rec, labels.get(rec.slug))
+                    for rec in records
+                ],
+            }
+        )
+    return {
+        "schema_version": SCHEMA_VERSION,
+        "project_root": str(project_root.resolve()),
+        "plans_root": str(plans_root.resolve()),
+        "generated_at": when.isoformat(),
+        "include_parked": include_parked,
+        "throughput": {
+            "window_days": WINDOW_DAYS,
+            "completed": completed_n,
+            "processed": processed_n,
+        },
+        "columns": col_out,
+    }
 
 
 def truncate(s: str, width: int) -> str:
@@ -406,6 +492,11 @@ def build_arg_parser() -> argparse.ArgumentParser:
     )
     ap.add_argument("--once", action="store_true", help="render a single frame and exit")
     ap.add_argument(
+        "--json",
+        action="store_true",
+        help="emit schema_version-1 board JSON on stdout (single frame; implies --once)",
+    )
+    ap.add_argument(
         "--include-parked",
         action="store_true",
         help="also show Ambiguous/Blocked columns (ambiguous/, blocked/)",
@@ -426,6 +517,15 @@ def main(argv: list[str] | None = None) -> int:
     if not plans_root.is_dir():
         print(f"no .plans/ directory under {project_root}", file=sys.stderr)
         return 1
+
+    if args.json:
+        payload = board_status_payload(
+            plans_root,
+            project_root,
+            include_parked=args.include_parked,
+        )
+        print(json.dumps(payload, indent=2))
+        return 0
 
     color_on = (not args.no_color) and sys.stdout.isatty()
 

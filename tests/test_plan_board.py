@@ -334,3 +334,177 @@ def test_main_once_no_color_no_ansi(tmp_path, capsys):
 def test_main_missing_plans_dir_errors(tmp_path, capsys):
     rc = pb.main(["--project", str(tmp_path), "--once"])
     assert rc == 1
+
+
+# --- JSON export (plan-board-json-export) ---------------------------------
+
+
+def _plan_rich(
+    path: Path,
+    *,
+    value: str = "medium",
+    priority: str = "P2",
+    title: str = "t",
+    preferred: str = "mid",
+    assignee: str | None = None,
+    depends_on: str = "none",
+) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    assignee_line = f"- **Assignee:** {assignee}\n" if assignee is not None else ""
+    path.write_text(
+        f"# Plan: {title}\n\n"
+        f"- **Value:** {value}\n"
+        f"- **Priority:** {priority}\n"
+        f"- **Preferred models:** {preferred}\n"
+        f"{assignee_line}"
+        f"- **Depends on:** {depends_on}\n\n"
+        "## Goal\ng\n\n## Steps\n| 1 | x |\n\n## Done when\n- [ ] ok\n",
+        encoding="utf-8",
+    )
+
+
+def test_scan_lane_enriches_preferred_depends_assignee(tmp_path):
+    plans = _tree(tmp_path)
+    _plan_rich(
+        plans / "features" / "rich.md",
+        preferred="mid, Grok 4.5",
+        assignee="alice@corp.com — owns it",
+        depends_on="other-slug",
+    )
+    recs = pb.scan_lane(plans, "features")
+    assert len(recs) == 1
+    r = recs[0]
+    assert r.preferred == "mid, Grok 4.5"
+    assert r.depends_on == ("other-slug",)
+    assert r.assignee is not None and "alice@corp.com" in r.assignee
+    assert r.agent_assignable is False
+
+
+def test_board_status_payload_schema_and_ready_merge(tmp_path):
+    plans = _tree(tmp_path)
+    _plan_rich(plans / "bugs" / "b.md", priority="P3", title="bug")
+    _plan_rich(plans / "features" / "f.md", priority="P1", title="feat")
+    _plan_rich(plans / "drafts" / "d.md", title="draft")
+
+    payload = pb.board_status_payload(plans, tmp_path, include_parked=False)
+    assert payload["schema_version"] == pb.SCHEMA_VERSION == 1
+    assert set(payload) >= {
+        "schema_version",
+        "project_root",
+        "plans_root",
+        "generated_at",
+        "include_parked",
+        "throughput",
+        "columns",
+    }
+    assert payload["include_parked"] is False
+    assert payload["throughput"]["window_days"] == pb.WINDOW_DAYS
+    assert "completed" in payload["throughput"]
+    assert "processed" in payload["throughput"]
+
+    names = [c["name"] for c in payload["columns"]]
+    assert names == ["Drafts", "Ready", "In Progress", "Review Needed", "Completed"]
+    by_name = {c["name"]: c for c in payload["columns"]}
+    assert by_name["Ready"]["lanes"] == ["bugs", "features"]
+    assert by_name["Ready"]["count"] == 2
+    ready_slugs = [p["slug"] for p in by_name["Ready"]["plans"]]
+    assert ready_slugs[0] == "b"  # bugs before features
+    assert set(ready_slugs) == {"b", "f"}
+    assert by_name["Drafts"]["plans"][0]["slug"] == "d"
+
+    card = by_name["Ready"]["plans"][0]
+    for key in (
+        "slug",
+        "rel",
+        "lane",
+        "title",
+        "priority",
+        "value",
+        "preferred",
+        "assignee",
+        "agent_assignable",
+        "depends_on",
+        "path",
+        "last_event",
+    ):
+        assert key in card
+    assert card["lane"] == "bugs"
+    assert card["preferred"] == "mid"
+    assert card["depends_on"] == []
+    assert card["last_event"] is None
+    assert card["path"].endswith("bugs/b.md")
+
+
+def test_board_status_payload_include_parked_and_empty_lanes(tmp_path):
+    plans = _tree(tmp_path)
+    _plan_rich(plans / "ambiguous" / "a.md")
+    _plan_rich(plans / "blocked" / "bl.md")
+
+    default = pb.board_status_payload(plans, tmp_path, include_parked=False)
+    assert [c["name"] for c in default["columns"]] == [
+        "Drafts",
+        "Ready",
+        "In Progress",
+        "Review Needed",
+        "Completed",
+    ]
+    for c in default["columns"]:
+        assert c["plans"] == []
+        assert c["count"] == 0
+
+    parked = pb.board_status_payload(plans, tmp_path, include_parked=True)
+    names = [c["name"] for c in parked["columns"]]
+    assert names[-2:] == ["Ambiguous", "Blocked"]
+    assert parked["include_parked"] is True
+    by_name = {c["name"]: c for c in parked["columns"]}
+    assert by_name["Ambiguous"]["plans"][0]["slug"] == "a"
+    assert by_name["Blocked"]["plans"][0]["slug"] == "bl"
+
+
+def test_board_status_payload_last_event_from_log(tmp_path):
+    plans = _tree(tmp_path)
+    _plan_rich(plans / "features" / "labeled.md")
+    _write_log(
+        plans,
+        "1.local.csv",
+        ["2026-07-01T00:00:00+00:00", "labeled", "entered-review-needed"],
+    )
+    payload = pb.board_status_payload(plans, tmp_path, include_parked=False)
+    ready = {c["name"]: c for c in payload["columns"]}["Ready"]
+    card = ready["plans"][0]
+    assert card["last_event"] == "Sent for review"
+
+
+def test_board_status_payload_sort_matches_terminal(tmp_path):
+    plans = _tree(tmp_path)
+    _plan(plans / "features" / "high.md", value="high", priority="P1", title="feature high")
+    _plan(plans / "bugs" / "low.md", value="low", priority="P3", title="bug low")
+    _plan(plans / "features" / "low.md", value="low", priority="P2", title="feature low")
+    _plan(plans / "features" / "hi2.md", value="high", priority="P2", title="feature hi2")
+
+    columns = pb.build_columns(plans, include_parked=False)
+    ready_term = [r.slug for r in dict(columns)["Ready"]]
+    payload = pb.board_status_payload(plans, tmp_path, include_parked=False)
+    ready_json = [
+        p["slug"]
+        for p in next(c for c in payload["columns"] if c["name"] == "Ready")["plans"]
+    ]
+    assert ready_json == ready_term == ["low", "high", "hi2", "low"]
+
+
+def test_main_json_stdout(tmp_path, capsys):
+    plans = _tree(tmp_path)
+    _plan_rich(plans / "features" / "smoke.md")
+    rc = pb.main(["--project", str(tmp_path), "--json"])
+    assert rc == 0
+    out = capsys.readouterr().out
+    data = __import__("json").loads(out)
+    assert data["schema_version"] == 1
+    assert any(c["name"] == "Ready" and c["count"] == 1 for c in data["columns"])
+
+
+def test_main_json_missing_plans_dir_errors(tmp_path, capsys):
+    rc = pb.main(["--project", str(tmp_path), "--json"])
+    assert rc == 1
+    err = capsys.readouterr().err
+    assert "no .plans/" in err

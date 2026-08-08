@@ -64,9 +64,13 @@ Shared selection: `plan_select.py` (fit + deps). Claims + moves: `plan_lease.cla
 
 Read-only, zero-dependency terminal kanban board for a project's `.plans/`: **Drafts | Ready | In Progress | Review Needed | Completed**, each column sorted by the same Priority → Value → mtime order as `/work`. Header shows rolling 7-day throughput (**Completed** / **Processed** into `review-needed/`), preferring `.plans/logs/*.csv` event files when present and falling back to git-commit-time/mtime otherwise. Each card shows a brief label for its most recent logged event, if any. Never writes to `.plans/`.
 
+**`--json`** dumps the same board as stable **schema_version 1** JSON (columns, per-plan slug/lane/title/priority/value/preferred/depends_on/assignee, throughput, optional `last_event` from the log) — for CI, dashboards, and other projects that should not import Anchor internals or talk MCP. Single frame (implies `--once`); `--include-parked` adds Ambiguous/Blocked the same way as the TUI. Lane is always the filesystem directory (`bugs`, not `Ready`); column name is separate. Exit `1` only when `.plans/` is missing.
+
 ```bash
 python scripts/plan_board.py               # live, redraws every 60s
 python scripts/plan_board.py --once         # single frame, for piping/CI
+python scripts/plan_board.py --json         # machine-readable board dump
+python scripts/plan_board.py --json --include-parked
 python scripts/plan_board.py --include-parked --no-color
 ```
 

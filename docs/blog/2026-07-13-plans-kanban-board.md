@@ -13,10 +13,12 @@ Your backlog was always readable with `ls`. Now it's readable at a glance.
 ```bash
 python scripts/plan_board.py               # live, redraws every 60s
 python scripts/plan_board.py --once         # single frame, for piping/CI
+python scripts/plan_board.py --json         # schema_version-1 board dump for CI/dashboards
 python scripts/plan_board.py --include-parked --no-color
 ```
 
-It's read-only — it never writes, moves, or edits anything under `.plans/` — and stdlib-only, so it copies standalone into any scaffolded project the same way `plan_select.py` and friends do.
+It's read-only — it never writes, moves, or edits anything under `.plans/` — and stdlib-only, so it copies standalone into any scaffolded project the same way `plan_select.py` and friends do. **`--json`** is the same board membership and sort as the terminal view, shaped for machines (`columns[]` with absolute paths, throughput, optional log `last_event`) so other projects can consume plan status without MCP or fit triage.
+
 
 **Two things make it more than a static `ls`:**
 
