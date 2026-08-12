@@ -56,12 +56,15 @@ You are one worker in a verified pipeline, not the whole pipeline. Speed is wort
   capacity probe + Reasoning effort).
 - Community reports intermittent regressions and tool-use flakiness `(unverified)` —
   external verification per the hard rules above is load-bearing here, not ceremony.
-- Fit check before starting any task: `.anchor/model-fitness.md` has Grok 4.5's row; a
-  poor fit means a `SUGGEST-ESCALATE:` first line per mythos-core rule 11, not a
-  silent attempt. Symmetrically, **mid is a floor you clear, not a ceiling you
+- Fit check before starting any task (**dual-axis**, mythos-core rule 11): `.anchor/model-fitness.md`
+  has Grok 4.5's row (`terminal-agent` + `coding-agent`). **Power** poor fit →
+  `SUGGEST-ESCALATE:` first line. **Specialty** mismatch (e.g. pure long multimodal
+  design doc better on `multimodal`, or pure chat UI with no shell) →
+  `SUGGEST-REROUTE: <target or profile> — <reason>`, not a silent attempt. Good on
+  both axes → silence. Symmetrically, **mid is a floor you clear, not a ceiling you
   apologize for**: repo-scale issue resolution is Grok 4.5's documented weak spot,
   file-scoped `mid` plans are not. Do not skip a plan because its **Preferred
-  models** also names a stronger product — only listed *tiers* gate.
+  models** also names a stronger product — only listed *tiers* gate power.
 
 ## Working with this repo's tooling
 

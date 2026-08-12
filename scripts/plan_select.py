@@ -469,20 +469,48 @@ def inventory_all_plan_summaries(plans_root: Path) -> list[dict[str, str]]:
     return out
 
 
+# Closed specialty profile tags (mythos-core dual-axis fit). Appear in Preferred
+# models freeform lists; mechanical tier fit ignores them (unknown tokens already
+# drop out of tier/name buckets). Used for optional specialty_hint reporting.
+SPECIALTY_PROFILES = frozenset({
+    "coding-agent",
+    "terminal-agent",
+    "critic",
+    "planner",
+    "general-chat",
+    "multimodal",
+    "swarm-local",
+})
+
+
+def parse_specialty_profiles(preferred: str | None) -> list[str]:
+    """Return known specialty profile tags listed in a Preferred models field."""
+    if not preferred:
+        return []
+    out: list[str] = []
+    for part in preferred.split(","):
+        tok = part.strip().strip("`").lower()
+        if tok in SPECIALTY_PROFILES and tok not in out:
+            out.append(tok)
+    return out
+
+
 def _parse_preferred_tokens(preferred: str | None) -> tuple[list[str], list[str]]:
     if not preferred:
         return [], []
     tiers: list[str] = []
     names: list[str] = []
     for part in preferred.split(","):
-        tok = part.strip()
+        tok = part.strip().strip("`")
         if not tok:
             continue
         low = tok.lower()
+        if low in SPECIALTY_PROFILES:
+            continue  # specialty tags are not tier/name power-fit tokens
         if low in FIT_RANK:
             tiers.append(low)
         else:
-            names.append(low)
+            names.append(low)  # lowercased; matches historical Preferred name fit
     return tiers, names
 
 

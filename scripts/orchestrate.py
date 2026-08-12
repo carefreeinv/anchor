@@ -357,13 +357,16 @@ def execute_task(task: str, plan: str, fleet: Fleet, verify_cmd: str | None,
             return {"task": task, "status": "handoff", "attempts": attempt,
                     "handoff": parsed, "output": out}
 
-        # Fit check (mythos-core rule 11): a worker that judges the task a poor fit
-        # for its tier says so up front — honor it immediately instead of burning
-        # attempts, unless the operator ran with --insist.
-        if out.lstrip().upper().startswith("SUGGEST-ESCALATE"):
-            suggestion = out.strip().splitlines()[0][:300]
+        # Fit check (mythos-core rule 11): dual-axis — power escalate or specialty
+        # re-route. Honor either first line immediately instead of burning attempts,
+        # unless the operator ran with --insist.
+        _fit_line = out.strip().splitlines()[0] if out.strip() else ""
+        _fit_upper = _fit_line.upper()
+        if _fit_upper.startswith("SUGGEST-ESCALATE") or _fit_upper.startswith("SUGGEST-REROUTE"):
+            suggestion = _fit_line[:300]
+            kind = "re-route" if _fit_upper.startswith("SUGGEST-REROUTE") else "escalation"
             if not insist:
-                print(f"[fit] {ep.name} suggests escalation: {suggestion}", file=sys.stderr)
+                print(f"[fit] {ep.name} suggests {kind}: {suggestion}", file=sys.stderr)
                 status = "hold" if hold_on_fail else "escalate"
                 _ledger_outcome(
                     task=task, out=out, ep=ep, verify_exit=None,
@@ -373,9 +376,12 @@ def execute_task(task: str, plan: str, fleet: Fleet, verify_cmd: str | None,
                 recorded = True
                 return {"task": task, "status": status, "attempts": attempt,
                         "suggestion": suggestion, "history": history}
-            history.append("Your previous output was SUGGEST-ESCALATE. The operator insists "
-                           "you proceed at this tier: stay strictly in scope, mark shaky "
-                           "output (unverified), and do not SUGGEST-ESCALATE again.")
+            history.append(
+                f"Your previous output was a fit gate ({suggestion[:80]}…). "
+                "The operator insists you proceed at this tier/profile: stay strictly "
+                "in scope, mark shaky output (unverified), and do not SUGGEST-ESCALATE "
+                "or SUGGEST-REROUTE again."
+            )
             continue
 
         if not has_required_footer(out):
@@ -552,7 +558,7 @@ def main() -> None:
     ap.add_argument("--hold-on-fail", action="store_true",
                     help="detached mode: hold failed tasks for later instead of escalating")
     ap.add_argument("--insist", action="store_true",
-                    help="override workers' SUGGEST-ESCALATE fit checks and make them proceed")
+                    help="override workers' SUGGEST-ESCALATE / SUGGEST-REROUTE fit checks and make them proceed")
     ap.add_argument("--scope-spec",
                     help="task-spec markdown with '## Files in scope'; changes outside it "
                          "are rejected before --verify runs")

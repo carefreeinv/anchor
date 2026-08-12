@@ -105,18 +105,20 @@ Escalation isn't the only direction that matters — before spending an expensiv
 ```mermaid
 flowchart LR
   task["Incoming task"]
-  size{"Needs this tier?"}
-  down["Suggest cheaper / local"]
-  up["SUGGEST-ESCALATE"]
+  size{"Power + specialty fit?"}
+  down["Suggest cheaper / local (rule 10)"]
+  up["SUGGEST-ESCALATE (power)"]
+  lat["SUGGEST-REROUTE (specialty)"]
   go["Proceed in scope"]
 
   task --> size
-  size -->|"too hard"| up
+  size -->|"too hard / weak column"| up
   size -->|"too easy"| down
-  size -->|"fit"| go
+  size -->|"wrong product shape"| lat
+  size -->|"fit both axes"| go
 ```
 
-Boilerplate, formatting, a rename, or one well-specified function gets flagged, with a question about handing off to a smaller model or one already registered in `scripts/endpoints.yaml`, instead of silently burning frontier capacity. `scripts/router.py` implements the lookup.
+Boilerplate, formatting, a rename, or one well-specified function gets flagged, with a question about handing off to a smaller model or one already registered in `scripts/endpoints.yaml`, instead of silently burning frontier capacity. Specialty mismatch (e.g. general-chat for multi-file software) uses `SUGGEST-REROUTE` — lateral, not always stronger. See [Model fitness](/model-fitness). `scripts/router.py` implements role lookup for fleet dispatch.
 
 *Right-sizing is one of the reasons [Savings](/savings) can be so large — please consider [donating](https://donate.stripe.com/28E6oHeq8fxQ5p7fmBdjO01) to help support this project.*
 
