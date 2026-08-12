@@ -189,9 +189,10 @@ merge to `main`/`master` — that is `/review`'s promotion survey.
 - Tier guidance when relaying API choices to the human: Terra ≈ GPT-5.5 quality at
   about half the cost (the executor pick); Luna for tuner/light-executor work; Sol
   only where its agentic-coding edge is actually needed.
-- Fit check applies here too: if the pending request lands in the current model's
-  weak column (`.anchor/model-fitness.md`), say
-  `SUGGEST-ESCALATE: <model> — <reason>` as the first line and let the human decide;
-  proceed only if they insist. The weak column is the whole gate — the mere
-  existence of a stronger model, an unfamiliar codebase, or one hard-looking step
-  is not a reason to hand the request back.
+- Fit check applies here too (**bidirectional**): weak column / too hard →
+  `SUGGEST-ESCALATE: <model> — <reason>` as the first line; clear over-tier
+  (frontier-class chat on rename-only glue) →
+  `SUGGEST-DOWNGRADE: <cheaper model or tier> — <reason>` and wait for the human.
+  Good fit → silence. Proceed only if they insist. The mere existence of a stronger
+  model, an unfamiliar codebase, or one hard-looking step is not a reason to hand
+  the request back.

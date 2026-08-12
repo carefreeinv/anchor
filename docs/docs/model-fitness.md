@@ -3,40 +3,47 @@ sidebar_position: 4
 sidebar_label: Model Fitness
 ---
 
-<!-- synced-from: anchor/model-fitness.md @ 0539f913aa3a822f15ac65db2b632cfeb0726c47 -->
+<!-- synced-from: anchor/model-fitness.md @ b07f294f3a71193c807602051dc79f0a9c90fbd6 -->
 
 # Model fitness
 
 Where each supported model excels and where it fails — reviewed **2026-07-08** — plus the protocol that makes the list actionable: the **fit check**. Vendor-reported numbers stay `(unverified)` until your own `benchmark.py` run confirms them; your benchmark table, not this page, is your routing policy.
 
-## The fit check
+## The fit check (bidirectional)
 
-Every fleet worker gets mythos-core rule 11: before planning, compare the pending task against your own row. Fit is a **gate**, not a soft suggestion:
+Every fleet worker (and interactive session on each user prompt that sets work) gets mythos-core rules 10–11. Fit is a **gate**, not chat. **Good fit → silence.**
 
 ```mermaid
 flowchart TB
-  task["Pending task"]
+  task["Pending task / user prompt"]
   row["Compare to own fitness row"]
-  fit{"Fit?"}
+  fit{"Material mismatch?"}
   go["Plan and execute"]
-  esc["First line: SUGGEST-ESCALATE"]
-  stop["Stop"]
+  esc["SUGGEST-ESCALATE"]
+  down["SUGGEST-DOWNGRADE"]
+  stop["Stop / wait"]
   insist{"Operator insists?"}
   shaky["Proceed in scope<br/>mark unverified"]
 
   task --> row --> fit
   fit -->|good| go
-  fit -->|poor| esc --> stop
+  fit -->|too hard| esc --> stop
+  fit -->|too easy| down --> stop
   stop --> insist
   insist -->|yes| shaky
-  insist -->|no| handoff["Handoff / wait"]
+  insist -->|no| handoff["Handoff / switch model"]
 ```
 
-Poor fit → the entire first line is `SUGGEST-ESCALATE: <better-suited model> — <reason>`, then stop. The operator can insist (`orchestrate.py --insist`), and the worker then proceeds strictly in scope with shaky output marked `(unverified)`. Scaffolded projects carry the operator's model-priority order in `ANCHOR-CONVENTIONS.md`, so the suggestion names the nearest better-fitting model from *that user's* list. Suggesting down-tier is equally required — boilerplate on a frontier model is the mirror-image failure.
+| Direction | First line | When |
+|-----------|------------|------|
+| Too hard | `SUGGEST-ESCALATE: <target> — <reason>` | Weak column, orchestration, under-tier |
+| Too easy | `SUGGEST-DOWNGRADE: <cheaper> — <reason>` | Clear over-tier (boilerplate, rename, format-only) |
 
-**What does *not* trigger the fit check.** The gate is your **weak column** and orchestration-class work — nothing wider. Do not escalate because a stronger model exists (true of nearly every task), because a plan's **Preferred models** names one (only the listed *tiers* set the floor; a list with no tier and no name you match is *unknown* fit, which is **eligible**), because the task is unfamiliar or multi-file, or because a single step looks hard (claim the plan and route *that step*). Over-shy escalation is a real failure mode, not the safe default: the plan sits in the backlog, the operator waits, and a model that could have finished it is idle. It just fails quietly.
+The operator can insist (`orchestrate.py --insist` or “do it here”). Prefer project model-priority for targets. Downgrade heuristics stay **conservative** — normal mid multi-file work is not “too easy.”
 
-`orchestrate.py` honors a `SUGGEST-ESCALATE` first line immediately (escalate, or hold in detached mode) without burning retry attempts.
+**What does *not* trigger the fit check.** Do not escalate because a stronger model exists, because Preferred only *names* one, because the task is unfamiliar/multi-file, or because one step looks hard. Do not spam downgrade because a cheaper model exists for routine executor work.
+
+`orchestrate.py` honors first-line `SUGGEST-ESCALATE` **and** `SUGGEST-DOWNGRADE` immediately (no retry burn).
 
 ## Frontier / API models
 

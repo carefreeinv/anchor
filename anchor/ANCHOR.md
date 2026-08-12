@@ -55,7 +55,19 @@ A sloppy prompt costs a frontier model money and costs a small model *correctnes
 
 ### Right-size before you start
 
-The escalation path above (stop after two failures, hand up a tier) has an inverse that's just as important and easier to forget: before spending an expensive tier's tokens, ask whether the task actually needs them. If it looks like boilerplate, formatting, a rename, or a single well-specified function, the model should say so and ask whether to proceed at the current tier or hand off to a smaller model or a model already registered in `scripts/endpoints.yaml` — rather than silently burning frontier capacity on work a cheap/local model would do just as correctly. `scripts/router.py` implements this lookup; a model without fleet access should still flag the mismatch in words.
+Before spending an expensive tier's tokens — **and on every user prompt that sets
+or redirects work** — judge fit both ways (detail: `model-fitness.md`):
+
+| Direction | First line | When |
+|-----------|------------|------|
+| Too hard | `SUGGEST-ESCALATE: <target> — <reason>` | Weak column, orchestration-class, under-tier |
+| Too easy | `SUGGEST-DOWNGRADE: <cheaper target> — <reason>` | Clear over-tier (boilerplate, rename, format-only) |
+| Good fit | *(silence)* | Proceed — no model pitch |
+
+Stop after a suggest line unless the operator insists. Prefer project model-priority
+/ Preferred orchestrator for targets. `scripts/router.py` helps fleet role pick;
+interactive agents use the first-line protocol, not silent model swap.
+
 
 ### When the tier you want is rationed
 

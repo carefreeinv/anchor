@@ -93,6 +93,36 @@ def test_execute_task_insist_overrides_fit_check():
     assert fleet.ep.calls == 2
 
 
+def test_execute_task_honors_suggest_downgrade_without_burning_attempts():
+    from orchestrate import execute_task
+
+    fleet = FakeFleet([
+        "SUGGEST-DOWNGRADE: small — rename-only; local swarm is enough",
+    ])
+    result = execute_task("rename the helper file", "plan", fleet,
+                          verify_cmd=None, hold_on_fail=False)
+
+    assert result["status"] == "escalate"
+    assert result["attempts"] == 1
+    assert "DOWNGRADE" in result["suggestion"].upper() or "small" in result["suggestion"]
+    assert fleet.ep.calls == 1
+
+
+def test_execute_task_insist_overrides_suggest_downgrade():
+    from orchestrate import execute_task
+
+    fleet = FakeFleet([
+        "SUGGEST-DOWNGRADE: small — too easy",
+        GOOD_OUTPUT,
+    ])
+    result = execute_task("do it here anyway", "plan", fleet,
+                          verify_cmd=None, hold_on_fail=False, insist=True)
+
+    assert result["status"] == "ok"
+    assert result["attempts"] == 2
+    assert fleet.ep.calls == 2
+
+
 def test_execute_task_rejects_out_of_scope_before_tests(git_repo):
     """Out-of-scope worktree edit → failed-scope, and --verify never runs."""
     from pathlib import Path

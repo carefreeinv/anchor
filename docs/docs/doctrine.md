@@ -3,7 +3,7 @@ sidebar_position: 3
 sidebar_label: Doctrine
 ---
 
-<!-- synced-from: anchor/ANCHOR.md @ f0aa97d19d80bd6942479f603f31a0171694a94b -->
+<!-- synced-from: anchor/ANCHOR.md @ 302ee995e5a5a64cc099eb70358c0b8b64f996d6 -->
 
 # The Doctrine
 
@@ -106,9 +106,9 @@ Escalation isn't the only direction that matters — before spending an expensiv
 flowchart LR
   task["Incoming task"]
   size{"Needs this tier?"}
-  down["Suggest cheaper / local"]
+  down["SUGGEST-DOWNGRADE"]
   up["SUGGEST-ESCALATE"]
-  go["Proceed in scope"]
+  go["Proceed in scope (silence)"]
 
   task --> size
   size -->|"too hard"| up
@@ -116,7 +116,7 @@ flowchart LR
   size -->|"fit"| go
 ```
 
-Boilerplate, formatting, a rename, or one well-specified function gets flagged, with a question about handing off to a smaller model or one already registered in `scripts/endpoints.yaml`, instead of silently burning frontier capacity. `scripts/router.py` implements the lookup.
+Boilerplate, formatting, a rename, or one well-specified function gets a first-line `SUGGEST-DOWNGRADE: <cheaper> — <reason>` (stop unless insisted), instead of silently burning frontier capacity. Too-hard work uses `SUGGEST-ESCALATE`. See [Model fitness](/model-fitness). `scripts/router.py` classifies fleet roles; interactive agents use the first-line protocol, not silent model swap.
 
 *Right-sizing is one of the reasons [Savings](/savings) can be so large — please consider [donating](https://donate.stripe.com/28E6oHeq8fxQ5p7fmBdjO01) to help support this project.*
 

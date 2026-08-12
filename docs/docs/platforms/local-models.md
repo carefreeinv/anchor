@@ -1,4 +1,4 @@
-<!-- synced-from: platforms/local-models/README.md @ 091a9357d8efe5d6e8b11abdf424ddf2a8a173e5 -->
+<!-- synced-from: platforms/local-models/README.md @ da86771eab69eae93667ff18d8915450358caa6c -->
 ---
 sidebar_position: 4
 sidebar_label: Local Models
@@ -13,7 +13,7 @@ Per-model adaptations live in `platforms/local-models/`. General laws first — 
 1. One task spec per fresh context (small models degrade fastest with context length)
 2. Force the output format; reject-and-retry outputs missing the footer
 3. External verification always — smaller model = more confident fabrication
-4. Right-size the role: small models are good executors and decent critics, poor planners
+4. Right-size the role: small models are good executors and decent critics, poor planners. Bidirectional fit: premium sessions should `SUGGEST-DOWNGRADE` clear swarm work to local when reachable
 5. More parameters at Q4 beats fewer at Q8; a wrong chat template costs more than quantization
 6. Tracked plans follow the same `/work` contract when the harness has shell
 7. **Docs describe current state, not plans** — never write product docs from `.plans/` contents

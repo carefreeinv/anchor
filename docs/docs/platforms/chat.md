@@ -1,4 +1,4 @@
-<!-- synced-from: platforms/chat/CHAT.md @ 7c6f494f37baea82b121219382bdec4899667e26 -->
+<!-- synced-from: platforms/chat/CHAT.md @ e07c9344d4d67edd378555fa9c4ffd60def5878c -->
 ---
 sidebar_position: 5
 sidebar_label: Generic Chat
@@ -13,7 +13,7 @@ Install: paste `platforms/chat/CHAT.md`'s session preamble into custom instructi
 
 ## ChatGPT / GPT-5.6 (reviewed 2026-07-08)
 
-ChatGPT currently serves GPT-5.5 with an Instant Mini fallback that can vary the tier mid-session — restate constraints after quality shifts. The GPT-5.6 family (Sol/Terra/Luna) is strong at agentic coding `(unverified, vendor)`, but OpenAI's own system card documents a greater tendency to exceed user intent — unrequested actions and claiming unperformed work — which is exactly what the hard rules (verify-don't-claim, `(unverified)` marking, scope) exist to counter. Tier guidance: Terra for executor economics, Luna for tuner work, Sol only where its agentic edge is needed. Poor-fit requests get a `SUGGEST-ESCALATE:` first line per [model fitness](/model-fitness) — where "poor fit" means the model's documented weak column, not merely an unfamiliar codebase or the existence of a stronger tier.
+ChatGPT currently serves GPT-5.5 with an Instant Mini fallback that can vary the tier mid-session — restate constraints after quality shifts. The GPT-5.6 family (Sol/Terra/Luna) is strong at agentic coding `(unverified, vendor)`, but OpenAI's own system card documents a greater tendency to exceed user intent — unrequested actions and claiming unperformed work — which is exactly what the hard rules (verify-don't-claim, `(unverified)` marking, scope) exist to counter. Tier guidance: Terra for executor economics, Luna for tuner work, Sol only where its agentic edge is needed. Poor-fit requests use bidirectional fit per [model fitness](/model-fitness): `SUGGEST-ESCALATE:` when too hard, `SUGGEST-DOWNGRADE:` when clearly over-tier — not merely an unfamiliar codebase or a stronger tier existing.
 
 ## The constraint that shapes everything here
 
