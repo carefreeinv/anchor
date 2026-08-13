@@ -3,7 +3,7 @@ sidebar_position: 4
 sidebar_label: Model Fitness
 ---
 
-<!-- synced-from: anchor/model-fitness.md @ 0539f913aa3a822f15ac65db2b632cfeb0726c47 -->
+<!-- synced-from: anchor/model-fitness.md @ d26157400667417a7fcf26894f24e57632174da9 -->
 
 # Model fitness
 
@@ -50,9 +50,15 @@ Poor fit → the entire first line is `SUGGEST-ESCALATE: <better-suited model> �
 | GPT-5.6 Terra | ~GPT-5.5 quality at ~half cost — the executor pick | Same system-card caveats as Sol |
 | GPT-5.6 Luna | Frontier-adjacent at $1/$6 — tuner/light executor | Keep off architecture and review |
 | ChatGPT (GPT-5.5 + Instant Mini fallback) | Conversational spec-shaping, piloted one-step turns | No execution; fallback varies the tier mid-session |
+| Grok 4.6 | Long-running agents; **base mid** + effort-effective tier; xhigh 4.6-only | Repo-scale unconfirmed; default effort high |
 | Grok 4.5 | Terminal/CLI tasks (≈GPT-5.5 class), long tool-use runs, token efficiency, price; **Preferred catalog tier = mid** | Measurably weaker at repo-scale issue resolution — decompose to file-scoped specs; `reasoning_effort` defaults high (use `/effort low` for mechanical); high effort ≠ frontier promotion; community-reported tool-use flakiness |
 | Gemini 2.5-class | Long-context ingestion, multimodal | Same external-verification rules as everyone |
 | Nemotron (NIM) | Local planner/critic stand-in; clean thinking toggle | Fabricates unfamiliar APIs under pressure |
+
+
+## Effort as effective tier (Grok family)
+
+For Grok 4.6 / 4.5, a **reported** `reasoning_effort` sets Preferred **effective** tier: `low`→mid, `medium`→reasoner, `high`/`xhigh`→frontier. **Unknown effort → mid** (never silent frontier from API default). Base catalog tier stays mid. Non-Grok products: effort is cost-only. Details in `anchor/model-fitness.md`.
 
 ## Local models
 

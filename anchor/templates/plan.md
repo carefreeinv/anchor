@@ -96,7 +96,7 @@ Use **model names** and/or **tiers** (see `.anchor/ANCHOR.md` routing + `.anchor
 | Tier | Typical models | Good for |
 |------|----------------|----------|
 | `small` | Haiku, Qwen3 4–8B, Gemma 3 12B | Boilerplate, renames, formatting, thin docs |
-| `mid` | Sonnet-class, Grok 4.5, Qwen3 32B, GPT Terra | Scoped multi-file features, refactors, routine reviews |
+| `mid` | Sonnet-class, Grok 4.6/4.5 @ low (or unknown effort), Qwen3 32B, GPT Terra | Scoped multi-file features, refactors, routine reviews |
 | `reasoner` | Opus-class, Nemotron thinking-on, R1 distill | Architecture, deep single-bug, security-adjacent |
 | `frontier` | Fable-class | Multi-hour autonomy, large migrations, multi-service debug |
 

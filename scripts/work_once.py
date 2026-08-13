@@ -111,6 +111,9 @@ def _parse_endpoints_crude(text: str) -> list[dict]:
 
 
 def resolve_worker(args: argparse.Namespace) -> Worker:
+    from plan_select import worker_with_effort
+
+    effort = getattr(args, "effort", None)
     if args.endpoint:
         model, tier = _load_endpoint(
             Path(args.registry) if args.registry else None, args.endpoint
@@ -118,10 +121,10 @@ def resolve_worker(args: argparse.Namespace) -> Worker:
         name = args.model or model
         if args.tier:
             tier = normalize_fit_tier(args.tier)
-        return Worker(name=name, tier=tier)
+        return worker_with_effort(name, tier, effort)
     name = args.model or args.agent_id or "work-once"
     tier = normalize_fit_tier(args.tier or "mid")
-    return Worker(name=name, tier=tier)
+    return worker_with_effort(name, tier, effort)
 
 
 def run_orchestrate(plan_path: Path, extra: list[str]) -> int:
@@ -348,6 +351,11 @@ def main(argv: list[str] | None = None) -> int:
         help="worker fit tier: small|mid|reasoner|frontier (or registry tier name)",
     )
     ap.add_argument("--model", help="worker model name for Preferred-models name match")
+    ap.add_argument(
+        "--effort",
+        help="reasoning effort; for Grok family sets effective fit tier "
+             "(low→mid, medium→reasoner, high/xhigh→frontier; omit→mid)",
+    )
     ap.add_argument(
         "--endpoint",
         help="resolve model+tier from endpoints.yaml by endpoint name",

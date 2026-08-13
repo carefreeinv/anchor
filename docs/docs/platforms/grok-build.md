@@ -1,4 +1,4 @@
-<!-- synced-from: platforms/grok-build/GROK.md @ 9eb27958842dad0b5a34f0eaab27791854d49a05 -->
+<!-- synced-from: platforms/grok-build/GROK.md @ 6a8857fa919abfad43a7481999516d9c115acb1c -->
 ---
 sidebar_position: 2
 sidebar_label: Grok Build
@@ -35,7 +35,7 @@ The hard rules (restate → plan → one-step-per-turn → verify-don't-claim �
 - **One task spec per session.** Restart instead of accumulating context; instruction decay makes long Grok sessions untrustworthy.
 - Architecture and security-adjacent steps are marked `Route to: bigger model` in the plan — Grok doesn't decide these alone.
 
-## Grok 4.5 (reviewed 2026-07-08)
+## Grok 4.6 (and 4.5) (reviewed 2026-07-08)
 
 Play to the strength: terminal/CLI-driven steps are Grok 4.5's best fit (GPT-5.5-class on terminal benchmarks, unusually token-efficient). Compensate for the weakness: it measurably trails Fable/GPT tiers on repo-scale issue resolution, so decompose to file-scoped task specs before handing work over. API `reasoning_effort` defaults to *high* — set low for mechanical steps or pay a token multiple for nothing. In the TUI use **`/effort low`** (or `/model <id> low`); CLI/headless: **`--effort low`**. Catalog tier for Preferred matching is **mid** — high effort is a cost dial, not a frontier promotion. Before [**`/work`**](/skills/work) burns high effort on mid plans, probe for a cheaper local/fleet executor (`scripts/endpoints.yaml`); if none are reachable, emit the effort command rather than a dead stop. Community-reported tool-use flakiness `(unverified)` makes external verification load-bearing. A poor-fit task gets a `SUGGEST-ESCALATE:` first line per the fit check in `.anchor/model-fitness.md`, not a silent attempt. Symmetrically, **mid is a floor Grok clears, not a ceiling to apologize for**: repo-scale issue resolution is the documented weak spot, file-scoped `mid` plans are not — and a plan whose **Preferred models** also names a stronger product is still a good fit, since only listed *tiers* gate.
 
@@ -48,3 +48,8 @@ Scaffold installs [**`/draft`**](/skills/draft), [**`/work`**](/skills/work), [*
 ## /commit-prep
 
 **Required before any `git commit`.** Agents run `/commit-prep` (discover this project’s tests/CI; CHANGELOG; blog-if-warranted — no Docusaurus required). **Prep only** — does not commit. After a green prep, [**`/work`**](/skills/work) / standing rules cover feature-branch commit (worktree preferred; merge to `dev` only via `/work`'s culmination answer + scoped gate; never to `main`).
+
+
+## Effort and Preferred fit (4.6-era)
+
+Base catalog tier is **mid**. When the session reports `reasoning_effort`, Anchor maps it to an **effective** Preferred tier (`low`→mid, `medium`→reasoner, `high`/`xhigh`→frontier). Omitted effort stays mid for eligibility. TUI: `/effort low|medium|high|xhigh`.

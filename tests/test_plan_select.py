@@ -316,3 +316,18 @@ def test_next_main_exit_codes_and_claim_writes_lease(tmp_path, capsys):
     # Backlog now empty → exit 1 again.
     rc = ps._next_main(["--next", "--root", str(root), "--tier", "mid"])
     assert rc == 1
+
+
+def test_effective_fit_tier_grok_map():
+    from plan_select import effective_fit_tier, is_grok_family, grok_effort_to_tier
+
+    assert is_grok_family("Grok 4.6")
+    assert is_grok_family("grok-4.5")
+    assert not is_grok_family("Claude Sonnet 5")
+    assert grok_effort_to_tier("low") == "mid"
+    assert grok_effort_to_tier("medium") == "reasoner"
+    assert grok_effort_to_tier("high") == "frontier"
+    assert grok_effort_to_tier("xhigh") == "frontier"
+    assert effective_fit_tier("Grok 4.6", "mid", None) == "mid"
+    assert effective_fit_tier("Grok 4.6", "mid", "high") == "frontier"
+    assert effective_fit_tier("Claude Sonnet 5", "mid", "high") == "mid"

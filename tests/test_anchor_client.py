@@ -248,3 +248,33 @@ def test_resolve_doctrine_path_missing_raises(tmp_path):
 def test_load_prompt_reads_source_tree():
     text = load_prompt("anchor/system-prompts/mythos-core.md")
     assert "FIT CHECK" in text or "fit check" in text.lower() or "Mythos" in text or len(text) > 100
+
+
+def test_endpoint_sends_reasoning_effort_quirk(monkeypatch):
+    """Grok endpoint quirk injects reasoning_effort into the OpenAI body."""
+    from anchor_client import Endpoint
+    import anchor_client as ac
+
+    captured = {}
+
+    class FakeResp:
+        status_code = 200
+        def raise_for_status(self):
+            return None
+        def json(self):
+            return {"choices": [{"message": {"content": "ok\n## Result\nx\n## How to verify\ny"}}]}
+
+    def fake_post(url, *, json, headers, timeout):
+        captured["json"] = json
+        return FakeResp()
+
+    monkeypatch.setattr(ac, "_post_with_retry", fake_post)
+    ep = Endpoint(
+        name="grok",
+        tier="mid",
+        base_url="http://example/v1",
+        model="grok-4.6",
+        quirks={"reasoning_effort": "xhigh"},
+    )
+    ep.chat([{"role": "user", "content": "hi"}], max_tokens=16)
+    assert captured["json"].get("reasoning_effort") == "xhigh"

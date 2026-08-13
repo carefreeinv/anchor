@@ -34,34 +34,36 @@ You are one worker in a verified pipeline, not the whole pipeline. Speed is wort
 - For anything security-adjacent or architectural, don't let Grok decide alone — mark the step `Route to: bigger model` in the plan.
 - The reverse matters too: if a step is boilerplate/formatting/a rename, mark it `Route to: smaller/local model` instead of running it on Grok's default tier.
 
-## Grok 4.5 notes (reviewed 2026-07-08)
+## Grok 4.6 notes (reviewed 2026-08-12; 4.5 still supported)
 
-- **Play to the strength: terminal-driven work.** Grok 4.5 benchmarks at GPT-5.5 class
-  on terminal/CLI tasks and is unusually token-efficient — CLI-heavy steps (builds,
-  migrations run via shell, log spelunking) are its best fit.
-- **Compensate for the weakness: repo-scale changes.** It measurably trails Fable/GPT
-  tiers at resolving whole-repo issues (DeepSWE-style tasks). Don't hand it "fix this
-  issue across the codebase" — decompose into file-scoped task specs first (this is
-  Anchor law anyway; on Grok 4.5 it's also the performance play).
-- **`reasoning_effort` defaults to high** in the API. Leave high for plan/review steps;
-  set low for mechanical execution or you pay a token multiple for no quality gain —
-  same economics as Nemotron's thinking toggle. In Grok Build TUI: **`/effort low`**
-  (or `/model <id> low`); CLI/headless: **`--effort low`**. Catalog tier for
-  Preferred matching is **mid** (see plan template) — high effort does not promote
-  you to frontier for `/work` fit.
-- **`/work` cost right-size:** before skipping `mid` plans or burning high effort on
-  them, probe for a cheaper local/fleet executor (`scripts/endpoints.yaml`); if none
-  are reachable, emit `/effort low` (or dispatch via `work_once.py --endpoint …`)
-  rather than a dead stop. Full contract: `.grok/skills/work/SKILL.md` (Cheaper
-  capacity probe + Reasoning effort).
-- Community reports intermittent regressions and tool-use flakiness `(unverified)` —
-  external verification per the hard rules above is load-bearing here, not ceremony.
-- Fit check before starting any task: `.anchor/model-fitness.md` has Grok 4.5's row; a
-  poor fit means a `SUGGEST-ESCALATE:` first line per mythos-core rule 11, not a
-  silent attempt. Symmetrically, **mid is a floor you clear, not a ceiling you
-  apologize for**: repo-scale issue resolution is Grok 4.5's documented weak spot,
-  file-scoped `mid` plans are not. Do not skip a plan because its **Preferred
-  models** also names a stronger product — only listed *tiers* gate.
+- **Primary product: Grok 4.6** (public 2026-08-12) — long-running agents, multi-step
+  codebase work, ambitious interactive/visual projects. Vendor composite ≈ GPT-5.6 Sol
+  `(unverified, vendor)`. **Grok 4.5** remains supported with the same effort map
+  (`xhigh` coerced to `high` at the API).
+- **Play to strengths:** terminal/CLI and multi-step agent loops. Still prefer
+  **file-scoped** task specs for repo-scale issues until local fitness data improves
+  DeepSWE-class confidence for 4.6 (4.5 was measurably behind Fable-class there).
+- **Base catalog tier = mid; reported effort sets effective Preferred tier**
+  (Grok family only — see `model-fitness.md` “Effort as effective tier”):
+
+  | Effort | Effective fit tier |
+  |--------|--------------------|
+  | `low` / `minimal` | `mid` |
+  | `medium` | `reasoner` |
+  | `high` (API default) / `xhigh` (4.6 only) | `frontier` |
+
+  **Omitted / unknown effort → effective `mid`** (never silent frontier from API
+  default). Report yourself as `Grok 4.6 @ <effort> → effective <tier>` before fit.
+- **Pasteable dials:** TUI **`/effort low|medium|high|xhigh`** (or `/model <id> low`);
+  CLI **`--effort …`**; fleet endpoint quirk `reasoning_effort:` in `endpoints.yaml`
+  (sent by `anchor_client.py`). Prefer **low** for mechanical steps; reserve
+  high/`xhigh` for architecture / long-horizon; **xhigh** is costly — opt-in only.
+- **`/work`:** pass `--effort` into `plan_fit` / `work_once` when you know the dial
+  so eligibility matches. Before burning high/`xhigh` on `small`/`mid` Preferred,
+  probe cheaper local/fleet capacity. Full contract: `.grok/skills/work/SKILL.md`.
+- Fit check (bidirectional if shipped): weak-column → `SUGGEST-ESCALATE:`; clear
+  over-tier on high cost → `SUGGEST-DOWNGRADE:` / lower `/effort`. Good fit → silence.
+  Do not skip file-scoped `mid` plans because Preferred also names a stronger product.
 
 ## Working with this repo's tooling
 

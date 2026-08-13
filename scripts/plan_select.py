@@ -196,6 +196,7 @@ def normalize_fit_tier(tier: str) -> str:
     return "mid"
 
 
+
 def plans_root_for(project_root: Path) -> Path:
     return project_root / ".plans"
 
@@ -535,10 +536,11 @@ class Effort(str, Enum):
 class EffortAdvice:
     """What to do with the reasoning dial for one plan.
 
-    ``verdict`` never affects eligibility. Effort is a **cost dial, not a tier
-    promotion** (mythos-core rule 11 / `/work` Model fit): cranking a mid model
-    to ``high`` does not qualify it for ``reasoner`` plans, and running a
-    reasoner at ``low`` does not disqualify it from ones it already fits.
+    ``verdict`` never gates eligibility by itself. For **non-Grok** products,
+    effort is a cost dial only. For the **Grok family**, reported effort also
+    sets effective Preferred tier via ``effective_fit_tier`` (separate from
+    this advice); this struct still recommends raising/lowering the dial to
+    match the plan's Preferred band.
     """
 
     verdict: Effort
@@ -579,6 +581,68 @@ def normalize_effort(effort: str | None) -> str | None:
     }
     e = aliases.get(e, e)
     return e if e in EFFORT_RANK else None
+
+def is_grok_family(name: str | None) -> bool:
+    """True when the worker product is Grok (4.5, 4.6, or generic "grok")."""
+    if not name:
+        return False
+    n = name.lower().replace("_", " ").replace("-", " ")
+    return "grok" in n.split() or n.startswith("grok") or " grok" in f" {n}"
+
+
+# Grok-family effort → effective Preferred fit tier (Grok 4.6-era map).
+# Unknown / unreported effort does **not** inherit API default high → frontier.
+GROK_EFFORT_TIER: dict[str, str] = {
+    "none": "mid",
+    "minimal": "mid",
+    "low": "mid",
+    "medium": "reasoner",
+    "high": "frontier",
+    "xhigh": "frontier",  # 4.6-only at API; 4.5 coerces xhigh→high
+}
+
+
+def grok_effort_to_tier(effort: str | None) -> str:
+    """Map a normalized effort word to mid|reasoner|frontier; unknown → mid."""
+    e = normalize_effort(effort)
+    if e is None:
+        return "mid"
+    return GROK_EFFORT_TIER.get(e, "mid")
+
+
+def effective_fit_tier(
+    name: str,
+    base_tier: str,
+    effort: str | None = None,
+) -> str:
+    """Session tier used for Preferred matching.
+
+    **Grok family:** when *effort* is a recognized dial setting, the
+    operator-confirmed map promotes/demotes eligibility (low→mid,
+    medium→reasoner, high/xhigh→frontier). Unrecognized or omitted effort
+    keeps **mid** (never silent frontier from API default).
+
+    **Other products:** catalog *base_tier* only; effort is cost advice
+    elsewhere (``classify_effort``), not a tier promotion.
+    """
+    base = normalize_fit_tier(base_tier)
+    if not is_grok_family(name):
+        return base
+    if effort is None or (isinstance(effort, str) and not effort.strip()):
+        return "mid"  # unknown dial → conservative mid
+    if normalize_effort(effort) is None:
+        return "mid"
+    return grok_effort_to_tier(effort)
+
+
+def worker_with_effort(
+    name: str,
+    base_tier: str,
+    effort: str | None = None,
+) -> Worker:
+    """Build a Worker whose ``tier`` is already the effective fit tier."""
+    return Worker(name=name, tier=effective_fit_tier(name, base_tier, effort))
+
 
 
 def plan_effort_tier(preferred: str | None) -> str:
@@ -995,8 +1059,13 @@ def _next_main(argv: list[str] | None = None) -> int:
         help="also move the plan to in-progress/ and write your lease (atomic)",
     )
     ap.add_argument("--json", action="store_true", help="emit a JSON object")
-    ap.add_argument("--tier", default="mid", help="worker fit tier (default mid)")
+    ap.add_argument("--tier", default="mid", help="worker catalog/base fit tier (default mid)")
     ap.add_argument("--model", help="worker model name for Preferred-models match")
+    ap.add_argument(
+        "--effort",
+        help="reasoning effort (Grok family: sets effective fit tier; "
+             "low→mid, medium→reasoner, high/xhigh→frontier; omit→mid for Grok)",
+    )
     ap.add_argument(
         "--no-fit-check", action="store_true", help="ignore Preferred-models filter"
     )
@@ -1013,7 +1082,9 @@ def _next_main(argv: list[str] | None = None) -> int:
               file=sys.stderr)
         return 2
 
-    worker = Worker(name=args.model or args.tier, tier=args.tier)
+    worker = worker_with_effort(
+        args.model or args.tier, args.tier, getattr(args, "effort", None)
+    )
     rec = select_one(
         plans_root,
         worker,

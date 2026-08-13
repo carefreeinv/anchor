@@ -6,6 +6,14 @@ Newest first.
 
 ## [Unreleased]
 
+### Changed
+
+- **Grok 4.6 + effort as effective Preferred tier (Grok family only)** — catalog base tier remains **mid** for Grok 4.6 and 4.5, but a **reported** `reasoning_effort` now sets session eligibility: `low`→mid, `medium`→reasoner, `high`/`xhigh`→frontier. **Unknown effort stays mid** (API default high does not silently take frontier backlog). Implemented in `plan_select.effective_fit_tier` / `worker_with_effort`; wired through `plan_fit`, `plan_select --effort`, and `work_once --effort`. Non-Grok products keep effort as a cost dial only. `anchor_client` accepts endpoint quirk `reasoning_effort` (incl. `xhigh` for 4.6). Doctrine: `model-fitness.md`, `platforms/grok-build/GROK.md`, `/work` skills. This **changes** prior “effort never promotes tier” language for Grok only.
+
+### Added
+
+- **Grok 4.6 fitness row** and effort→tier table in model-fitness (4.5 row retained as prior gen).
+
 ### Added
 
 - **`scripts/plan_board.py --json`** — machine-readable kanban dump (`schema_version: 1`) with the same columns, membership, and Priority → Value → mtime sort as the terminal board: per-plan slug/rel/lane/title/priority/value/preferred/depends_on/assignee/path, optional log `last_event`, and the 7-day Completed/Processed throughput block. Single-frame (auto-once); `--include-parked` adds Ambiguous/Blocked. Stdlib-only and read-only — for CI, dashboards, and other projects that should not import Anchor internals or talk MCP. Documented in `docs/docs/tooling/scripts.md` and the kanban blog post

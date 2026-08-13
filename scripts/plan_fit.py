@@ -40,6 +40,7 @@ from plan_select import (
     normalize_effort,
     plan_effort_tier,
     plans_root_for,
+    worker_with_effort,
 )
 
 # Fit values a bare pick may take. Mirrors work_once/select_one: `unknown` is
@@ -48,19 +49,25 @@ ELIGIBLE_FITS = (Fit.GOOD, Fit.UNKNOWN)
 
 
 def _resolve_worker(args: argparse.Namespace) -> Worker:
+    """Resolve Worker; apply Grok effort→effective tier when --effort is set."""
+    effort = getattr(args, "effort", None)
     if args.endpoint:
         from work_once import _load_endpoint  # local: keeps YAML cost off the common path
 
         model, tier = _load_endpoint(
             Path(args.registry) if args.registry else None, args.endpoint
         )
-        return Worker(name=args.model or model, tier=args.tier or tier)
+        name = args.model or model
+        base = args.tier or tier
+        return worker_with_effort(name, base, effort)
     if not args.tier and not args.model:
         raise SystemExit(
             "say who you are: --tier small|mid|reasoner|frontier "
             "(and/or --model NAME, or --endpoint NAME from endpoints.yaml)"
         )
-    return Worker(name=args.model or args.tier or "worker", tier=args.tier or "mid")
+    name = args.model or args.tier or "worker"
+    base = args.tier or "mid"
+    return worker_with_effort(name, base, effort)
 
 
 def _reason(rec: PlanRecord, worker: Worker) -> str:

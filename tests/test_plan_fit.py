@@ -77,15 +77,15 @@ def test_every_tier_has_an_effort_band():
 
 # --- the invariant that makes effort safe -----------------------------------
 
-def test_effort_never_changes_eligibility(tmp_path):
-    """A cost dial is not a tier promotion (mythos-core rule 11).
+def test_effort_never_changes_eligibility_for_non_grok(tmp_path):
+    """Non-Grok products: effort is a cost dial, not a tier promotion.
 
-    Cranking a mid worker to xhigh must not make reasoner-only plans eligible,
-    and dropping a reasoner to none must not disqualify it from its own work.
+    Cranking a mid worker named Claude to xhigh must not make reasoner-only
+    plans eligible; dropping a reasoner to none must not disqualify it.
     """
     plans = _tree(tmp_path)
     _plan(plans / "features" / "hard.md", preferred="reasoner")
-    mid, reasoner = Worker("m", "mid"), Worker("r", "reasoner")
+    mid, reasoner = Worker("Claude Sonnet 5", "mid"), Worker("Claude Opus", "reasoner")
 
     for effort in (None, "none", "low", "high", "xhigh"):
         take, skip = plan_fit.triage(inventory_ready(plans, mid), mid, effort)
@@ -93,6 +93,41 @@ def test_effort_never_changes_eligibility(tmp_path):
 
         take, _ = plan_fit.triage(inventory_ready(plans, reasoner), reasoner, effort)
         assert len(take) == 1, f"reasoner refused its own work at {effort}"
+
+
+def test_grok_effort_sets_effective_tier_eligibility(tmp_path):
+    """Grok family: reported effort changes Preferred eligibility."""
+    from plan_select import worker_with_effort
+
+    plans = _tree(tmp_path)
+    _plan(plans / "features" / "hard.md", preferred="reasoner")
+    _plan(plans / "features" / "mid.md", preferred="mid")
+    _plan(plans / "features" / "front.md", preferred="frontier")
+
+    low = worker_with_effort("Grok 4.6", "mid", "low")
+    take, skip = plan_fit.triage(inventory_ready(plans, low), low, "low")
+    assert {r.slug for r, _ in take} == {"mid"}
+    assert {r.slug for r in skip} == {"hard", "front"}
+
+    # medium → effective reasoner: good for reasoner Preferred; overqualified for mid-only
+    med = worker_with_effort("Grok 4.6", "mid", "medium")
+    take, skip = plan_fit.triage(inventory_ready(plans, med), med, "medium")
+    assert {r.slug for r, _ in take} == {"hard"}
+    assert "mid" in {r.slug for r in skip}
+
+    # high/xhigh → effective frontier: only frontier Preferred (overqualified for mid/reasoner)
+    high = worker_with_effort("Grok 4.6", "mid", "high")
+    take, skip = plan_fit.triage(inventory_ready(plans, high), high, "high")
+    assert {r.slug for r, _ in take} == {"front"}
+    assert {r.slug for r in skip} == {"hard", "mid"}
+
+    xh = worker_with_effort("Grok 4.5", "mid", "xhigh")  # coerced to frontier via map
+    assert xh.tier == "frontier"
+
+    unknown = worker_with_effort("Grok 4.6", "mid", None)
+    take, skip = plan_fit.triage(inventory_ready(plans, unknown), unknown, None)
+    assert {r.slug for r, _ in take} == {"mid"}
+    assert "hard" in {r.slug for r in skip}
 
 
 # --- triage / CLI -----------------------------------------------------------

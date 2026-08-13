@@ -144,9 +144,12 @@ Before selecting a plan, identify **all three**:
    (listed under `mid`; named “Grok 4.5” is a good hit). Temporary-coordinator
    eligibility is not the same as “treat every `mid` plan as overqualified.”
 2. **Cost posture** when the product supports it: current **reasoning effort** /
-   thinking mode if known (`low` | `medium` | `high` | …). **High effort on a
-   mid-class model is a cost dial, not a tier promotion** — it does not by
-   itself make you overqualified for `mid` Preferred plans.
+   thinking mode if known (`low` | `medium` | `high` | `xhigh` | …). **Grok family
+   (4.5/4.6):** reported effort sets **effective fit tier** (`low`→mid,
+   `medium`→reasoner, `high`/`xhigh`→frontier; **unknown effort → mid**). Report
+   `Grok 4.6 @ high → effective frontier` (or 4.5) before Preferred matching.
+   **Non-Grok products:** high effort remains a **cost dial only**, not a tier
+   promotion.
 3. **Cheaper capacity** on this host/fleet (next subsection) — required whenever
    fit is poor **or** the top ready work is `small`/`mid` while this session is
    expensive (true higher tier, or mid model stuck on high effort).
@@ -214,7 +217,7 @@ yourself if only the human/UI can.
 
 | Product | Lower cost for `small`/`mid` work | Raise for `reasoner`+ work |
 |---------|-----------------------------------|----------------------------|
-| **Grok Build (TUI)** | `/effort low` — or `/model <id> low` | `/effort high` |
+| **Grok Build (TUI)** | `/effort low` — or `/model <id> low` | `/effort high` or `/effort xhigh` (4.6) |
 | **Grok CLI / headless** | `--effort low` / `--reasoning-effort low` | `--effort high` |
 | **API (Grok-class)** | `reasoning_effort: "low"` | `"high"` |
 | **Nemotron / Qwen3 hybrid** | thinking **off** for bulk execute | thinking **on** for plan/critic |
@@ -222,19 +225,21 @@ yourself if only the human/UI can.
 
 Effort vs fit:
 
-- **Good fit + high effort on `small`/`mid` Preferred:** print the lower-effort
-  command in one line, then **execute** (or pause one turn only if the operator
-  must apply a slash command first — say which). Do **not** reclassify as
-  overqualified solely because effort is high.
-- **True overqualified** (clearly higher *tier* than all Preferred, e.g. Fable
-  on `small`/`mid` only) **+ no cheaper worker + operator needs progress:**
-  suggest `/work --no-fit-check` **and** the effort/model command above; stop
-  unless they insist or already authorized “do it on this model.” Use Rule 2's
-  terse skip format — an expensive session declining cheap work should cost the
-  operator three lines, not three paragraphs.
-- **Underqualified:** still skip. Suggest a stronger session/model — cranking
-  effort up is not a substitute when Preferred needs reasoner/frontier you are
-  not.
+- **Grok + reported effort:** use **effective tier** for good/under/overqualified
+  (e.g. Grok @ high is effective frontier — overqualified for Preferred `small`
+  only; Grok @ low is mid — underqualified for Preferred `reasoner` only). Pass
+  `--effort` to `plan_fit` / `work_once` when known.
+- **Good fit + wasteful effort on `small`/`mid` Preferred:** print the lower-effort
+  command (`/effort low`) in one line, then **execute** (or pause one turn if the
+  operator must apply a slash command first). On **non-Grok** models, do **not**
+  reclassify as overqualified solely because effort is high.
+- **True overqualified** (effective tier above all Preferred, e.g. Fable or
+  Grok@high on `small`/`mid` only) **+ no cheaper worker + operator needs progress:**
+  suggest lower effort / cheaper endpoint **and** `/work --no-fit-check` if needed;
+  stop unless they insist. Use Rule 2's terse skip format.
+- **Underqualified:** still skip. On Grok, suggest **raising** `/effort` (medium /
+  high / xhigh on 4.6) when the map would make you eligible; on other products,
+  cranking effort is not a substitute for a stronger model.
 
 ### Matching
 
