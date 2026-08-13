@@ -148,8 +148,8 @@ Before selecting a plan, identify **all three**:
    eligibility is not the same as “treat every `mid` plan as overqualified.”
 2. **Cost posture** when the product supports it: current **reasoning effort** /
    thinking mode if known (`low` | `medium` | `high` | `xhigh` | …). **Grok family
-   (4.5/4.6):** reported effort sets **effective fit tier** (`low`→mid, `medium`/`high`→reasoner, `xhigh`→frontier; **unknown effort → mid**). Report
-   `Grok 4.6 @ high → effective frontier` (or 4.5) before Preferred matching.
+   (4.5/4.6):** prefer **4.5 for lighter/cheaper mid**, **4.6 for heavier multi-step agent** work; reported effort sets **effective fit tier** (`low`→mid, `medium`/`high`→reasoner, `xhigh`→frontier; **unknown effort → mid**). Report
+   `Grok 4.5|4.6 @ <effort> → effective <tier>` before Preferred matching.
    **Non-Grok products:** high effort remains a **cost dial only**, not a tier
    promotion.
 3. **Cheaper capacity** on this host/fleet (next subsection) — required whenever
