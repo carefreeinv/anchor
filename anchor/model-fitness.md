@@ -94,8 +94,8 @@ products keep effort as a cost dial.
 |-------------|--------------------|-------------------------------------------|
 | `low` / `minimal` / `none` | `mid` | Sonnet / basic executor |
 | `medium` | `reasoner` | Opus-class depth |
-| `high` (API default) | `frontier` | Fable-class routing depth |
-| `xhigh` (4.6 only; 4.5 coerces to high) | `frontier` | Max depth / cost — prefer explicit opt-in |
+| `high` (API default on 4.6/4.5) | `reasoner` | Same band as medium — 4.6 is strong enough that default high is reasoner-class, not Fable routing |
+| `xhigh` (4.6 only; 4.5 coerces to high) | `frontier` | Explicit max depth / cost — opt-in only |
 
 **Unknown / omitted effort → `mid`** for eligibility. Do **not** treat “API
 defaults to high” as silent frontier when the session never reports the dial
@@ -105,7 +105,7 @@ defaults to high” as silent frontier when the session never reports the dial
 Grok Build TUI `/effort low|medium|high|xhigh`; CLI `--effort …`; fleet endpoint
 quirk `reasoning_effort: high` (see `anchor_client.py`).
 
-**Weak column still binds** at every effort: high/`xhigh` is routing depth, not a
+**Weak column still binds** at every effort: high is reasoner-class depth; `xhigh` is optional frontier routing depth, not a
 free pass on repo-scale weakness. Vendor agentic claims stay `(unverified)` until
 observed locally.
 

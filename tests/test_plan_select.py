@@ -326,8 +326,9 @@ def test_effective_fit_tier_grok_map():
     assert not is_grok_family("Claude Sonnet 5")
     assert grok_effort_to_tier("low") == "mid"
     assert grok_effort_to_tier("medium") == "reasoner"
-    assert grok_effort_to_tier("high") == "frontier"
+    assert grok_effort_to_tier("high") == "reasoner"
     assert grok_effort_to_tier("xhigh") == "frontier"
     assert effective_fit_tier("Grok 4.6", "mid", None) == "mid"
-    assert effective_fit_tier("Grok 4.6", "mid", "high") == "frontier"
+    assert effective_fit_tier("Grok 4.6", "mid", "high") == "reasoner"
+    assert effective_fit_tier("Grok 4.6", "mid", "xhigh") == "frontier"
     assert effective_fit_tier("Claude Sonnet 5", "mid", "high") == "mid"

@@ -145,8 +145,7 @@ Before selecting a plan, identify **all three**:
    eligibility is not the same as “treat every `mid` plan as overqualified.”
 2. **Cost posture** when the product supports it: current **reasoning effort** /
    thinking mode if known (`low` | `medium` | `high` | `xhigh` | …). **Grok family
-   (4.5/4.6):** reported effort sets **effective fit tier** (`low`→mid,
-   `medium`→reasoner, `high`/`xhigh`→frontier; **unknown effort → mid**). Report
+   (4.5/4.6):** reported effort sets **effective fit tier** (`low`→mid, `medium`/`high`→reasoner, `xhigh`→frontier; **unknown effort → mid**). Report
    `Grok 4.6 @ high → effective frontier` (or 4.5) before Preferred matching.
    **Non-Grok products:** high effort remains a **cost dial only**, not a tier
    promotion.
@@ -226,7 +225,7 @@ yourself if only the human/UI can.
 Effort vs fit:
 
 - **Grok + reported effort:** use **effective tier** for good/under/overqualified
-  (e.g. Grok @ high is effective frontier — overqualified for Preferred `small`
+  (e.g. Grok @ high is effective reasoner; @ xhigh is effective frontier — overqualified for Preferred `small`
   only; Grok @ low is mid — underqualified for Preferred `reasoner` only). Pass
   `--effort` to `plan_fit` / `work_once` when known.
 - **Good fit + wasteful effort on `small`/`mid` Preferred:** print the lower-effort
@@ -234,7 +233,7 @@ Effort vs fit:
   operator must apply a slash command first). On **non-Grok** models, do **not**
   reclassify as overqualified solely because effort is high.
 - **True overqualified** (effective tier above all Preferred, e.g. Fable or
-  Grok@high on `small`/`mid` only) **+ no cheaper worker + operator needs progress:**
+  Grok@xhigh or Fable on `small`/`mid` only) **+ no cheaper worker + operator needs progress:**
   suggest lower effort / cheaper endpoint **and** `/work --no-fit-check` if needed;
   stop unless they insist. Use Rule 2's terse skip format.
 - **Underqualified:** still skip. On Grok, suggest **raising** `/effort` (medium /

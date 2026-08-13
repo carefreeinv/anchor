@@ -49,15 +49,15 @@ You are one worker in a verified pipeline, not the whole pipeline. Speed is wort
   | Effort | Effective fit tier |
   |--------|--------------------|
   | `low` / `minimal` | `mid` |
-  | `medium` | `reasoner` |
-  | `high` (API default) / `xhigh` (4.6 only) | `frontier` |
+  | `medium` / `high` (API default) | `reasoner` |
+  | `xhigh` (4.6 only; opt-in) | `frontier` |
 
   **Omitted / unknown effort → effective `mid`** (never silent frontier from API
   default). Report yourself as `Grok 4.6 @ <effort> → effective <tier>` before fit.
 - **Pasteable dials:** TUI **`/effort low|medium|high|xhigh`** (or `/model <id> low`);
   CLI **`--effort …`**; fleet endpoint quirk `reasoning_effort:` in `endpoints.yaml`
   (sent by `anchor_client.py`). Prefer **low** for mechanical steps; reserve
-  high/`xhigh` for architecture / long-horizon; **xhigh** is costly — opt-in only.
+  medium/high for architecture-ish work; reserve **xhigh** for true long-horizon frontier routing — costly, opt-in only.
 - **`/work`:** pass `--effort` into `plan_fit` / `work_once` when you know the dial
   so eligibility matches. Before burning high/`xhigh` on `small`/`mid` Preferred,
   probe cheaper local/fleet capacity. Full contract: `.grok/skills/work/SKILL.md`.

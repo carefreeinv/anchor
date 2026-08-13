@@ -52,4 +52,4 @@ Scaffold installs [**`/draft`**](/skills/draft), [**`/work`**](/skills/work), [*
 
 ## Effort and Preferred fit (4.6-era)
 
-Base catalog tier is **mid**. When the session reports `reasoning_effort`, Anchor maps it to an **effective** Preferred tier (`low`→mid, `medium`→reasoner, `high`/`xhigh`→frontier). Omitted effort stays mid for eligibility. TUI: `/effort low|medium|high|xhigh`.
+Base catalog tier is **mid**. When the session reports `reasoning_effort`, Anchor maps it to an **effective** Preferred tier (`low`→mid, `medium`/`high`→reasoner, `xhigh`→frontier). Omitted effort stays mid for eligibility. TUI: `/effort low|medium|high|xhigh`.

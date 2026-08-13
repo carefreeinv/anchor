@@ -597,8 +597,8 @@ GROK_EFFORT_TIER: dict[str, str] = {
     "minimal": "mid",
     "low": "mid",
     "medium": "reasoner",
-    "high": "frontier",
-    "xhigh": "frontier",  # 4.6-only at API; 4.5 coerces xhigh→high
+    "high": "reasoner",  # API default on 4.6/4.5 — reasoner-class, not frontier
+    "xhigh": "frontier",  # 4.6-only explicit max; opt-in cost/depth
 }
 
 
@@ -619,7 +619,7 @@ def effective_fit_tier(
 
     **Grok family:** when *effort* is a recognized dial setting, the
     operator-confirmed map promotes/demotes eligibility (low→mid,
-    medium→reasoner, high/xhigh→frontier). Unrecognized or omitted effort
+    medium/high→reasoner, xhigh→frontier). Unrecognized or omitted effort
     keeps **mid** (never silent frontier from API default).
 
     **Other products:** catalog *base_tier* only; effort is cost advice
@@ -1064,7 +1064,7 @@ def _next_main(argv: list[str] | None = None) -> int:
     ap.add_argument(
         "--effort",
         help="reasoning effort (Grok family: sets effective fit tier; "
-             "low→mid, medium→reasoner, high/xhigh→frontier; omit→mid for Grok)",
+             "low→mid, medium/high→reasoner, xhigh→frontier; omit→mid for Grok)",
     )
     ap.add_argument(
         "--no-fit-check", action="store_true", help="ignore Preferred-models filter"

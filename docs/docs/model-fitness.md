@@ -58,7 +58,7 @@ Poor fit → the entire first line is `SUGGEST-ESCALATE: <better-suited model> �
 
 ## Effort as effective tier (Grok family)
 
-For Grok 4.6 / 4.5, a **reported** `reasoning_effort` sets Preferred **effective** tier: `low`→mid, `medium`→reasoner, `high`/`xhigh`→frontier. **Unknown effort → mid** (never silent frontier from API default). Base catalog tier stays mid. Non-Grok products: effort is cost-only. Details in `anchor/model-fitness.md`.
+For Grok 4.6 / 4.5, a **reported** `reasoning_effort` sets Preferred **effective** tier: `low`→mid, `medium`/`high`→reasoner, `xhigh`→frontier. **Unknown effort → mid** (never silent frontier from API default). Base catalog tier stays mid. Non-Grok products: effort is cost-only. Details in `anchor/model-fitness.md`.
 
 ## Local models
 

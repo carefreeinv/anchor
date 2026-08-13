@@ -109,20 +109,20 @@ def test_grok_effort_sets_effective_tier_eligibility(tmp_path):
     assert {r.slug for r, _ in take} == {"mid"}
     assert {r.slug for r in skip} == {"hard", "front"}
 
-    # medium → effective reasoner: good for reasoner Preferred; overqualified for mid-only
-    med = worker_with_effort("Grok 4.6", "mid", "medium")
-    take, skip = plan_fit.triage(inventory_ready(plans, med), med, "medium")
-    assert {r.slug for r, _ in take} == {"hard"}
-    assert "mid" in {r.slug for r in skip}
+    # medium/high → effective reasoner: good for reasoner Preferred; overqualified for mid-only
+    for eff in ("medium", "high"):
+        w = worker_with_effort("Grok 4.6", "mid", eff)
+        assert w.tier == "reasoner"
+        take, skip = plan_fit.triage(inventory_ready(plans, w), w, eff)
+        assert {r.slug for r, _ in take} == {"hard"}, eff
+        assert "mid" in {r.slug for r in skip}, eff
 
-    # high/xhigh → effective frontier: only frontier Preferred (overqualified for mid/reasoner)
-    high = worker_with_effort("Grok 4.6", "mid", "high")
-    take, skip = plan_fit.triage(inventory_ready(plans, high), high, "high")
+    # xhigh → effective frontier: only frontier Preferred
+    xh = worker_with_effort("Grok 4.6", "mid", "xhigh")
+    assert xh.tier == "frontier"
+    take, skip = plan_fit.triage(inventory_ready(plans, xh), xh, "xhigh")
     assert {r.slug for r, _ in take} == {"front"}
     assert {r.slug for r in skip} == {"hard", "mid"}
-
-    xh = worker_with_effort("Grok 4.5", "mid", "xhigh")  # coerced to frontier via map
-    assert xh.tier == "frontier"
 
     unknown = worker_with_effort("Grok 4.6", "mid", None)
     take, skip = plan_fit.triage(inventory_ready(plans, unknown), unknown, None)

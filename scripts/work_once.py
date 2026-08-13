@@ -354,7 +354,7 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument(
         "--effort",
         help="reasoning effort; for Grok family sets effective fit tier "
-             "(low→mid, medium→reasoner, high/xhigh→frontier; omit→mid)",
+             "(low→mid, medium/high→reasoner, xhigh→frontier; omit→mid)",
     )
     ap.add_argument(
         "--endpoint",

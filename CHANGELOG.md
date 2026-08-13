@@ -8,7 +8,7 @@ Newest first.
 
 ### Changed
 
-- **Grok 4.6 + effort as effective Preferred tier (Grok family only)** — catalog base tier remains **mid** for Grok 4.6 and 4.5, but a **reported** `reasoning_effort` now sets session eligibility: `low`→mid, `medium`→reasoner, `high`/`xhigh`→frontier. **Unknown effort stays mid** (API default high does not silently take frontier backlog). Implemented in `plan_select.effective_fit_tier` / `worker_with_effort`; wired through `plan_fit`, `plan_select --effort`, and `work_once --effort`. Non-Grok products keep effort as a cost dial only. `anchor_client` accepts endpoint quirk `reasoning_effort` (incl. `xhigh` for 4.6). Doctrine: `model-fitness.md`, `platforms/grok-build/GROK.md`, `/work` skills. This **changes** prior “effort never promotes tier” language for Grok only.
+- **Grok 4.6 + effort as effective Preferred tier (Grok family only; medium/high→reasoner)** — catalog base tier remains **mid** for Grok 4.6 and 4.5, but a **reported** `reasoning_effort` now sets session eligibility: `low`→mid, `medium`/`high`→reasoner, `xhigh`→frontier. **Unknown effort stays mid** (API default high does not silently take frontier backlog). Implemented in `plan_select.effective_fit_tier` / `worker_with_effort`; wired through `plan_fit`, `plan_select --effort`, and `work_once --effort`. Non-Grok products keep effort as a cost dial only. `anchor_client` accepts endpoint quirk `reasoning_effort` (incl. `xhigh` for 4.6). Doctrine: `model-fitness.md`, `platforms/grok-build/GROK.md`, `/work` skills. This **changes** prior “effort never promotes tier” language for Grok only.
 
 ### Added
 
