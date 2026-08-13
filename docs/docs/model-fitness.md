@@ -3,7 +3,7 @@ sidebar_position: 4
 sidebar_label: Model Fitness
 ---
 
-<!-- synced-from: anchor/model-fitness.md @ d26157400667417a7fcf26894f24e57632174da9 -->
+<!-- synced-from: anchor/model-fitness.md @ c6ade97603e5d5d2b996cab5e19f84f5c9f1461e -->
 
 # Model fitness
 
@@ -55,6 +55,10 @@ Poor fit â†’ the entire first line is `SUGGEST-ESCALATE: <better-suited model> â
 | Gemini 2.5-class | Long-context ingestion, multimodal | Same external-verification rules as everyone |
 | Nemotron (NIM) | Local planner/critic stand-in; clean thinking toggle | Fabricates unfamiliar APIs under pressure |
 
+
+## Grok 4.5 vs 4.6
+
+Prefer **Grok 4.5** for lighter/cheaper mid work while available; **Grok 4.6** for heavier long-running agent tasks. Keep both in model-priority (`grok:4.5`, `grok:4.6`) until 4.5 is retired.
 
 ## Effort as effective tier (Grok family)
 

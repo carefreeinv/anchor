@@ -22,7 +22,7 @@ are not that preferred orchestrator:
 
 **Temporary coordinator:** if Preferred orchestrator is **unset** and no project MCP
 coordinator is registered, a **frontier / near-frontier** model (Fable-class,
-Opus-class, strong GPT-5.x, Grok 4.5 as session lead, etc.) may temporarily
+Opus-class, strong GPT-5.x, Grok 4.6 (or 4.5) as session lead, etc.) may temporarily
 coordinate: inventory `.plans/**`, propose **Depends on**, draft under `drafts/`.
 Announce `TEMPORARY-COORDINATOR: <name> — Preferred orchestrator unset`. Mid, small,
 and local models must **not** self-appoint—escalate to a stronger session or the
@@ -65,8 +65,8 @@ fails quietly. Weigh it the same way you weigh attempting work above your tier.
 | GPT-5.6 Terra | ~GPT-5.5 quality at roughly half the cost `(unverified, vendor)` — the economics pick for executor work | Same system-card caveats as Sol; benchmarks vendor-reported |
 | GPT-5.6 Luna | Frontier-adjacent quality at budget price ($1/$6) — strong tuner/executor-light | Thinnest tier of the family; keep it off architecture and review roles |
 | ChatGPT (product: GPT-5.5 + Instant Mini fallback) | Conversational spec-shaping, explanations, one-step-per-turn piloted work | No shell/file access: every "it works" is a claim on the human's behalf; fallback routing means tier varies mid-session |
-| Grok 4.6 (public 2026-08-12) | Long-running agents, multi-step codebase work, ambitious interactive/visual projects; vendor: matches GPT-5.6 Sol on Artificial Analysis Intelligence Index `(unverified, vendor)`; ~$2/$6, large context `(unverified)`; **base catalog tier mid** — **reported** `reasoning_effort` sets **effective** Preferred tier (see below) | Repo-scale / DeepSWE-class results not yet locally confirmed for 4.6 — keep file-scoped decomposition until `fitness_report` / `benchmark.py` say otherwise; `reasoning_effort` default **high** (API); **`xhigh` is 4.6-only** (4.5 coerces to high); reasoning cannot be disabled |
-| Grok 4.5 (public 2026-07-09) | Terminal/CLI-driven tasks (Terminal-Bench ≈ GPT-5.5 class), long tool-use runs, token efficiency; cheap at $2/$6; **base catalog tier mid**; same effort→effective-tier map as 4.6 (`xhigh`→high at API) | **Repo-scale issue resolution measurably behind** (DeepSWE 53% vs Fable 5's 70%) — decompose to file-scoped specs; tool-use flakiness `(unverified)`; prefer `/effort low` for mechanical steps |
+| Grok 4.6 (public 2026-08-12) | **Heavier Grok:** long-running agents, multi-step codebase work, ambitious interactive/visual projects; vendor Sol-class composite `(unverified)`; **base catalog mid** + effort-effective tier (see below). Prefer when the task needs sustained multi-step agent work | Same effort map as 4.5; repo-scale DeepSWE-class results not yet locally confirmed for 4.6 — file-scoped decompose until observed; default effort high; **xhigh** 4.6-only; **use 4.5 instead for thin/cheap mid work** |
+| Grok 4.5 (public 2026-07-09) | **Lighter / cheaper Grok** while still available: terminal/CLI-driven tasks, long tool-use, token-efficient scoped execution; **base catalog mid** + same effort map (`xhigh`→high at API). Prefer for mechanical mid, file-scoped execute, and cost-sensitive runs | Repo-scale measurably behind Fable-class (DeepSWE); tool-use flakiness `(unverified)`; may be phased out later — keep configs that name **both** `grok:4.5` and `grok:4.6` so a sunset is a one-line priority edit, not a rewrite |
 | Gemini (2.5-class) | Long-context ingestion, multimodal analysis, breadth | Same external-verification rules as everyone; keep task specs self-contained |
 | Nemotron Super/Ultra (NIM) | Local planner/critic stand-in when frontier is metered; clean thinking toggle | Fabricates unfamiliar APIs under pressure; don't leave thinking on for bulk execution |
 
@@ -85,29 +85,40 @@ Model names link to the **official quick start** (download / serve / templates).
 
 ## Effort as effective tier (Grok family) — 4.6-era
 
-For **Grok 4.6 / 4.5** (and generic “Grok” workers), a **reported** reasoning
-effort sets the session’s **effective fit tier** for Preferred-models matching
-(`plan_fit` / `plan_select` / `work_once --effort`). This is **Grok-only**; other
+### Which Grok product (cost / weight)
+
+Keep **both** first-class until 4.5 is retired. Prefer the lighter product when it is enough:
+
+| Product | Prefer for | Avoid for |
+|---------|------------|-----------|
+| **Grok 4.5** | Cheaper/lighter mid: file-scoped execute, terminal/CLI, mechanical multi-file, cost-sensitive agent runs | Sustained multi-hour agent loops, ambitious greenfield apps (use 4.6) |
+| **Grok 4.6** | Heavier agent work: long multi-step coding, interactive/visual projects, when 4.5 quality is not enough | Pure renames/format (downgrade effort or use 4.5 / small local) |
+
+**Model-priority tokens** (examples): put the cheap side earlier when both are allowed, e.g.
+`…, grok:4.5, grok:4.6, claude:sonnet, …` — walk the list; only escalate product when fit/quality requires it. Bare `grok` means “any Grok session”; prefer **versioned** tokens so a 4.5 sunset is a one-line edit.
+
+### Effort dial (both products)
+
+A **reported** reasoning effort sets the session’s **effective fit tier** for Preferred
+matching (`plan_fit` / `plan_select` / `work_once --effort`). **Grok-only**; other
 products keep effort as a cost dial.
 
-| Grok effort | Effective fit tier | Claude-class analog (mental model only) |
-|-------------|--------------------|-------------------------------------------|
-| `low` / `minimal` / `none` | `mid` | Sonnet / basic executor |
-| `medium` | `reasoner` | Opus-class depth |
-| `high` (API default on 4.6/4.5) | `reasoner` | Same band as medium — 4.6 is strong enough that default high is reasoner-class, not Fable routing |
-| `xhigh` (4.6 only; 4.5 coerces to high) | `frontier` | Explicit max depth / cost — opt-in only |
+| Grok effort | Effective fit tier | Typical use |
+|-------------|--------------------|-------------|
+| `low` / `minimal` / `none` | `mid` | Mechanical / file-scoped — prefer **4.5** when available |
+| `medium` / `high` (API default) | `reasoner` | Harder single problems / architecture-ish — **4.6** often better value |
+| `xhigh` (4.6 only; 4.5 coerces to high) | `frontier` | Explicit max depth/cost — opt-in only |
 
-**Unknown / omitted effort → `mid`** for eligibility. Do **not** treat “API
-defaults to high” as silent frontier when the session never reports the dial
-(unattended workers without `--effort` stay mid).
+**Unknown / omitted effort → `mid`** (unattended workers without `--effort` stay mid;
+do not inherit API default high as silent promotion).
 
-**Base catalog tier** remains **mid** for both 4.5 and 4.6. Pasteable controls:
-Grok Build TUI `/effort low|medium|high|xhigh`; CLI `--effort …`; fleet endpoint
-quirk `reasoning_effort: high` (see `anchor_client.py`).
+**Base catalog tier** remains **mid** for 4.5 and 4.6. Controls: TUI
+`/effort low|medium|high|xhigh`; CLI `--effort`; fleet quirk `reasoning_effort:`
+(`anchor_client.py`).
 
-**Weak column still binds** at every effort: high is reasoner-class depth; `xhigh` is optional frontier routing depth, not a
-free pass on repo-scale weakness. Vendor agentic claims stay `(unverified)` until
-observed locally.
+**Weak column still binds** at every effort and product generation. Vendor agentic
+claims stay `(unverified)` until observed locally.
+
 
 ## Observed data (preferred over vendor claims)
 

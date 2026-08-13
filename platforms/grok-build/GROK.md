@@ -34,15 +34,30 @@ You are one worker in a verified pipeline, not the whole pipeline. Speed is wort
 - For anything security-adjacent or architectural, don't let Grok decide alone — mark the step `Route to: bigger model` in the plan.
 - The reverse matters too: if a step is boilerplate/formatting/a rename, mark it `Route to: smaller/local model` instead of running it on Grok's default tier.
 
-## Grok 4.6 notes (reviewed 2026-08-12; 4.5 still supported)
+## Grok product notes (reviewed 2026-08-12)
 
-- **Primary product: Grok 4.6** (public 2026-08-12) — long-running agents, multi-step
-  codebase work, ambitious interactive/visual projects. Vendor composite ≈ GPT-5.6 Sol
-  `(unverified, vendor)`. **Grok 4.5** remains supported with the same effort map
-  (`xhigh` coerced to `high` at the API).
-- **Play to strengths:** terminal/CLI and multi-step agent loops. Still prefer
-  **file-scoped** task specs for repo-scale issues until local fitness data improves
-  DeepSWE-class confidence for 4.6 (4.5 was measurably behind Fable-class there).
+### Pick 4.5 vs 4.6 (cost ladder)
+
+Both stay first-class until 4.5 is retired. **Prefer the cheaper generation when it is enough.**
+
+| Product | Use when | Priority token |
+|---------|----------|----------------|
+| **Grok 4.5** | Lighter mid: file-scoped execute, terminal/CLI, mechanical multi-file, cost-sensitive runs | `grok:4.5` |
+| **Grok 4.6** | Heavier agent work: long multi-step coding, interactive/visual projects, when 4.5 quality is not enough | `grok:4.6` |
+
+Example model-priority (cheap → expensive among Grok):  
+`local:qwen3,nim,grok:4.5,grok:4.6,claude:sonnet,claude:opus,claude:fable`  
+Bare `grok` = whatever session you opened; versioned tokens make a 4.5 sunset a one-line edit.
+
+### Shared behavior (4.6 + 4.5)
+
+- **Play to strengths:** terminal/CLI and multi-step agent loops. Prefer **file-scoped**
+  task specs for repo-scale issues until local fitness data improves DeepSWE-class
+  confidence (4.5 was measurably behind Fable-class; 4.6 still treat carefully).
+- **Grok 4.6** (public 2026-08-12) — long-running agents, ambitious interactive/visual
+  work; vendor composite ≈ GPT-5.6 Sol `(unverified, vendor)`.
+- **Grok 4.5** (public 2026-07-09) — still the **default cheap Grok** for thin mid work
+  while available; same effort map (`xhigh` coerced to `high` at the API).
 - **Base catalog tier = mid; reported effort sets effective Preferred tier**
   (Grok family only — see `model-fitness.md` “Effort as effective tier”):
 
@@ -53,7 +68,7 @@ You are one worker in a verified pipeline, not the whole pipeline. Speed is wort
   | `xhigh` (4.6 only; opt-in) | `frontier` |
 
   **Omitted / unknown effort → effective `mid`** (never silent frontier from API
-  default). Report yourself as `Grok 4.6 @ <effort> → effective <tier>` before fit.
+  default). Report yourself as `Grok 4.5|4.6 @ <effort> → effective <tier>` before fit (pick product by cost ladder above).
 - **Pasteable dials:** TUI **`/effort low|medium|high|xhigh`** (or `/model <id> low`);
   CLI **`--effort …`**; fleet endpoint quirk `reasoning_effort:` in `endpoints.yaml`
   (sent by `anchor_client.py`). Prefer **low** for mechanical steps; reserve
@@ -109,7 +124,7 @@ Needs Work → `bugs|features/`. Empty queue with `dev` ahead of `main` offers a
 
 Exhaustive **security audit** (first-party code + dependencies) that writes
 prioritized bug plans under `.plans/bugs/` (or `--to drafts`). **Frontier /
-reasoner only** by default (`--force-model` override; Grok 4.5 is mid-class for
+reasoner only** by default (`--force-model` override; Grok 4.5/4.6 base catalog is mid-class for
 this gate). Plans only — no auto-fix, no exploit PoCs. Skill:
 `.grok/skills/audit/SKILL.md`.
 

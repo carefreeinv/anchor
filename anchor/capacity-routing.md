@@ -47,6 +47,15 @@ stopping. Never let a quota reset decide the quality bar.
 
 ## Reroute correctly
 
+### Grok 4.5 vs 4.6 under capacity pressure
+
+When model-priority lists both, **prefer `grok:4.5` for light mid work** (usually
+cheaper) and reserve **`grok:4.6`** for sustained multi-step agent tasks. Do not
+jump to 4.6 (or raise effort to xhigh) just because 4.5 is rate-limited if a
+local swarm or Sonnet-class alternative clears the fitness floor. If 4.5 is
+retired later, drop `grok:4.5` from priority and keep `grok:4.6`.
+
+
 A different model is a different session with no memory of this one. A reroute that
 just re-sends the last prompt loses the plan, the constraints, and every decision
 already made.

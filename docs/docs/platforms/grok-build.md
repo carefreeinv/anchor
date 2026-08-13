@@ -1,4 +1,4 @@
-<!-- synced-from: platforms/grok-build/GROK.md @ 6a8857fa919abfad43a7481999516d9c115acb1c -->
+<!-- synced-from: platforms/grok-build/GROK.md @ d226c4c7509d01c795ea43cb15469678052af622 -->
 ---
 sidebar_position: 2
 sidebar_label: Grok Build
@@ -49,6 +49,10 @@ Scaffold installs [**`/draft`**](/skills/draft), [**`/work`**](/skills/work), [*
 
 **Required before any `git commit`.** Agents run `/commit-prep` (discover this project’s tests/CI; CHANGELOG; blog-if-warranted — no Docusaurus required). **Prep only** — does not commit. After a green prep, [**`/work`**](/skills/work) / standing rules cover feature-branch commit (worktree preferred; merge to `dev` only via `/work`'s culmination answer + scoped gate; never to `main`).
 
+
+## Grok 4.5 vs 4.6
+
+Use **4.5** for cost-sensitive mid execute; **4.6** for sustained multi-step agent work. Priority tokens: `grok:4.5`, `grok:4.6`.
 
 ## Effort and Preferred fit (4.6-era)
 
