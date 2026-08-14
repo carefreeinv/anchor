@@ -122,7 +122,9 @@ def resolve_worker(args: argparse.Namespace) -> Worker:
         if args.tier:
             tier = normalize_fit_tier(args.tier)
         return worker_with_effort(name, tier, effort)
-    name = args.model or args.agent_id or "work-once"
+    # Lease / worktree ids are not product names — never feed --agent-id into
+    # effective_fit_tier (``grok-effort-*`` would look like the Grok family).
+    name = args.model or "work-once"
     tier = normalize_fit_tier(args.tier or "mid")
     return worker_with_effort(name, tier, effort)
 

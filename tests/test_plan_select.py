@@ -346,6 +346,12 @@ def test_effective_fit_tier_grok_map():
     assert is_grok_family("xai/grok-4.5")
     assert not is_grok_family("Claude Sonnet 5")
     assert not is_grok_family("grokking")
+    # Lease / worktree ids that contain the token are not Grok products
+    assert not is_grok_family("grok-effort-tier-46")
+    assert not is_grok_family("grok-46-work")
+    assert is_grok_family("grok")
+    assert effective_fit_tier("grok-effort-tier-46", "mid", "high") == "mid"
+    assert effective_fit_tier("grok-effort-tier-46", "mid", "xhigh") == "mid"
     assert grok_effort_to_tier("low") == "mid"
     assert grok_effort_to_tier("medium") == "reasoner"
     assert grok_effort_to_tier("high") == "reasoner"

@@ -208,7 +208,7 @@ yourself if only the human/UI can.
 | Preferred (use highest listed tier) | Suggested effort on reasoning models |
 |-------------------------------------|--------------------------------------|
 | `small` | `low` (or `minimal` / `none` if the product offers them) |
-| `mid` | `low` or `medium` |
+| `mid` | `low` (Grok: **`low` only** — `medium` already → reasoner) |
 | `reasoner` | `high` |
 | `frontier` | `high` or `xhigh` as needed |
 
@@ -227,7 +227,8 @@ Effort vs fit:
 - **Grok + reported effort:** use **effective tier** for good/under/overqualified
   (e.g. Grok 4.6 @ high is effective reasoner — **overqualified for Preferred `mid`/`small` only**;
   Grok 4.6 @ xhigh is effective frontier — **overqualified for `small`, `mid`, and `reasoner`**;
-  Grok @ low is mid — underqualified for Preferred `reasoner`/`frontier` only;
+  Grok @ low (or omitted) is mid — underqualified for Preferred `reasoner`/`frontier` only;
+  **Grok @ medium already promotes to reasoner** (overqualified for mid-only — use `low`);
   Grok 4.5 @ xhigh coerces to high → reasoner, not frontier). Pass
   `--effort` to `plan_fit` / `work_once` when known.
 - **Good fit + wasteful effort on `small`/`mid` Preferred:** print the lower-effort

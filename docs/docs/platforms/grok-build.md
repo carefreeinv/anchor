@@ -1,5 +1,4 @@
 <!-- synced-from: platforms/grok-build/GROK.md @ 835e2afa8f4868af7f13a6530b6ad1e059274c89 -->
-<!-- synced-from: platforms/grok-build/GROK.md @ PENDING -->
 ---
 sidebar_position: 2
 sidebar_label: Grok Build

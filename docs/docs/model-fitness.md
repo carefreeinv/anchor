@@ -4,8 +4,6 @@ sidebar_position: 4
 sidebar_label: Model Fitness
 ---
 
-<!-- synced-from: anchor/model-fitness.md @ PENDING -->
-
 # Model fitness
 
 Where each supported model excels and where it fails — reviewed **2026-08-12** (dual-axis specialty profiles) — plus the protocol that makes the list actionable: the **dual-axis fit check** (power + specialty). Vendor-reported numbers stay `(unverified)` until your own `benchmark.py` run confirms them; your benchmark table, not this page, is your routing policy.

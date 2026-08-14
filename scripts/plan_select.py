@@ -619,12 +619,25 @@ def _model_tokens(name: str) -> list[str]:
 def is_grok_family(name: str | None) -> bool:
     """True when the worker product is Grok (4.5, 4.6, or generic "grok").
 
-    Accepts ``Grok 4.6``, ``grok-4.5``, and slash-prefixed fleet ids such as
-    ``x-ai/grok-4.6`` / ``xai/grok-4.5``.
+    Accepts ``Grok``, ``Grok 4.6``, ``grok-4.5``, and slash-prefixed fleet ids
+    such as ``x-ai/grok-4.6`` / ``xai/grok-4.5``.
+
+    Lease / worktree ids that merely *contain* the token (``grok-effort-tier-46``)
+    are **not** Grok products — otherwise ``work_once --agent-id grok-* --effort
+    high`` would silently promote a non-Grok worker.
     """
     if not name:
         return False
-    return "grok" in _model_tokens(name)
+    tokens = _model_tokens(name)
+    try:
+        i = tokens.index("grok")
+    except ValueError:
+        return False
+    rest = tokens[i + 1 :]
+    if not rest:
+        return True  # bare "grok"
+    # Product-shaped: grok + version 4 / 4.5 / 4.6 (optional trailing junk)
+    return rest[0] == "4" and (len(rest) == 1 or rest[1] in ("5", "6"))
 
 
 def is_grok_45(name: str | None) -> bool:
