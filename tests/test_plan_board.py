@@ -1,6 +1,7 @@
 import datetime
 import os
 import subprocess
+import sys
 from pathlib import Path
 
 import plan_board as pb
@@ -508,3 +509,292 @@ def test_main_json_missing_plans_dir_errors(tmp_path, capsys):
     assert rc == 1
     err = capsys.readouterr().err
     assert "no .plans/" in err
+
+
+# --- Extra kanban coverage (from parked WIP) -------------------------------
+
+
+def test_render_frame_shows_throughput_headers_counts_and_cards(tmp_path, monkeypatch):
+    """Full terminal frame: header stats, column titles with counts, cards."""
+    monkeypatch.setenv("COLUMNS", "200")
+    plans = _tree(tmp_path)
+    now = datetime.datetime(2026, 8, 8, 12, 0, tzinfo=datetime.timezone.utc)
+    _plan(plans / "drafts" / "wip-idea.md", title="Draft idea", priority="P2")
+    _plan(plans / "bugs" / "crash.md", title="Fix crash", priority="P1", value="high")
+    _plan(plans / "features" / "shiny.md", title="Add shiny", priority="P2", value="medium")
+    _plan(plans / "in-progress" / "doing.md", title="Doing work", priority="P2")
+    _plan(plans / "review-needed" / "check.md", title="Needs eyes", priority="P2")
+    _plan(plans / "completed" / "done.md", title="Shipped", priority="P3")
+    recent = (now - datetime.timedelta(days=1)).isoformat()
+    _write_log(plans, "done.local.csv", [recent, "done", "entered-completed"])
+    _write_log(plans, "check.local.csv", [recent, "check", "entered-review-needed"])
+
+    frame, positions = pb.render_frame(
+        plans,
+        tmp_path,
+        include_parked=False,
+        color_on=False,
+        prev_positions=None,
+        flash_state={},
+        now=now,
+    )
+
+    assert "Completed (7d): 1" in frame
+    assert "Processed (7d): 1" in frame
+    assert "Drafts (1)" in frame
+    assert "Ready (2)" in frame
+    assert "In Progress (1)" in frame
+    assert "Review Needed (1)" in frame
+    assert "Completed (1)" in frame
+    assert "crash" in frame
+    assert "Fix crash" in frame
+    assert "[P1/high]" in frame
+    assert "shiny" in frame
+    assert "doing" in frame
+    assert "wip-idea" in frame
+    assert "Ambiguous" not in frame
+    assert "Blocked" not in frame
+    assert positions == {
+        "wip-idea": "Drafts",
+        "crash": "Ready",
+        "shiny": "Ready",
+        "doing": "In Progress",
+        "check": "Review Needed",
+        "done": "Completed",
+    }
+
+
+def test_render_frame_include_parked_shows_ambiguous_and_blocked(tmp_path, monkeypatch):
+    monkeypatch.setenv("COLUMNS", "200")
+    plans = _tree(tmp_path)
+    _plan(plans / "ambiguous" / "unclear.md", title="Unclear scope")
+    _plan(plans / "blocked" / "stuck.md", title="Waiting on API")
+
+    frame_default, _ = pb.render_frame(
+        plans, tmp_path, include_parked=False, color_on=False, prev_positions=None, flash_state={}
+    )
+    assert "Ambiguous" not in frame_default
+    assert "unclear" not in frame_default
+
+    frame, positions = pb.render_frame(
+        plans, tmp_path, include_parked=True, color_on=False, prev_positions=None, flash_state={}
+    )
+    assert "Ambiguous (1)" in frame
+    assert "Blocked (1)" in frame
+    assert "unclear" in frame
+    assert "stuck" in frame
+    assert positions["unclear"] == "Ambiguous"
+    assert positions["stuck"] == "Blocked"
+
+
+def test_all_columns_sort_by_priority_then_value(tmp_path):
+    """Sort order is uniform across columns — not only Ready."""
+    plans = _tree(tmp_path)
+    for lane in ("drafts", "in-progress", "completed"):
+        _plan(plans / lane / "p3.md", priority="P3", value="high", title="p3")
+        _plan(plans / lane / "p1-low.md", priority="P1", value="low", title="p1 low")
+        _plan(plans / lane / "p1-high.md", priority="P1", value="high", title="p1 high")
+
+    columns = dict(pb.build_columns(plans, include_parked=False))
+    for name in ("Drafts", "In Progress", "Completed"):
+        slugs = [r.slug for r in columns[name]]
+        assert slugs == ["p1-high", "p1-low", "p3"], f"{name}: {slugs}"
+
+
+def test_scan_lane_skips_readme_and_unreadable_handles_local_md(tmp_path):
+    plans = _tree(tmp_path)
+    _plan(plans / "features" / "real.local.md", title="Private plan")
+    (plans / "features" / "README.md").write_text("# lane readme\n", encoding="utf-8")
+    (plans / "features" / "notes.txt").write_text("not a plan\n", encoding="utf-8")
+    (plans / "features" / "empty.md").write_text("", encoding="utf-8")
+
+    recs = pb.scan_lane(plans, "features")
+    slugs = {r.slug for r in recs}
+    assert "real" in slugs
+    assert "README" not in slugs
+    assert "notes" not in slugs
+    assert "empty" in slugs
+    private = next(r for r in recs if r.slug == "real")
+    assert private.rel == "features/real.local.md"
+    assert private.lane == "features"
+
+
+def test_scan_lane_missing_lane_dir_returns_empty(tmp_path):
+    plans = tmp_path / ".plans"
+    plans.mkdir()
+    assert pb.scan_lane(plans, "features") == []
+    assert pb.build_columns(plans, include_parked=False)
+    for _name, records in pb.build_columns(plans, include_parked=True):
+        assert records == []
+
+
+def test_parse_log_file_malformed_and_valid(tmp_path):
+    plans = _tree(tmp_path)
+    logs = plans / "logs"
+    logs.mkdir()
+    (logs / "bad-short.csv").write_text("only-one-field\n", encoding="utf-8")
+    (logs / "bad-ts.csv").write_text("not-a-date,slug,entered-completed\n", encoding="utf-8")
+    (logs / "ok.csv").write_text(
+        "2026-08-01T10:00:00,foo,entered-completed,review-needed,completed\n",
+        encoding="utf-8",
+    )
+    assert pb.parse_log_file(logs / "bad-short.csv") is None
+    assert pb.parse_log_file(logs / "bad-ts.csv") is None
+    assert pb.parse_log_file(logs / "missing.csv") is None
+    ev = pb.parse_log_file(logs / "ok.csv")
+    assert ev is not None
+    assert ev.slug == "foo"
+    assert ev.event == "entered-completed"
+    assert ev.from_lane == "review-needed"
+    assert ev.to_lane == "completed"
+    assert ev.timestamp.tzinfo is not None
+
+    events = pb.load_log_events(plans)
+    assert len(events) == 1
+    assert events[0].slug == "foo"
+
+
+def test_throughput_excludes_events_outside_window(tmp_path):
+    plans = _tree(tmp_path)
+    now = datetime.datetime(2026, 8, 8, 12, 0, tzinfo=datetime.timezone.utc)
+    old = (now - datetime.timedelta(days=10)).isoformat()
+    recent = (now - datetime.timedelta(days=2)).isoformat()
+    _write_log(plans, "old.csv", [old, "a", "entered-completed"])
+    _write_log(plans, "new.csv", [recent, "b", "entered-completed"])
+    _write_log(plans, "old-rn.csv", [old, "c", "entered-review-needed"])
+    _write_log(plans, "new-rn.csv", [recent, "d", "entered-review-needed"])
+
+    completed, processed = pb.compute_throughput(
+        plans, tmp_path, pb.load_log_events(plans), now=now
+    )
+    assert (completed, processed) == (1, 1)
+
+
+def test_board_status_throughput_matches_compute_throughput(tmp_path):
+    """JSON throughput block is the same counters as the terminal header."""
+    plans = _tree(tmp_path)
+    now = datetime.datetime(2026, 8, 8, 12, 0, tzinfo=datetime.timezone.utc)
+    recent = (now - datetime.timedelta(hours=6)).isoformat()
+    _write_log(plans, "c.csv", [recent, "x", "entered-completed"])
+    _write_log(plans, "p1.csv", [recent, "y", "entered-review-needed"])
+    _write_log(plans, "p2.csv", [recent, "z", "entered-review-needed"])
+    events = pb.load_log_events(plans)
+    expected = pb.compute_throughput(plans, tmp_path, events, now=now)
+    payload = pb.board_status_payload(plans, tmp_path, include_parked=False, now=now)
+    assert payload["throughput"]["window_days"] == 7
+    assert payload["throughput"]["completed"] == expected[0] == 1
+    assert payload["throughput"]["processed"] == expected[1] == 2
+
+
+def test_format_card_lines_and_truncate():
+    from plan_select import PlanRecord
+
+    rec = PlanRecord(
+        path=Path("/tmp/.plans/features/long-slug-name.md"),
+        rel="features/long-slug-name.md",
+        lane="features",
+        slug="long-slug-name",
+        value="high",
+        priority="P1",
+        preferred="mid",
+        title="A very long plan title for truncation",
+    )
+    lines = pb.format_card_lines(rec, "Sent for review", width=12)
+    assert lines[0] == pb.truncate("long-slug-name", 12) == "long-slug-n…"
+    assert lines[2] == "[P1/high]"
+    assert lines[3].startswith("↳ ")
+    assert lines[-1] == ""
+    assert pb.truncate("abc", 10) == "abc"
+    assert pb.truncate("abcdef", 4) == "abc…"
+    assert pb.truncate("x", 0) == ""
+    assert pb.truncate("xy", 1) == "x"
+
+
+def test_cli_subprocess_once_and_json(tmp_path):
+    """Real script entrypoint (not only imported main) works for kanban consumers."""
+    plans = _tree(tmp_path)
+    _plan(plans / "bugs" / "cli-bug.md", title="CLI bug", priority="P1", value="high")
+    script = Path(pb.__file__).resolve()
+
+    once = subprocess.run(
+        [sys.executable, str(script), "--project", str(tmp_path), "--once", "--no-color"],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert once.returncode == 0, once.stderr
+    assert "cli-bug" in once.stdout
+    assert "Ready (1)" in once.stdout
+    assert "Completed (7d):" in once.stdout
+    assert "\x1b[" not in once.stdout
+
+    js = subprocess.run(
+        [sys.executable, str(script), "--project", str(tmp_path), "--json"],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert js.returncode == 0, js.stderr
+    data = __import__("json").loads(js.stdout)
+    assert data["schema_version"] == 1
+    ready = next(c for c in data["columns"] if c["name"] == "Ready")
+    assert ready["count"] == 1
+    assert ready["plans"][0]["slug"] == "cli-bug"
+    assert ready["plans"][0]["lane"] == "bugs"
+    assert ready["plans"][0]["priority"] == "P1"
+
+    missing = subprocess.run(
+        [sys.executable, str(script), "--project", str(tmp_path / "nope"), "--once"],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert missing.returncode == 1
+    assert "no .plans/" in missing.stderr
+
+
+def test_main_include_parked_once(tmp_path, capsys, monkeypatch):
+    monkeypatch.setenv("COLUMNS", "200")
+    plans = _tree(tmp_path)
+    _plan(plans / "blocked" / "gate.md", title="Blocked gate")
+    rc = pb.main(["--project", str(tmp_path), "--once", "--no-color", "--include-parked"])
+    assert rc == 0
+    out = capsys.readouterr().out
+    assert "Blocked (1)" in out
+    assert "gate" in out
+
+
+def test_flash_expires_after_flash_frames(tmp_path):
+    plans = _tree(tmp_path)
+    src = plans / "features" / "flashy.md"
+    _plan(src)
+    _, pos1 = pb.render_frame(
+        plans, tmp_path, include_parked=False, color_on=False, prev_positions=None, flash_state={}
+    )
+    src.rename(plans / "in-progress" / "flashy.md")
+    flash: dict[str, int] = {}
+    pb.render_frame(
+        plans, tmp_path, include_parked=False, color_on=False, prev_positions=pos1, flash_state=flash
+    )
+    assert flash.get("flashy") in (pb.FLASH_FRAMES, pb.FLASH_FRAMES - 1)
+    pos = pos1
+    for _ in range(pb.FLASH_FRAMES + 2):
+        _, pos = pb.render_frame(
+            plans,
+            tmp_path,
+            include_parked=False,
+            color_on=False,
+            prev_positions=pos,
+            flash_state=flash,
+        )
+    assert "flashy" not in flash
+
+
+def test_default_priority_and_value_when_headers_absent(tmp_path):
+    plans = _tree(tmp_path)
+    path = plans / "features" / "bare.md"
+    path.write_text("# Plan: Bare\n\n## Goal\nx\n", encoding="utf-8")
+    rec = pb.scan_lane(plans, "features")[0]
+    assert rec.priority == "P2"
+    assert rec.value == "medium"
+    assert rec.title == "Plan: Bare"
