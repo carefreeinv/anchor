@@ -1,5 +1,5 @@
 ---
-title: A terminal kanban board for .plans/
+title: A terminal kanban board for .plans
 authors: [carefree]
 tags: [feature, tooling]
 ---
@@ -17,7 +17,7 @@ python scripts/plan_board.py --json         # schema_version-1 board dump for CI
 python scripts/plan_board.py --include-parked --no-color
 ```
 
-It's read-only — it never writes, moves, or edits anything under `.plans/` — and stdlib-only, so it copies standalone into any scaffolded project the same way `plan_select.py` and friends do. **`--json`** is the same board membership and sort as the terminal view, shaped for machines (`columns[]` with absolute paths, throughput, optional log `last_event`) so other projects can consume plan status without MCP or fit triage.
+It's read-only — it never writes, moves, or edits anything under `.plans/` — and stdlib-only, so it copies standalone into any scaffolded project the same way `plan_select.py` and friends do. The `--json` flag is the same board membership and sort as the terminal view, shaped for machines (`columns[]` with absolute paths, throughput, optional log `last_event`) so other projects can consume plan status without MCP or fit triage.
 
 
 **Two things make it more than a static `ls`:**

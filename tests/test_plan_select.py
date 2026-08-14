@@ -338,7 +338,7 @@ def test_next_main_exit_codes_and_claim_writes_lease(tmp_path, capsys):
 
 
 def test_effective_fit_tier_grok_map():
-    from plan_select import effective_fit_tier, is_grok_family, grok_effort_to_tier
+    from plan_select import effective_fit_tier, grok_effort_to_tier, is_grok_family
 
     assert is_grok_family("Grok 4.6")
     assert is_grok_family("grok-4.5")

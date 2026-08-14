@@ -33,10 +33,10 @@ from pathlib import Path
 
 from plan_select import (
     EFFORT_LEVELS,
+    SPECIALTY_PROFILES,
     EffortAdvice,
     Fit,
     PlanRecord,
-    SPECIALTY_PROFILES,
     Worker,
     classify_effort,
     inventory_ready,

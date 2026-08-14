@@ -252,8 +252,8 @@ def test_load_prompt_reads_source_tree():
 
 def test_endpoint_sends_reasoning_effort_quirk(monkeypatch):
     """Grok endpoint quirk injects reasoning_effort into the OpenAI body."""
-    from anchor_client import Endpoint
     import anchor_client as ac
+    from anchor_client import Endpoint
 
     captured = {}
 

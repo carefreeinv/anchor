@@ -5,9 +5,9 @@ authors: [carefree]
 tags: [routing, doctrine, fleet]
 ---
 
-# Dual-axis model fit — power and specialty
-
 Anchor’s fit check used to answer one question well: **is this model strong enough?** Mythos-core rule 11 and `model-fitness.md` sent weak-column and orchestration-class work up with `SUGGEST-ESCALATE`. That stopped silent overreach — but it did not catch the other failure mode: a model that is *strong enough* yet the **wrong kind of product** for the job.
+
+<!-- truncate -->
 
 ## What shipped
 

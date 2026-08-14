@@ -1,10 +1,8 @@
 ---
 title: Claimed-vs-actual scoring for fleet models
-date: 2026-07-10
+authors: [carefree]
 tags: [fleet, verification, model-fitness]
 ---
-
-# Claimed-vs-actual scoring for fleet models
 
 Anchor already treats a model’s claim of success as an **input** to verification, not a substitute. That sentence now has a ledger.
 
