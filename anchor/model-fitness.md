@@ -59,11 +59,11 @@ same power band, different product shape — re-route **laterally**:
 
 - `SUGGEST-REROUTE: coding-agent — leave multi-file software execution for a software-dev optimized model`
 - `SUGGEST-REROUTE: Claude Sonnet 5 — general-chat session cannot run shell/repo tools`
-- `SUGGEST-REROUTE: critic — bulk implementation is wrong shape for R1-distill`
+- `SUGGEST-REROUTE: coding-agent — bulk implementation is wrong shape for R1-distill`
 - `SUGGEST-REROUTE: coding-agent — swarm-local 4B/8B is thin glue only, not this multi-service edit`
 - `SUGGEST-REROUTE: multimodal — task needs screenshot/vision; this endpoint is text-only`
 - `SUGGEST-REROUTE: terminal-agent — long fleet shell run fits Grok/CLI agent better than pure chat`
-- `SUGGEST-REROUTE: planner — cross-plan Depends on / architecture needs Preferred orchestrator`
+- `SUGGEST-REROUTE: multimodal — long visual design doc is wrong shape for a terminal-only session`
 
 Decision order: **power first** (escalate if underqualified/weak-column); else **specialty**;
 else silent proceed. Specialty is never “a stronger model exists.”
@@ -149,8 +149,10 @@ it grows large; automated rotation is out of scope here.
 - Scaffolded into every project (core doctrine file); `ANCHOR-CONVENTIONS.md` adds the
   operator's model-priority order next to it.
 - `mythos-core.md` rule 11 makes the **dual-axis** fit check binding for every fleet worker;
-  `orchestrate.py` treats first-line `SUGGEST-ESCALATE` (power) and `SUGGEST-REROUTE`
+  `orchestrate.py` treats `SUGGEST-ESCALATE` (power) and `SUGGEST-REROUTE`
   (specialty) as immediate fit gates (no burned attempts) unless run with `--insist`.
+  The token may be the entire first line, or follow mythos-core rule 13's six-line
+  preflight block; later prose quoting the tokens is ignored.
 - Re-review this file when a listed model ships a major version; entries carry the
   review date above. Prefer observed fitness report numbers over vendor claims
   when sample sizes are large enough (see above).

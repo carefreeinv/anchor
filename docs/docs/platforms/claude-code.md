@@ -4,8 +4,6 @@ sidebar_position: 1
 sidebar_label: Claude Code
 ---
 
-<!-- synced-from: platforms/claude-code/CLAUDE.md @ PENDING -->
-
 # Claude Code
 
 Install: copy `platforms/claude-code/CLAUDE.md` into your repo root (or merge into an existing CLAUDE.md), and connect both MCP servers:

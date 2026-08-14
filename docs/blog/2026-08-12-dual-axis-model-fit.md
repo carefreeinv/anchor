@@ -1,7 +1,7 @@
 ---
 slug: dual-axis-model-fit
 title: Dual-axis model fit — power and specialty
-authors: [anchor]
+authors: [carefree]
 tags: [routing, doctrine, fleet]
 ---
 

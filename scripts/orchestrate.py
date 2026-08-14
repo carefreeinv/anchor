@@ -66,6 +66,31 @@ HANDOFF_THRESHOLD = 0.8
 # A task needing a fourth window is decomposed wrong, not merely large.
 MAX_RESPAWNS = 2
 
+# Fit-gate tokens (mythos-core rule 11). A rule-13 preflight block may precede them.
+FIT_GATE_SCAN_LINES = 12
+_FIT_GATE_PREFIXES = ("SUGGEST-ESCALATE", "SUGGEST-REROUTE")
+
+
+def fit_gate_line(out: str) -> str | None:
+    """Return the first power/specialty fit-gate line, or None.
+
+    Honors a bare first line *and* a token after mythos-core rule 13's six-item
+    preflight. Only the first ``FIT_GATE_SCAN_LINES`` non-empty lines are
+    inspected so later prose quoting the tokens cannot trip the gate.
+    """
+    seen = 0
+    for raw in out.splitlines():
+        line = raw.strip()
+        if not line:
+            continue
+        seen += 1
+        upper = line.upper()
+        if any(upper.startswith(p) for p in _FIT_GATE_PREFIXES):
+            return line
+        if seen >= FIT_GATE_SCAN_LINES:
+            break
+    return None
+
 
 def estimate_tokens(text: str) -> int:
     """Conservative token estimate for budget accounting.
@@ -358,13 +383,12 @@ def execute_task(task: str, plan: str, fleet: Fleet, verify_cmd: str | None,
                     "handoff": parsed, "output": out}
 
         # Fit check (mythos-core rule 11): dual-axis — power escalate or specialty
-        # re-route. Honor either first line immediately instead of burning attempts,
-        # unless the operator ran with --insist.
-        _fit_line = out.strip().splitlines()[0] if out.strip() else ""
-        _fit_upper = _fit_line.upper()
-        if _fit_upper.startswith("SUGGEST-ESCALATE") or _fit_upper.startswith("SUGGEST-REROUTE"):
+        # re-route. Honor a bare first line *or* a token after rule 13's preflight
+        # instead of burning attempts, unless the operator ran with --insist.
+        _fit_line = fit_gate_line(out)
+        if _fit_line:
             suggestion = _fit_line[:300]
-            kind = "re-route" if _fit_upper.startswith("SUGGEST-REROUTE") else "escalation"
+            kind = "re-route" if _fit_line.upper().startswith("SUGGEST-REROUTE") else "escalation"
             if not insist:
                 print(f"[fit] {ep.name} suggests {kind}: {suggestion}", file=sys.stderr)
                 status = "hold" if hold_on_fail else "escalate"

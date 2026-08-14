@@ -3,7 +3,7 @@ sidebar_position: 4
 sidebar_label: Model Fitness
 ---
 
-<!-- synced-from: anchor/model-fitness.md @ 7ef95a8d382da74b0a5113a31039ecb2c330c365 -->
+<!-- synced-from: anchor/model-fitness.md @ caaacf5b46a99d7111afc2a7f8dba9bdef3aeb95 -->
 
 # Model fitness
 
@@ -46,7 +46,12 @@ The operator can insist (`orchestrate.py --insist`); the worker then proceeds in
 
 **What does *not* trigger the fit check.** Do not escalate/re-route because a stronger model exists, because a plan's **Preferred models** names one (only listed *tiers* set the power floor; *unknown* fit is **eligible**), because the task is unfamiliar or multi-file *within your profile*, or because one step looks hard. Over-shy refusal is a real failure mode.
 
-`orchestrate.py` honors first-line `SUGGEST-ESCALATE` **and** `SUGGEST-REROUTE` immediately (escalate/hold) without burning retries.
+`orchestrate.py` honors `SUGGEST-ESCALATE` **and** `SUGGEST-REROUTE` immediately (escalate/hold) without burning retries. The token may be the entire first line or follow rule 13's six-line preflight; later prose quoting the tokens is ignored.
+
+Copy-paste examples (the argument after the colon is always the **destination** profile or model — never the source):
+
+- `SUGGEST-REROUTE: coding-agent — bulk implementation is wrong shape for R1-distill`
+- `SUGGEST-REROUTE: multimodal — long visual design doc is wrong shape for a terminal-only session`
 
 ## Frontier / API models
 
