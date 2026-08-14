@@ -137,10 +137,10 @@ Anchor base skill (which requires a foreign project path). Command:
 ## /local-models
 
 Probe this machine for **lean local models**, recommend fits, install links, and
-optional reconfigure draft. Scaffolded into **projects** (not part of
-the Anchor base skill set). Command: `.claude/commands/local-models.md`
-(source: `platforms/claude-code/commands/`). Uses `scripts/fit_device.py --probe`
-when available.
+optional reconfigure draft. **Dual-use:** lives in the Anchor checkout base
+**and** scaffolded into projects. Command: `.claude/commands/local-models.md`
+(full procedure: `.grok/skills/local-models/SKILL.md`). Uses
+`scripts/fit_device.py --probe` when available.
 
 ## /commit-prep
 

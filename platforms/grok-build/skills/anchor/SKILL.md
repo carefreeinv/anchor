@@ -160,12 +160,14 @@ Then **ask** before writes. On OK:
 # --force only with explicit user acceptance of overwriting local mods
 ```
 
-**Special case — scaffolded-only skills** (e.g. `/local-models`, this `/anchor`
-skill) whose manifest `src` still points at old Anchor-source paths: if
-`--check` says **source missing** but the file lives under
-`$ANCHOR_ROOT/platforms/…`, copy the current platforms source to the project
-dest, update manifest `src` + hash to the platforms path, and re-check. Do not
-leave broken “source missing” without offering that fix.
+**Special case — relocated skill sources** (e.g. `/local-models` moved from
+`platforms/…` to dual-use base `.grok/skills/…`, or this `/anchor` skill under
+`platforms/…`) whose manifest `src` still points at old Anchor-source paths: if
+`--check` says **source missing**, prefer `anchor --upgrade` (the CLI remaps
+known relocations such as local-models → base). If the file only lives under
+`$ANCHOR_ROOT/platforms/…`, copy that source to the project dest, update
+manifest `src` + hash, and re-check. Do not leave broken “source missing”
+without offering that fix.
 
 ### 6. No manifest → dry-run scaffold
 

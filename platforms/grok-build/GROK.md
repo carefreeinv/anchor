@@ -186,10 +186,9 @@ another project from the Anchor tree). Same slash name; different default.
 ## /local-models
 
 Probe this machine for **lean local models**, recommend fits, install links, and
-optional reconfigure draft. Scaffolded into **projects** (not part of
-the Anchor base skill set). Skill: `.grok/skills/local-models/SKILL.md`
-(source: `platforms/grok-build/skills/local-models/`). Uses
-`scripts/fit_device.py --probe` when fleet/scripts are available.
+optional reconfigure draft. **Dual-use:** lives in the Anchor checkout base
+**and** scaffolded into projects. Skill: `.grok/skills/local-models/SKILL.md`.
+Uses `scripts/fit_device.py --probe` when fleet/scripts are available.
 
 ## /commit-prep
 
