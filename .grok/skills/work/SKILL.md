@@ -228,8 +228,10 @@ yourself if only the human/UI can.
 Effort vs fit:
 
 - **Grok + reported effort:** use **effective tier** for good/under/overqualified
-  (e.g. Grok @ high is effective reasoner; @ xhigh is effective frontier — overqualified for Preferred `small`
-  only; Grok @ low is mid — underqualified for Preferred `reasoner` only). Pass
+  (e.g. Grok 4.6 @ high is effective reasoner — **overqualified for Preferred `mid`/`small` only**;
+  Grok 4.6 @ xhigh is effective frontier — **overqualified for `small`, `mid`, and `reasoner`**;
+  Grok @ low is mid — underqualified for Preferred `reasoner`/`frontier` only;
+  Grok 4.5 @ xhigh coerces to high → reasoner, not frontier). Pass
   `--effort` to `plan_fit` / `work_once` when known.
 - **Good fit + wasteful effort on `small`/`mid` Preferred:** print the lower-effort
   command (`/effort low`) in one line, then **execute** (or pause one turn if the
@@ -281,6 +283,17 @@ Escalate on your **weak column** (`.anchor/model-fitness.md`) and on
 orchestration-class work — not on the mere existence of a stronger model. "A
 better model could do this" is true of nearly every plan and is not a fit
 verdict.
+
+**Specialty axis (dual-axis fit):** after power/tier fit is OK, judge whether
+you are the right *kind* of model for the plan (profiles in
+`.anchor/model-fitness.md`: `coding-agent`, `terminal-agent`, `critic`,
+`planner`, `general-chat`, `multimodal`, `swarm-local`). Material specialty
+mismatch → entire first line `SUGGEST-REROUTE: <target or profile> — <reason>`
+and stop unless the operator insists (same insist contract as escalate). Example:
+swarm-local / general-chat session leaving multi-file software for
+`coding-agent`. Good fit on **both** power and specialty → silence. Preferred
+models may list profile tags next to tiers; mechanical `plan_fit` / pickers still
+use tiers + names only — profile tags guide self-assessment.
 
 ### Rules
 

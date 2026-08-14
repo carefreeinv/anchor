@@ -96,6 +96,25 @@ def test_fit_skip_overqualified_and_underqualified():
     assert classify_fit(Worker("unknown", "mid"), None) == Fit.UNKNOWN
 
 
+def test_specialty_tags_are_ignored_for_power_fit():
+    """Profile tags in Preferred must not name-match (e.g. 'agent' in worker name)."""
+    from plan_select import parse_specialty_profiles
+
+    assert parse_specialty_profiles("mid, coding-agent") == ["coding-agent"]
+    assert parse_specialty_profiles("coding-agent, Claude Sonnet 5") == ["coding-agent"]
+    assert parse_specialty_profiles("`critic`, terminal-agent") == [
+        "critic",
+        "terminal-agent",
+    ]
+    assert parse_specialty_profiles("mid") == []
+    # Without the skip, "coding-agent" name-matches any worker with "agent".
+    assert classify_fit(Worker("agent smith", "small"), "coding-agent") == Fit.UNKNOWN
+    assert classify_fit(
+        Worker("coding helper", "small"), "mid, coding-agent"
+    ) == Fit.UNDERQUALIFIED
+    assert classify_fit(Worker("sonnet", "mid"), "mid, coding-agent") == Fit.GOOD
+
+
 def test_lesser_workers_are_not_gated_out_by_stronger_names():
     """Only listed *tiers* set the floor — a stronger product name alongside a
     tier you match must not read as underqualified, and a names-only list you
@@ -323,7 +342,10 @@ def test_effective_fit_tier_grok_map():
 
     assert is_grok_family("Grok 4.6")
     assert is_grok_family("grok-4.5")
+    assert is_grok_family("x-ai/grok-4.6")
+    assert is_grok_family("xai/grok-4.5")
     assert not is_grok_family("Claude Sonnet 5")
+    assert not is_grok_family("grokking")
     assert grok_effort_to_tier("low") == "mid"
     assert grok_effort_to_tier("medium") == "reasoner"
     assert grok_effort_to_tier("high") == "reasoner"
@@ -331,4 +353,8 @@ def test_effective_fit_tier_grok_map():
     assert effective_fit_tier("Grok 4.6", "mid", None) == "mid"
     assert effective_fit_tier("Grok 4.6", "mid", "high") == "reasoner"
     assert effective_fit_tier("Grok 4.6", "mid", "xhigh") == "frontier"
+    assert effective_fit_tier("x-ai/grok-4.6", "mid", "high") == "reasoner"
+    # 4.5 xhigh coerces like high → reasoner (matches xAI API)
+    assert effective_fit_tier("Grok 4.5", "mid", "xhigh") == "reasoner"
+    assert effective_fit_tier("xai/grok-4.5", "mid", "xhigh") == "reasoner"
     assert effective_fit_tier("Claude Sonnet 5", "mid", "high") == "mid"

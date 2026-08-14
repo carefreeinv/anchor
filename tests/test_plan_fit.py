@@ -129,6 +129,13 @@ def test_grok_effort_sets_effective_tier_eligibility(tmp_path):
     assert {r.slug for r, _ in take} == {"mid"}
     assert "hard" in {r.slug for r in skip}
 
+    # 4.5 xhigh ≡ high → reasoner (not frontier)
+    g45 = worker_with_effort("Grok 4.5", "mid", "xhigh")
+    assert g45.tier == "reasoner"
+    take, skip = plan_fit.triage(inventory_ready(plans, g45), g45, "xhigh")
+    assert {r.slug for r, _ in take} == {"hard"}
+    assert "front" in {r.slug for r in skip}
+
 
 # --- triage / CLI -----------------------------------------------------------
 
@@ -198,6 +205,36 @@ def test_cli_exit_codes_and_json(tmp_path, capsys):
     assert payload["next"] == "features/hard.md"
     assert payload["eligible"][0]["effort"]["verdict"] == "underpowered"
     assert payload["worker"]["tier"] == "reasoner"
+
+
+def test_profile_hint_does_not_change_eligibility(tmp_path, capsys):
+    """--profile is a soft JSON hint; power fit still decides take/skip."""
+    plans = _tree(tmp_path)
+    _plan(plans / "features" / "tagged.md", preferred="mid, coding-agent")
+    root = str(tmp_path)
+
+    assert plan_fit.main(
+        ["--root", root, "--tier", "mid", "--profile", "critic", "--json"]
+    ) == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["worker"]["profile"] == "critic"
+    hint = payload["eligible"][0]["specialty_hint"]
+    assert hint["match"] is False
+    assert hint["worker_profile"] == "critic"
+    assert "coding-agent" in hint["plan_profiles"]
+
+    assert plan_fit.main(
+        ["--root", root, "--tier", "mid", "--profile", "coding-agent", "--json"]
+    ) == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["eligible"][0]["specialty_hint"]["match"] is True
+
+    assert plan_fit.main(
+        ["--root", root, "--tier", "mid", "--profile", "wizard", "--json"]
+    ) == 0
+    payload = json.loads(capsys.readouterr().out)
+    note = payload["eligible"][0]["specialty_hint"]["note"]
+    assert "unknown" in note
 
 
 def test_cli_requires_an_identity_and_rejects_bad_effort(tmp_path, capsys):

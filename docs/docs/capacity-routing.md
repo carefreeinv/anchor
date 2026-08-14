@@ -32,6 +32,10 @@ The fitness floor is the whole point. [Model priority](/skills/overview) is an e
 
 ## Reroute correctly
 
+### Grok 4.5 vs 4.6 under capacity pressure
+
+When model-priority lists both, **prefer `grok:4.5` for light mid work** (usually cheaper) and reserve **`grok:4.6`** for sustained multi-step agent tasks. Do not jump to 4.6 (or raise effort to xhigh) just because 4.5 is rate-limited if a local swarm or Sonnet-class alternative clears the fitness floor. If 4.5 is retired later, drop `grok:4.5` from priority and keep `grok:4.6`.
+
 A different model is a different session with no memory of this one. Re-sending the last prompt loses the plan, the constraints, and every decision already made.
 
 **Checkpoint before switching** — write state where the next model will look (the in-progress plan file under `.plans/in-progress/`, or a scratch note): what's done, what's next, what's verified vs. assumed, which files are mid-edit. **Restate on arrival** with the task spec, constraints, and acceptance criteria, the same restate-first discipline every Anchor session opens with. **Say the tier changed**, in the transcript and the footer, so anyone reading results later can tell which tier produced which work. **Re-verify rather than inherit** — the previous model's claims are still claims, and anything unverified stays `(unverified)` across the handoff.

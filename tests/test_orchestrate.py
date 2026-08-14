@@ -93,6 +93,77 @@ def test_execute_task_insist_overrides_fit_check():
     assert fleet.ep.calls == 2
 
 
+def test_execute_task_honors_suggest_reroute_without_burning_attempts():
+    """Specialty-axis fit gate (mythos-core rule 11) — same no-retry contract as escalate."""
+    from orchestrate import execute_task
+
+    fleet = FakeFleet([
+        "SUGGEST-REROUTE: coding-agent — leave multi-file software for a software-dev optimized model",
+    ])
+    result = execute_task("implement the auth middleware across three packages", "plan", fleet,
+                          verify_cmd=None, hold_on_fail=False)
+
+    assert result["status"] == "escalate"
+    assert result["attempts"] == 1
+    assert "coding-agent" in result["suggestion"]
+    assert fleet.ep.calls == 1
+
+
+def test_execute_task_insist_overrides_suggest_reroute():
+    from orchestrate import execute_task
+
+    fleet = FakeFleet([
+        "SUGGEST-REROUTE: coding-agent — wrong specialty",
+        GOOD_OUTPUT,
+    ])
+    result = execute_task("do it anyway", "plan", fleet,
+                          verify_cmd=None, hold_on_fail=False, insist=True)
+
+    assert result["status"] == "ok"
+    assert result["attempts"] == 2
+    assert fleet.ep.calls == 2
+
+
+RULE13_THEN_REROUTE = (
+    "Goal restated? PASS\n"
+    "Acceptance criteria present? PASS\n"
+    "Files-in-scope listed? PASS\n"
+    "Budget declared and fits (spec's ## Budget)? PASS\n"
+    "Tier + specialty fit OK (rule 11: power escalate and/or specialty re-route)? FAIL\n"
+    "Task small enough for this tier (rule 10)? PASS\n"
+    "SUGGEST-REROUTE: coding-agent — leave multi-file software for a software-dev optimized model\n"
+)
+
+
+def test_fit_gate_line_finds_token_after_preflight():
+    from orchestrate import fit_gate_line
+
+    line = fit_gate_line(RULE13_THEN_REROUTE)
+    assert line is not None and line.startswith("SUGGEST-REROUTE: coding-agent")
+    buried = "\n".join(f"note {i}" for i in range(15))
+    buried += "\nSUGGEST-REROUTE: coding-agent — too late\n"
+    assert fit_gate_line(buried) is None
+
+
+def test_execute_task_honors_reroute_after_rule13_preflight():
+    """Rule 13 prints six preflight lines then the token — must not FORMAT-retry."""
+    from orchestrate import execute_task
+
+    fleet = FakeFleet([RULE13_THEN_REROUTE])
+    result = execute_task(
+        "implement the auth middleware across three packages",
+        "plan",
+        fleet,
+        verify_cmd=None,
+        hold_on_fail=False,
+    )
+
+    assert result["status"] == "escalate"
+    assert result["attempts"] == 1
+    assert "coding-agent" in result["suggestion"]
+    assert fleet.ep.calls == 1
+
+
 def test_execute_task_rejects_out_of_scope_before_tests(git_repo):
     """Out-of-scope worktree edit → failed-scope, and --verify never runs."""
     from pathlib import Path

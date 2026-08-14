@@ -470,20 +470,48 @@ def inventory_all_plan_summaries(plans_root: Path) -> list[dict[str, str]]:
     return out
 
 
+# Closed specialty profile tags (mythos-core dual-axis fit). Appear in Preferred
+# models freeform lists; mechanical tier fit ignores them (unknown tokens already
+# drop out of tier/name buckets). Used for optional specialty_hint reporting.
+SPECIALTY_PROFILES = frozenset({
+    "coding-agent",
+    "terminal-agent",
+    "critic",
+    "planner",
+    "general-chat",
+    "multimodal",
+    "swarm-local",
+})
+
+
+def parse_specialty_profiles(preferred: str | None) -> list[str]:
+    """Return known specialty profile tags listed in a Preferred models field."""
+    if not preferred:
+        return []
+    out: list[str] = []
+    for part in preferred.split(","):
+        tok = part.strip().strip("`").lower()
+        if tok in SPECIALTY_PROFILES and tok not in out:
+            out.append(tok)
+    return out
+
+
 def _parse_preferred_tokens(preferred: str | None) -> tuple[list[str], list[str]]:
     if not preferred:
         return [], []
     tiers: list[str] = []
     names: list[str] = []
     for part in preferred.split(","):
-        tok = part.strip()
+        tok = part.strip().strip("`")
         if not tok:
             continue
         low = tok.lower()
+        if low in SPECIALTY_PROFILES:
+            continue  # specialty tags are not tier/name power-fit tokens
         if low in FIT_RANK:
             tiers.append(low)
         else:
-            names.append(low)
+            names.append(low)  # lowercased; matches historical Preferred name fit
     return tiers, names
 
 
@@ -582,12 +610,31 @@ def normalize_effort(effort: str | None) -> str | None:
     e = aliases.get(e, e)
     return e if e in EFFORT_RANK else None
 
+def _model_tokens(name: str) -> list[str]:
+    """Split a product / endpoint id on common separators (incl. OpenRouter ``/``)."""
+    n = name.lower().replace("_", " ").replace("-", " ").replace("/", " ").replace(".", " ")
+    return n.split()
+
+
 def is_grok_family(name: str | None) -> bool:
-    """True when the worker product is Grok (4.5, 4.6, or generic "grok")."""
+    """True when the worker product is Grok (4.5, 4.6, or generic "grok").
+
+    Accepts ``Grok 4.6``, ``grok-4.5``, and slash-prefixed fleet ids such as
+    ``x-ai/grok-4.6`` / ``xai/grok-4.5``.
+    """
     if not name:
         return False
-    n = name.lower().replace("_", " ").replace("-", " ")
-    return "grok" in n.split() or n.startswith("grok") or " grok" in f" {n}"
+    return "grok" in _model_tokens(name)
+
+
+def is_grok_45(name: str | None) -> bool:
+    """True for Grok 4.5 (API coerces ``xhigh`` → ``high``)."""
+    if not name or not is_grok_family(name):
+        return False
+    tokens = _model_tokens(name)
+    return any(
+        tokens[i] == "4" and tokens[i + 1] == "5" for i in range(len(tokens) - 1)
+    )
 
 
 # Grok-family effort → effective Preferred fit tier (Grok 4.6-era map).
@@ -630,9 +677,13 @@ def effective_fit_tier(
         return base
     if effort is None or (isinstance(effort, str) and not effort.strip()):
         return "mid"  # unknown dial → conservative mid
-    if normalize_effort(effort) is None:
+    e = normalize_effort(effort)
+    if e is None:
         return "mid"
-    return grok_effort_to_tier(effort)
+    # xAI treats 4.5 xhigh as high → landed map reasoner, not frontier.
+    if e == "xhigh" and is_grok_45(name):
+        e = "high"
+    return GROK_EFFORT_TIER.get(e, "mid")
 
 
 def worker_with_effort(

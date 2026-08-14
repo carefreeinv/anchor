@@ -17,8 +17,10 @@ so a script should apply them.
     1 eligible · 1 skipped
 
 Identify yourself with **one** of ``--tier`` / ``--model`` / ``--endpoint``, and
-optionally ``--effort`` for cost advice. Effort never changes eligibility — it
-is a cost dial, not a tier promotion.
+optionally ``--effort``. For the **Grok family**, a reported effort sets the
+**effective** Preferred tier (``low``→mid, ``medium``/``high``→reasoner,
+``xhigh``→frontier on 4.6; 4.5 ``xhigh`` coerces to high/reasoner; omit→mid).
+On other products, effort is still a cost dial and does not change eligibility.
 
 Exit codes: 0 something is eligible · 1 nothing eligible · 2 error.
 """
@@ -34,10 +36,12 @@ from plan_select import (
     EffortAdvice,
     Fit,
     PlanRecord,
+    SPECIALTY_PROFILES,
     Worker,
     classify_effort,
     inventory_ready,
     normalize_effort,
+    parse_specialty_profiles,
     plan_effort_tier,
     plans_root_for,
     worker_with_effort,
@@ -116,21 +120,66 @@ def _line(rec: PlanRecord, advice: EffortAdvice | None, worker: Worker) -> str:
     return f"{head} → {note}" if note else head
 
 
+def _specialty_hint(preferred: str | None, profile: str | None) -> dict | None:
+    """Soft hint only — never changes eligibility (v1 mechanical specialty).
+
+    When the worker declares ``--profile`` and Preferred lists known specialty
+    tags, report overlap / mismatch for operators and daemons. Power-tier fit
+    remains the only gate in :func:`triage`.
+    """
+    tags = parse_specialty_profiles(preferred)
+    if not tags and not profile:
+        return None
+    prof = (profile or "").strip().lower() or None
+    if prof and prof not in SPECIALTY_PROFILES:
+        return {
+            "plan_profiles": tags,
+            "worker_profile": prof,
+            "match": None,
+            "note": f"unknown worker profile {prof!r} (not in closed set)",
+        }
+    if not prof:
+        return {"plan_profiles": tags, "worker_profile": None, "match": None}
+    if not tags:
+        return {
+            "plan_profiles": [],
+            "worker_profile": prof,
+            "match": None,
+            "note": "plan has no specialty tags; power fit only",
+        }
+    ok = prof in tags
+    return {
+        "plan_profiles": tags,
+        "worker_profile": prof,
+        "match": ok,
+        "note": (
+            None if ok
+            else f"specialty mismatch: worker {prof} not in plan tags {tags}"
+        ),
+    }
+
+
 def _as_json(
     take: list[tuple[PlanRecord, EffortAdvice]],
     skip: list[PlanRecord],
     worker: Worker,
     effort: str | None,
+    profile: str | None = None,
 ) -> str:
     return json.dumps(
         {
-            "worker": {"name": worker.name, "tier": worker.tier,
-                       "effort": normalize_effort(effort)},
+            "worker": {
+                "name": worker.name,
+                "tier": worker.tier,
+                "effort": normalize_effort(effort),
+                "profile": (profile or "").strip().lower() or None,
+            },
             "eligible": [
                 {
                     "rel": r.rel, "lane": r.lane, "slug": r.slug,
                     "priority": r.priority, "value": r.value,
                     "preferred": r.preferred, "fit": r.fit.value,
+                    "specialty_hint": _specialty_hint(r.preferred, profile),
                     "effort": {
                         "verdict": a.verdict.value,
                         "suggested": a.suggested,
@@ -144,6 +193,7 @@ def _as_json(
                 {
                     "rel": r.rel, "lane": r.lane, "slug": r.slug,
                     "preferred": r.preferred, "fit": r.fit.value,
+                    "specialty_hint": _specialty_hint(r.preferred, profile),
                     "deps_met": r.deps_met, "deps_unmet": list(r.deps_unmet),
                     "assignee": r.assignee, "agent_assignable": r.agent_assignable,
                     "reason": _reason(r, worker),
@@ -177,6 +227,11 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--ignore-deps", action="store_true",
                     help="do not treat unmet Depends on as a skip")
     ap.add_argument("--json", action="store_true", help="machine-readable output")
+    ap.add_argument(
+        "--profile",
+        help="optional specialty profile for soft hints only "
+             f"({', '.join(sorted(SPECIALTY_PROFILES))}); does not change eligibility",
+    )
     args = ap.parse_args(argv)
 
     plans_root = plans_root_for(Path(args.root).resolve())
@@ -205,7 +260,7 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     if args.json:
-        print(_as_json(take, skip, worker, args.effort))
+        print(_as_json(take, skip, worker, args.effort, profile=args.profile))
         return 0 if take else 1
 
     if not records:

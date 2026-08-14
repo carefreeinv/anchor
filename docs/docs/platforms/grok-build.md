@@ -1,10 +1,9 @@
-<!-- synced-from: platforms/grok-build/GROK.md @ d226c4c7509d01c795ea43cb15469678052af622 -->
+<!-- synced-from: platforms/grok-build/GROK.md @ 835e2afa8f4868af7f13a6530b6ad1e059274c89 -->
+<!-- synced-from: platforms/grok-build/GROK.md @ PENDING -->
 ---
 sidebar_position: 2
 sidebar_label: Grok Build
 ---
-
-<!-- synced-from: platforms/grok-build/GROK.md @ PENDING -->
 
 # Grok Build
 
@@ -35,9 +34,9 @@ The hard rules (restate → plan → one-step-per-turn → verify-don't-claim �
 - **One task spec per session.** Restart instead of accumulating context; instruction decay makes long Grok sessions untrustworthy.
 - Architecture and security-adjacent steps are marked `Route to: bigger model` in the plan — Grok doesn't decide these alone.
 
-## Grok 4.6 (and 4.5) (reviewed 2026-07-08)
+## Grok 4.6 (and 4.5) (reviewed 2026-08-12)
 
-Play to the strength: terminal/CLI-driven steps are Grok 4.5's best fit (GPT-5.5-class on terminal benchmarks, unusually token-efficient). Compensate for the weakness: it measurably trails Fable/GPT tiers on repo-scale issue resolution, so decompose to file-scoped task specs before handing work over. API `reasoning_effort` defaults to *high* — set low for mechanical steps or pay a token multiple for nothing. In the TUI use **`/effort low`** (or `/model <id> low`); CLI/headless: **`--effort low`**. Catalog tier for Preferred matching is **mid** — high effort is a cost dial, not a frontier promotion. Before [**`/work`**](/skills/work) burns high effort on mid plans, probe for a cheaper local/fleet executor (`scripts/endpoints.yaml`); if none are reachable, emit the effort command rather than a dead stop. Community-reported tool-use flakiness `(unverified)` makes external verification load-bearing. A poor-fit task gets a `SUGGEST-ESCALATE:` first line per the fit check in `.anchor/model-fitness.md`, not a silent attempt. Symmetrically, **mid is a floor Grok clears, not a ceiling to apologize for**: repo-scale issue resolution is the documented weak spot, file-scoped `mid` plans are not — and a plan whose **Preferred models** also names a stronger product is still a good fit, since only listed *tiers* gate.
+Prefer **Grok 4.5** for lighter/cheaper mid (file-scoped execute, terminal/CLI); **Grok 4.6** for sustained multi-step agent work. Priority tokens: `grok:4.5`, `grok:4.6`. Play to terminal/CLI and multi-step loops; decompose repo-scale issues to file-scoped specs. Base catalog tier is **mid**. A **reported** `reasoning_effort` sets **effective** Preferred tier (`low`→mid, `medium`/`high`→reasoner, `xhigh`→frontier on 4.6; 4.5 `xhigh` coerces to high → reasoner). Omitted effort stays mid. TUI: **`/effort low|medium|high|xhigh`**. Dual-axis fit: power → `SUGGEST-ESCALATE:`; specialty mismatch → `SUGGEST-REROUTE:`. Mid is a floor Grok clears — do not skip file-scoped `mid` plans because Preferred also names a stronger product. Reported `high` *does* make Grok effective reasoner (skips mid-only Preferred).
 
 If MCP is available, connect `anchor-prompts` and call `tune_prompt` on any vague task before starting, and `preflight_check` before executing any spec.
 
@@ -48,12 +47,3 @@ Scaffold installs [**`/draft`**](/skills/draft), [**`/work`**](/skills/work), [*
 ## /commit-prep
 
 **Required before any `git commit`.** Agents run `/commit-prep` (discover this project’s tests/CI; CHANGELOG; blog-if-warranted — no Docusaurus required). **Prep only** — does not commit. After a green prep, [**`/work`**](/skills/work) / standing rules cover feature-branch commit (worktree preferred; merge to `dev` only via `/work`'s culmination answer + scoped gate; never to `main`).
-
-
-## Grok 4.5 vs 4.6
-
-Use **4.5** for cost-sensitive mid execute; **4.6** for sustained multi-step agent work. Priority tokens: `grok:4.5`, `grok:4.6`.
-
-## Effort and Preferred fit (4.6-era)
-
-Base catalog tier is **mid**. When the session reports `reasoning_effort`, Anchor maps it to an **effective** Preferred tier (`low`→mid, `medium`/`high`→reasoner, `xhigh`→frontier). Omitted effort stays mid for eligibility. TUI: `/effort low|medium|high|xhigh`.

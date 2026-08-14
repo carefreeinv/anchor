@@ -66,6 +66,31 @@ HANDOFF_THRESHOLD = 0.8
 # A task needing a fourth window is decomposed wrong, not merely large.
 MAX_RESPAWNS = 2
 
+# Fit-gate tokens (mythos-core rule 11). A rule-13 preflight block may precede them.
+FIT_GATE_SCAN_LINES = 12
+_FIT_GATE_PREFIXES = ("SUGGEST-ESCALATE", "SUGGEST-REROUTE")
+
+
+def fit_gate_line(out: str) -> str | None:
+    """Return the first power/specialty fit-gate line, or None.
+
+    Honors a bare first line *and* a token after mythos-core rule 13's six-item
+    preflight. Only the first ``FIT_GATE_SCAN_LINES`` non-empty lines are
+    inspected so later prose quoting the tokens cannot trip the gate.
+    """
+    seen = 0
+    for raw in out.splitlines():
+        line = raw.strip()
+        if not line:
+            continue
+        seen += 1
+        upper = line.upper()
+        if any(upper.startswith(p) for p in _FIT_GATE_PREFIXES):
+            return line
+        if seen >= FIT_GATE_SCAN_LINES:
+            break
+    return None
+
 
 def estimate_tokens(text: str) -> int:
     """Conservative token estimate for budget accounting.
@@ -357,13 +382,15 @@ def execute_task(task: str, plan: str, fleet: Fleet, verify_cmd: str | None,
             return {"task": task, "status": "handoff", "attempts": attempt,
                     "handoff": parsed, "output": out}
 
-        # Fit check (mythos-core rule 11): a worker that judges the task a poor fit
-        # for its tier says so up front — honor it immediately instead of burning
-        # attempts, unless the operator ran with --insist.
-        if out.lstrip().upper().startswith("SUGGEST-ESCALATE"):
-            suggestion = out.strip().splitlines()[0][:300]
+        # Fit check (mythos-core rule 11): dual-axis — power escalate or specialty
+        # re-route. Honor a bare first line *or* a token after rule 13's preflight
+        # instead of burning attempts, unless the operator ran with --insist.
+        _fit_line = fit_gate_line(out)
+        if _fit_line:
+            suggestion = _fit_line[:300]
+            kind = "re-route" if _fit_line.upper().startswith("SUGGEST-REROUTE") else "escalation"
             if not insist:
-                print(f"[fit] {ep.name} suggests escalation: {suggestion}", file=sys.stderr)
+                print(f"[fit] {ep.name} suggests {kind}: {suggestion}", file=sys.stderr)
                 status = "hold" if hold_on_fail else "escalate"
                 _ledger_outcome(
                     task=task, out=out, ep=ep, verify_exit=None,
@@ -373,9 +400,12 @@ def execute_task(task: str, plan: str, fleet: Fleet, verify_cmd: str | None,
                 recorded = True
                 return {"task": task, "status": status, "attempts": attempt,
                         "suggestion": suggestion, "history": history}
-            history.append("Your previous output was SUGGEST-ESCALATE. The operator insists "
-                           "you proceed at this tier: stay strictly in scope, mark shaky "
-                           "output (unverified), and do not SUGGEST-ESCALATE again.")
+            history.append(
+                f"Your previous output was a fit gate ({suggestion[:80]}…). "
+                "The operator insists you proceed at this tier/profile: stay strictly "
+                "in scope, mark shaky output (unverified), and do not SUGGEST-ESCALATE "
+                "or SUGGEST-REROUTE again."
+            )
             continue
 
         if not has_required_footer(out):
@@ -552,7 +582,7 @@ def main() -> None:
     ap.add_argument("--hold-on-fail", action="store_true",
                     help="detached mode: hold failed tasks for later instead of escalating")
     ap.add_argument("--insist", action="store_true",
-                    help="override workers' SUGGEST-ESCALATE fit checks and make them proceed")
+                    help="override workers' SUGGEST-ESCALATE / SUGGEST-REROUTE fit checks and make them proceed")
     ap.add_argument("--scope-spec",
                     help="task-spec markdown with '## Files in scope'; changes outside it "
                          "are rejected before --verify runs")
