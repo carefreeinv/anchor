@@ -78,9 +78,10 @@ you need to see a box come back before the cap lifts — but labels capped
 endpoints, and `list_fleet` shows the current level.
 
 Timer-driven workers get a clean environment, so `fleet_watch` copies the load
-settings into the units it emits. It deliberately does **not** write the broker
-password into a unit file; those are world-readable. Use a credential file or a
-drop-in.
+settings into the units it emits — minus the secrets, because unit files and
+crontabs are world-readable. `ANCHOR_MQTT_PASSWORD` is never written, and
+`user:pass@` userinfo in the broker URL is stripped before emission. Use a
+credential file or a drop-in.
 
 It's opt-in throughout. With nothing configured, the resolved level is `high`
 from source `disabled` and nothing about your fleet changes. Full contract:

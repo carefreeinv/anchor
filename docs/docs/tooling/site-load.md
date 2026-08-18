@@ -179,9 +179,12 @@ current level — pair `--retain` with `--ttl` so a retained `high` cannot outli
 the condition that justified it.
 
 Timer-driven workers get a clean environment, so `fleet_watch` copies the load
-settings into the units it emits. The **broker password is deliberately not
-written** to a unit file (they are world-readable) — use a credential file or a
-systemd drop-in.
+settings into the units it emits. Unit files and crontabs are world-readable, so
+**no secret is written to either**: `ANCHOR_MQTT_PASSWORD` is never emitted, and
+any `user:pass@` userinfo in `ANCHOR_MQTT_URL` is **stripped** before the value is
+written (that credential is not used for auth anyway — only the host and port are
+read from the URL). Supply credentials through `ANCHOR_MQTT_USERNAME` /
+`ANCHOR_MQTT_PASSWORD` via a credential file or a systemd drop-in.
 
 ## Security
 

@@ -352,12 +352,52 @@ def is_local_base_url(base_url: str | None) -> bool:
     )
 
 
+TRUTHY = {"1", "true", "yes", "on"}
+FALSY = {"0", "false", "no", "off"}
+
+
+def sanitize_broker_url(url: str | None) -> str:
+    """Broker URL with any ``user:pass@`` userinfo removed.
+
+    ``mqtt://user:pass@host:1883`` is the ordinary way to write a broker URL, and
+    this value gets copied into systemd units and crontab lines — both
+    world-readable. The userinfo is not even used: connections authenticate from
+    ``ANCHOR_MQTT_USERNAME`` / ``ANCHOR_MQTT_PASSWORD``, and only the host and
+    port are read out of this URL. So it is stripped wherever the value is
+    emitted or displayed.
+    """
+    if not url:
+        return ""
+    from urllib.parse import urlsplit, urlunsplit
+
+    parts = urlsplit(str(url))
+    if not parts.hostname or "@" not in parts.netloc:
+        return str(url)
+    netloc = parts.hostname
+    if ":" in netloc:  # IPv6 literal
+        netloc = f"[{netloc}]"
+    if parts.port:
+        netloc = f"{netloc}:{parts.port}"
+    return urlunsplit((parts.scheme, netloc, parts.path, parts.query, parts.fragment))
+
+
 def endpoint_is_local(endpoint: dict) -> bool:
-    """Locality for a registry entry: explicit ``local:`` wins, else the heuristic."""
+    """Locality for a registry entry: explicit ``local:`` wins, else the heuristic.
+
+    A string that is neither truthy nor falsy is **unknown**, not false: it falls
+    through to the base URL. Reading an unparseable annotation as "not local"
+    would turn a mangled ``local:`` value into a silently disabled governor —
+    strictly worse than never annotating the endpoint at all.
+    """
     explicit = endpoint.get("local")
+    if isinstance(explicit, str):
+        token = explicit.strip().lower()
+        if token in TRUTHY:
+            return True
+        if token in FALSY:
+            return False
+        explicit = None  # unrecognized → defer to the heuristic below
     if explicit is not None:
-        if isinstance(explicit, str):
-            return explicit.strip().lower() in {"1", "true", "yes", "on"}
         return bool(explicit)
     return is_local_base_url(endpoint.get("base_url"))
 
@@ -722,6 +762,8 @@ def main(argv: list[str] | None = None) -> int:
     print(policy.describe())
     print(f"allowed local tiers: {', '.join(policy.tiers()) or 'none'}")
     print(f"enabled={cfg.enabled} failsafe={cfg.failsafe} cache={cfg.cache_path}")
+    if cfg.broker_url:
+        print(f"broker={sanitize_broker_url(cfg.broker_url)}")
     if args.tier:
         allowed, reason, _ = check_local_work(args.tier, root, cfg)
         print(f"tier {args.tier}: {'ALLOW' if allowed else 'DENY — ' + reason}")

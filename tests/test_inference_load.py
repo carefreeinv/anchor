@@ -372,3 +372,47 @@ def test_cli_set_writes_the_mirror_and_status_reads_it(tmp_path, capsys):
 def test_cli_set_rejects_an_unknown_level(tmp_path, capsys):
     assert il.main(["--root", str(tmp_path), "--set", "medium"]) == 2
     assert "unknown load level" in capsys.readouterr().err
+
+
+# -- F2: an unparseable `local:` must not read as "not local" ---------------
+
+def test_unrecognized_local_string_defers_to_the_url_heuristic():
+    # Reading a mangled annotation as False would make marking an endpoint
+    # WORSE than never annotating it — the governor would silently switch off.
+    private = {"local": "tru e  # oops", "base_url": "http://10.0.1.10:8000/v1"}
+    cloud = {"local": "??", "base_url": "https://api.example.com/v1"}
+    assert il.endpoint_is_local(private)
+    assert not il.endpoint_is_local(cloud)
+
+
+@pytest.mark.parametrize("raw,expected", [
+    ("true", True), ("TRUE", True), ("yes", True), ("on", True), ("1", True),
+    ("false", False), ("no", False), ("off", False), ("0", False),
+])
+def test_explicit_local_tokens_are_honored_in_both_directions(raw, expected):
+    ep = {"local": raw, "base_url": "http://10.0.1.10:8000/v1"}
+    assert il.endpoint_is_local(ep) is expected
+
+
+# -- F3: the broker URL must never carry credentials into emitted files -----
+
+@pytest.mark.parametrize("url,expected", [
+    ("mqtt://opuser:s3cret@broker.example:8883", "mqtt://broker.example:8883"),
+    ("mqtts://user@host", "mqtts://host"),
+    ("mqtt://u:p@[fe80::1]:1883", "mqtt://[fe80::1]:1883"),
+    ("mqtt://broker:1883", "mqtt://broker:1883"),
+    ("", ""),
+    (None, ""),
+])
+def test_sanitize_broker_url_strips_userinfo_only(url, expected):
+    assert il.sanitize_broker_url(url) == expected
+
+
+def test_status_output_never_prints_broker_credentials(tmp_path, capsys, monkeypatch):
+    monkeypatch.setenv("ANCHOR_MQTT_URL", "mqtt://opuser:s3cret@broker.example:8883")
+    monkeypatch.setenv("ANCHOR_MQTT_SITE", "garage")
+    assert il.main(["--root", str(tmp_path), "--status"]) == 0
+    out = capsys.readouterr().out
+    assert "s3cret" not in out
+    assert "opuser" not in out
+    assert "broker.example:8883" in out

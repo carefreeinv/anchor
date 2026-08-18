@@ -557,3 +557,26 @@ def test_stale_policy_holds_local_work_by_default(tmp_path, capsys):
     ])
     assert code == 1
     assert "failsafe:hold" in capsys.readouterr().err
+
+
+def test_crude_parser_strips_inline_comments_on_the_shipped_registry():
+    # Regression: the repo's own endpoints.yaml annotates `local: true` with a
+    # trailing comment. Parsed naively, that string missed the truthy set and
+    # read as NOT local — turning the governor off for that endpoint on any
+    # install without PyYAML, the exact case this parser exists for.
+    registry = Path(work_once.__file__).resolve().parent / "endpoints.yaml"
+    parsed = work_once._parse_endpoints_crude(registry.read_text(encoding="utf-8"))
+    h100 = next(e for e in parsed if e["name"] == "h100-executor")
+    assert h100["local"] == "true"
+    assert h100["base_url"] == "http://10.0.1.10:8000/v1"
+
+    import inference_load as il
+
+    assert il.endpoint_is_local(h100) is True
+
+
+def test_crude_value_handles_comments_quotes_and_urls():
+    assert work_once._crude_value("tier: swarm   # tiny") == "swarm"
+    assert work_once._crude_value('model: "qwen3:4b"') == "qwen3:4b"
+    assert work_once._crude_value("base_url: http://x/v1#frag") == "http://x/v1#frag"
+    assert work_once._crude_value("name: box") == "box"

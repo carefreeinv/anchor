@@ -336,8 +336,13 @@ def cmd_list_or_once(
 
 # Site inference-load settings a timer-driven worker must inherit: a unit gets a
 # clean environment, so without these the governor is simply "not configured" and
-# the cap silently does nothing. Passwords are deliberately absent — a unit file is
-# world-readable; point the broker at a credential file or a drop-in instead.
+# the cap silently does nothing.
+#
+# Secrets are deliberately absent — a unit file and a crontab are world-readable.
+# That means BOTH halves: ANCHOR_MQTT_PASSWORD is never emitted, and any
+# ``user:pass@`` userinfo inside ANCHOR_MQTT_URL is stripped before it is written
+# (the standard MQTT URL form carries credentials, and emitting the variable
+# verbatim leaked them). Point the broker at a credential file or a drop-in.
 LOAD_ENV_KEYS = (
     "ANCHOR_MQTT_URL",
     "ANCHOR_MQTT_SITE",
@@ -349,14 +354,28 @@ LOAD_ENV_KEYS = (
 )
 
 
+def load_env_value(key: str, raw: str) -> str:
+    """The value safe to write into a world-readable unit/crontab for *key*."""
+    if key == "ANCHOR_MQTT_URL":
+        try:
+            from inference_load import sanitize_broker_url
+        except ImportError:  # standalone copy without the load governor
+            return raw
+        return sanitize_broker_url(raw)
+    return raw
+
+
 def load_env_lines(env: dict | None = None) -> list[str]:
     """``Environment=`` lines for whichever load settings are configured here."""
     src = os.environ if env is None else env
     lines = []
     for key in LOAD_ENV_KEYS:
         val = str(src.get(key, "") or "").strip()
-        if val:
-            lines.append(f"Environment={key}={_shell_quote(val)}")
+        if not val:
+            continue
+        safe = load_env_value(key, val)
+        if safe:
+            lines.append(f"Environment={key}={_shell_quote(safe)}")
     return lines
 
 

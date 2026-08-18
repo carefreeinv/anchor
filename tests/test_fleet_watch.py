@@ -230,3 +230,35 @@ def test_worker_spec_local_flag_reaches_work_once(tmp_path):
     assert "--local-worker" not in fw.work_once_cmd(
         Path(fw.SCRIPTS_DIR), project, plain, python="/usr/bin/python3"
     )
+
+
+def test_unit_strips_credentials_embedded_in_the_broker_url(tmp_path):
+    # The earlier test supplied the secret only via ANCHOR_MQTT_PASSWORD, so it
+    # passed while `user:pass@host` — the ordinary MQTT URL form — leaked
+    # verbatim into a world-readable unit file.
+    project = tmp_path / "app"
+    project.mkdir()
+    (project / ".plans").mkdir()
+    env = {"ANCHOR_MQTT_URL": "mqtt://opuser:s3cret@broker.example:8883",
+           "ANCHOR_MQTT_SITE": "garage"}
+    workers = [fw.parse_worker("tier=mid,agent=mid-1,interval=5m")]
+    body = next(
+        c for n, c in fw.emit_systemd(project, Path(fw.SCRIPTS_DIR), workers,
+                                      python="/usr/bin/python3", env=env)
+        if n.endswith(".service")
+    )
+    assert "s3cret" not in body
+    assert "opuser" not in body
+    assert "Environment=ANCHOR_MQTT_URL=mqtt://broker.example:8883" in body
+
+
+def test_cron_lines_strip_credentials_embedded_in_the_broker_url(tmp_path):
+    project = tmp_path / "app"
+    project.mkdir()
+    (project / ".plans").mkdir()
+    env = {"ANCHOR_MQTT_URL": "mqtt://opuser:s3cret@broker.example:8883"}
+    workers = [fw.parse_worker("tier=small,agent=swarm-1,interval=10m")]
+    body = "\n".join(fw.emit_cron_lines(project, Path(fw.SCRIPTS_DIR), workers,
+                                        python="/usr/bin/python3", env=env))
+    assert "s3cret" not in body
+    assert "mqtt://broker.example:8883" in body

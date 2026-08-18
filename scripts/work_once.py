@@ -104,26 +104,48 @@ def _load_endpoint(registry: Path | None, name: str) -> tuple[str, str, bool]:
     raise SystemExit(f"endpoint {name!r} not found in {path}")
 
 
+def _crude_value(line: str) -> str:
+    """Value half of a ``key: value`` line, minus any inline comment or quotes.
+
+    YAML starts an inline comment at a ``#`` preceded by whitespace, so that is
+    what we cut on — a ``#`` inside a URL or an unspaced token stays put. Getting
+    this wrong is not cosmetic: an endpoint annotated ``local: true   # my rack``
+    used to parse as the whole string, miss the truthy set, and read as *not*
+    local, silently disabling the load governor for that endpoint.
+    """
+    value = line.split(":", 1)[1]
+    for i, ch in enumerate(value):
+        if ch == "#" and (i == 0 or value[i - 1] in " \t"):
+            value = value[:i]
+            break
+    value = value.strip()
+    if len(value) >= 2 and value[0] == value[-1] and value[0] in "\"'":
+        value = value[1:-1]
+    return value
+
+
 def _parse_endpoints_crude(text: str) -> list[dict]:
     """Tiny YAML-ish scrape when PyYAML is unavailable."""
     endpoints: list[dict] = []
     current: dict | None = None
     for line in text.splitlines():
         stripped = line.strip()
+        if stripped.startswith("#"):
+            continue
         if stripped.startswith("- name:"):
             if current:
                 endpoints.append(current)
-            current = {"name": stripped.split(":", 1)[1].strip()}
+            current = {"name": _crude_value(stripped)}
         elif current is not None and stripped.startswith("tier:"):
-            current["tier"] = stripped.split(":", 1)[1].strip()
+            current["tier"] = _crude_value(stripped)
         elif current is not None and stripped.startswith("model:"):
-            current["model"] = stripped.split(":", 1)[1].strip()
+            current["model"] = _crude_value(stripped)
         elif current is not None and stripped.startswith("base_url:"):
             # Needed for locality: without it the load governor could not tell a
             # local box from a cloud tier when PyYAML is unavailable.
-            current["base_url"] = stripped.split(":", 1)[1].strip()
+            current["base_url"] = _crude_value(stripped)
         elif current is not None and stripped.startswith("local:"):
-            current["local"] = stripped.split(":", 1)[1].strip()
+            current["local"] = _crude_value(stripped)
     if current:
         endpoints.append(current)
     return endpoints
