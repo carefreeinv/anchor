@@ -1,13 +1,16 @@
 """Local delegation is refused while the site inference-load cap is on.
 
-The gate itself lives in ``inference_load.endpoint_refusal`` precisely so it is
-testable without the MCP SDK; the thin server wrapper is exercised too when the
-SDK happens to be installed.
+The gate itself lives in ``inference_load.endpoint_refusal`` so it is testable
+without the MCP SDK. The thin server wrapper is covered too, against a **stubbed**
+``FastMCP``: the real SDK is not installed in CI, and current SDK releases no
+longer expose ``mcp.server.fastmcp`` at all, so an ``importorskip`` here would skip
+forever and quietly leave the delegate gate unverified.
 """
 from __future__ import annotations
 
 import sys
 import time
+import types
 from pathlib import Path
 from unittest.mock import patch
 
@@ -97,18 +100,40 @@ def test_registry_tier_mapping():
     assert il.registry_tier_to_fit(None) is None
 
 
-# -- the MCP wrapper (only when the SDK is installed) -----------------------
+# -- the MCP wrapper (against a stubbed SDK, so CI actually runs these) ------
 
-def _server():
-    pytest.importorskip("mcp.server.fastmcp")
-    sys.path.insert(0, str(REPO / "mcp" / "model-fleet"))
-    import server
+class _StubFastMCP:
+    """Enough FastMCP for import: ``@mcp.tool()`` returns the function unchanged."""
 
-    return server
+    def __init__(self, name):
+        self.name = name
+
+    def tool(self, *a, **kw):
+        return lambda fn: fn
+
+    def run(self):  # pragma: no cover - never called under test
+        raise AssertionError("the stub server must not be run")
 
 
-def test_delegate_refuses_without_sending_work(tmp_path):
-    server = _server()
+@pytest.fixture
+def server(monkeypatch):
+    """Import mcp/model-fleet/server.py against a stubbed SDK."""
+    for name in ("mcp", "mcp.server", "mcp.server.fastmcp"):
+        module = types.ModuleType(name)
+        if name == "mcp.server.fastmcp":
+            module.FastMCP = _StubFastMCP
+        monkeypatch.setitem(sys.modules, name, module)
+    sys.modules["mcp"].server = sys.modules["mcp.server"]
+    sys.modules["mcp.server"].fastmcp = sys.modules["mcp.server.fastmcp"]
+    monkeypatch.syspath_prepend(str(REPO / "mcp" / "model-fleet"))
+    monkeypatch.delitem(sys.modules, "server", raising=False)
+    import server as server_module
+
+    yield server_module
+    sys.modules.pop("server", None)
+
+
+def test_delegate_refuses_without_sending_work(tmp_path, server):
     _level(tmp_path, "off")
     with patch.object(server, "REPO", tmp_path), \
          patch.object(server, "fleet") as fake_fleet, \
@@ -119,8 +144,7 @@ def test_delegate_refuses_without_sending_work(tmp_path):
     chat.assert_not_called()
 
 
-def test_delegate_proceeds_when_allowed(tmp_path):
-    server = _server()
+def test_delegate_proceeds_when_allowed(tmp_path, server):
     _level(tmp_path, "high")
     with patch.object(server, "REPO", tmp_path), \
          patch.object(server, "fleet") as fake_fleet, \
@@ -133,8 +157,7 @@ def test_delegate_proceeds_when_allowed(tmp_path):
     assert il.LOAD_LIMITED not in out
 
 
-def test_parallel_review_refuses_rather_than_running_one_pass(tmp_path):
-    server = _server()
+def test_parallel_review_refuses_rather_than_running_one_pass(tmp_path, server):
     _level(tmp_path, "off")
     with patch.object(server, "REPO", tmp_path), \
          patch.object(server, "fleet") as fake_fleet, \
@@ -146,8 +169,7 @@ def test_parallel_review_refuses_rather_than_running_one_pass(tmp_path):
     chat.assert_not_called()
 
 
-def test_list_fleet_reports_the_site_level(tmp_path):
-    server = _server()
+def test_list_fleet_reports_the_site_level(tmp_path, server):
     _level(tmp_path, "low", reason="solar")
     with patch.object(server, "REPO", tmp_path), \
          patch.object(server, "fleet") as fake_fleet:

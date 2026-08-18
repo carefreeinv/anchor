@@ -100,6 +100,20 @@ python3 "$SCRIPTS/fleet_watch.py" --project "$PROJECT" …
      `/fleet-watch --install` / re-run with consent to use `--install-user --yes`
 5. Optional smoke only if useful: `--once` for one tier (exit 1 = idle is OK).
 
+**Local workers and the site load cap.** A worker spec resolved from `endpoint=`
+inherits that endpoint's locality automatically. A **`tier=`-only** worker does
+not — `work_once` has no endpoint to judge — so if that tier runs on hardware the
+operator powers, add **`local=1`** to the spec:
+
+```bash
+--worker tier=small,agent=<id>,interval=10m,local=1
+```
+
+Without it, a site inference-load policy (`.anchor/inference-load.json` /
+`ANCHOR_MQTT_*`) has nothing to gate and the cap is inert for that timer. Emitted
+units and crontab lines carry the load settings automatically; secrets are never
+written to them.
+
 ## 4. Flags
 
 - **`--status`** — stop after status (no emit/install).

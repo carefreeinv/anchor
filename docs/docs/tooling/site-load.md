@@ -79,6 +79,12 @@ anchor/v1/sites/{site_id}/inference/load          # site policy
 anchor/v1/sites/{site_id}/projects/{slug}/load    # optional per-project override
 ```
 
+The project topic **outranks** the site topic while its message is fresh — that is
+what a per-project cap is for. The two are mirrored under separate scopes, so a
+periodic site heartbeat cannot erase a standing override. A project override that
+goes stale falls through to the **site** policy rather than to the fail-safe, so an
+abandoned per-project topic cannot strand a project the site is still governing.
+
 ```json
 {
   "level": "low",
@@ -98,8 +104,15 @@ default row; `level: off` denies regardless.
 
 `ttl_s` is measured against **local receipt time**, not the publisher's `ts` — a
 publisher with a skewed clock cannot hand out an immortal "full load" message.
-When no fresh policy is available (never received, broker down, TTL elapsed) the
-configured fail-safe applies:
+
+A payload that omits `ttl_s` expires after **`ANCHOR_LOAD_MAX_AGE`** (default
+`900`s) instead. Freshness is the **consumer's** guarantee: a publisher must not
+be able to opt out of expiry by leaving a field blank, or a retained
+`{"level":"high"}` would outlive a dead publisher forever. Set the ceiling to `0`
+to opt out explicitly; `--status` warns whenever a live policy is relying on it.
+
+When no fresh policy is available (never received, broker down, TTL or ceiling
+elapsed) the configured fail-safe applies:
 
 | `ANCHOR_LOAD_FAILSAFE` | Behavior |
 |------------------------|----------|
@@ -141,6 +154,7 @@ Environment wins over an optional `.anchor/mqtt-load.yaml` (or
 | `ANCHOR_MQTT_PROJECT` | Project slug for the per-project override topic |
 | `ANCHOR_MQTT_USERNAME` / `ANCHOR_MQTT_PASSWORD` | Broker credentials |
 | `ANCHOR_LOAD_FAILSAFE` | `hold` \| `last_known` \| `unrestricted` |
+| `ANCHOR_LOAD_MAX_AGE` | Seconds a policy **without** `ttl_s` stays fresh (default `900`; `0` disables) |
 | `ANCHOR_LOAD_CACHE` | Mirror path (default `.anchor/inference-load.json`) |
 | `ANCHOR_LOAD_DISABLE` | `1` forces the governor off |
 

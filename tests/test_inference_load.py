@@ -1,5 +1,6 @@
 import json
 import time
+from pathlib import Path
 
 import inference_load as il
 import pytest
@@ -118,8 +119,21 @@ def test_ttl_measured_against_local_receipt_not_publisher_clock():
     assert not fresh.is_expired(now)
 
 
-def test_no_ttl_never_expires():
-    assert not il.LoadPolicy(level="high", received_at=0.0).is_expired(time.time())
+def test_no_ttl_falls_back_to_the_consumer_ceiling():
+    # Freshness is the consumer's guarantee: a publisher cannot opt out of expiry
+    # by leaving ttl_s blank, which would strand a retained "high" forever.
+    old = il.LoadPolicy(level="high", received_at=time.time() - 1000)
+    assert old.is_expired(default_ttl_s=il.DEFAULT_MAX_AGE_SECONDS)
+    assert not old.is_expired(default_ttl_s=0)        # ceiling explicitly disabled
+    assert not old.is_expired()                       # no ceiling supplied by caller
+    fresh = il.LoadPolicy(level="high", received_at=time.time())
+    assert not fresh.is_expired(default_ttl_s=il.DEFAULT_MAX_AGE_SECONDS)
+
+
+def test_publisher_ttl_wins_over_the_ceiling():
+    policy = il.LoadPolicy(level="high", ttl_s=5, received_at=time.time() - 30)
+    assert policy.effective_ttl(3600) == 5
+    assert policy.is_expired(default_ttl_s=3600)
 
 
 # -- fail-safe --------------------------------------------------------------
@@ -416,3 +430,119 @@ def test_status_output_never_prints_broker_credentials(tmp_path, capsys, monkeyp
     assert "s3cret" not in out
     assert "opuser" not in out
     assert "broker.example:8883" in out
+
+
+# -- F1: a publisher cannot disable the fail-safe by omitting ttl_s ---------
+
+def test_policy_without_ttl_expires_under_the_default_ceiling(tmp_path):
+    cfg = _cfg(tmp_path, failsafe=il.FAILSAFE_HOLD)
+    il.write_cache(cfg.cache_path,
+                   il.LoadPolicy(level="high", reason="solar",
+                                 received_at=time.time() - il.DEFAULT_MAX_AGE_SECONDS - 5))
+    policy = il.get_load_policy(tmp_path, cfg)
+    assert policy.level == "off"
+    assert policy.source == "failsafe:hold"
+
+
+def test_ceiling_can_be_disabled_explicitly(tmp_path):
+    cfg = _cfg(tmp_path, failsafe=il.FAILSAFE_HOLD, max_age_s=0)
+    il.write_cache(cfg.cache_path,
+                   il.LoadPolicy(level="high", received_at=time.time() - 999_999))
+    assert il.get_load_policy(tmp_path, cfg).level == "high"
+
+
+@pytest.mark.parametrize("raw,expected", [
+    ("", il.DEFAULT_MAX_AGE_SECONDS), ("0", 0), ("none", 0), ("off", 0),
+    ("60", 60), ("  120 ", 120),
+])
+def test_max_age_parsing(raw, expected):
+    assert il._max_age(raw) == expected
+
+
+@pytest.mark.parametrize("raw", ["soon", "-5", "1.5"])
+def test_bad_max_age_is_refused(raw):
+    with pytest.raises(il.LoadPolicyError):
+        il._max_age(raw)
+
+
+def test_max_age_read_from_env(tmp_path):
+    cfg = il.load_config(tmp_path, env={"ANCHOR_MQTT_TOPIC": "t",
+                                        "ANCHOR_LOAD_MAX_AGE": "60"})
+    assert cfg.max_age_s == 60
+
+
+def test_status_warns_when_the_publisher_set_no_ttl(tmp_path, capsys, monkeypatch):
+    monkeypatch.setenv("ANCHOR_MQTT_TOPIC", "t")
+    il.main(["--root", str(tmp_path), "--set", "high"])
+    capsys.readouterr()
+    il.main(["--root", str(tmp_path), "--status"])
+    out = capsys.readouterr().out
+    assert "no ttl_s" in out
+    assert "max_age" in out
+
+
+# -- F4: a project override outranks the site policy -----------------------
+
+def _scoped_cfg(tmp_path):
+    return il.LoadConfig(enabled=True, cache_path=tmp_path / "cache.json",
+                         topic="anchor/v1/sites/g/inference/load",
+                         project_topic="anchor/v1/sites/g/projects/p/load")
+
+
+def test_project_override_survives_repeated_site_heartbeats(tmp_path):
+    cfg = _scoped_cfg(tmp_path)
+    il.apply_message(cfg, cfg.project_topic, '{"level": "off", "reason": "thermal"}')
+    for _ in range(3):
+        il.apply_message(cfg, cfg.topic, '{"level": "high"}')
+    policy = il.get_load_policy(tmp_path, cfg)
+    assert policy.level == "off"
+    assert policy.reason == "thermal"
+
+
+def test_site_policy_applies_when_no_override_exists(tmp_path):
+    cfg = _scoped_cfg(tmp_path)
+    il.apply_message(cfg, cfg.topic, '{"level": "mid"}')
+    assert il.get_load_policy(tmp_path, cfg).level == "mid"
+
+
+def test_stale_override_falls_through_to_the_site_not_the_failsafe(tmp_path):
+    cfg = _scoped_cfg(tmp_path)
+    il.write_cache(cfg.cache_path,
+                   il.LoadPolicy(level="off", ttl_s=30, received_at=time.time() - 600),
+                   il.SCOPE_PROJECT)
+    il.write_cache(cfg.cache_path,
+                   il.LoadPolicy(level="mid", ttl_s=600, received_at=time.time()),
+                   il.SCOPE_SITE)
+    policy = il.get_load_policy(tmp_path, cfg)
+    assert policy.level == "mid"          # abandoned override must not strand us
+    assert policy.source != "failsafe:hold"
+
+
+def test_both_scopes_stale_falls_back_to_the_failsafe(tmp_path):
+    cfg = _scoped_cfg(tmp_path)
+    for scope in (il.SCOPE_PROJECT, il.SCOPE_SITE):
+        il.write_cache(cfg.cache_path,
+                       il.LoadPolicy(level="high", ttl_s=30,
+                                     received_at=time.time() - 600), scope)
+    assert il.get_load_policy(tmp_path, cfg).level == "off"
+
+
+def test_scope_for_topic():
+    cfg = _scoped_cfg(Path("/tmp"))
+    assert il.scope_for_topic(cfg, cfg.project_topic) == il.SCOPE_PROJECT
+    assert il.scope_for_topic(cfg, cfg.topic) == il.SCOPE_SITE
+    assert il.scope_for_topic(cfg, "some/other/topic") == il.SCOPE_SITE
+
+
+def test_single_policy_mirror_still_reads_as_the_site_scope(tmp_path):
+    # A hand-written sidecar mirror knows nothing about scopes.
+    path = tmp_path / "cache.json"
+    path.write_text(json.dumps({"level": "low"}), encoding="utf-8")
+    entries = il.read_cache_entries(path)
+    assert set(entries) == {il.SCOPE_SITE}
+    assert entries[il.SCOPE_SITE].level == "low"
+
+
+def test_write_cache_refuses_an_unknown_scope(tmp_path):
+    with pytest.raises(il.LoadPolicyError):
+        il.write_cache(tmp_path / "c.json", il.LoadPolicy(level="off"), "galaxy")

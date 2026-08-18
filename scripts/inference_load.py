@@ -60,8 +60,12 @@ Freshness and fail-safe
 -----------------------
 ``ttl_s`` is measured against **local receipt time**, not the publisher's ``ts``
 — a publisher with a skewed clock must not be able to hand out an immortal
-"full load" message. When no fresh policy is available (never received, broker
-down, TTL elapsed) the configured fail-safe applies:
+"full load" message. A payload that omits ``ttl_s`` expires after
+``ANCHOR_LOAD_MAX_AGE`` (default 900s) instead: freshness is the **consumer's**
+guarantee, never something a publisher can opt out of by leaving a field blank.
+Set the ceiling to ``0`` to opt out explicitly. When no fresh policy is available
+(never received, broker down, TTL or ceiling elapsed) the configured fail-safe
+applies:
 
 ======================= ==================================================
 ``hold`` (default)      Treat as ``off`` — safe for shared power/thermal
@@ -91,6 +95,8 @@ Environment (wins over file config):
 ``ANCHOR_MQTT_USERNAME``     broker username
 ``ANCHOR_MQTT_PASSWORD``     broker password (never commit; env only)
 ``ANCHOR_LOAD_FAILSAFE``     ``hold`` | ``last_known`` | ``unrestricted``
+``ANCHOR_LOAD_MAX_AGE``      seconds a policy without ``ttl_s`` stays fresh
+                             (default 900; ``0`` disables the ceiling)
 ``ANCHOR_LOAD_CACHE``        mirror path (default ``<root>/.anchor/inference-load.json``)
 ``ANCHOR_LOAD_DISABLE``      ``1`` to force the governor off
 ===========================  =================================================
@@ -142,6 +148,13 @@ FAILSAFE_HOLD = "hold"
 FAILSAFE_LAST_KNOWN = "last_known"
 FAILSAFE_UNRESTRICTED = "unrestricted"
 FAILSAFES = (FAILSAFE_HOLD, FAILSAFE_LAST_KNOWN, FAILSAFE_UNRESTRICTED)
+
+# Ceiling on how long ANY policy stays fresh, applied when the publisher omits
+# `ttl_s`. Without it the fail-safe is delegated to the publisher's discipline:
+# a retained `{"level":"high"}` would outlive a dead publisher forever, which is
+# exactly the "stale full-load after broker death" failure this module exists to
+# prevent. 0 disables the ceiling (explicit opt-out).
+DEFAULT_MAX_AGE_SECONDS = 900  # 15 minutes
 
 DEFAULT_CACHE_REL = ".anchor/inference-load.json"
 DEFAULT_TOPIC_TMPL = "anchor/v1/sites/{site_id}/inference/load"
@@ -208,11 +221,23 @@ class LoadPolicy:
             return True  # unknown tier: level gate only
         return str(tier).strip().lower() in self.tiers()
 
-    def is_expired(self, now: float | None = None) -> bool:
-        """TTL measured against local receipt, not the publisher's clock."""
-        if not self.ttl_s:
+    def effective_ttl(self, default_ttl_s: int | None = None) -> int | None:
+        """The freshness window that actually applies to this policy.
+
+        The publisher's ``ttl_s`` when it set one, else the consumer's configured
+        ceiling. A publisher cannot opt out of expiry by omitting the field.
+        """
+        if self.ttl_s:
+            return self.ttl_s
+        return default_ttl_s or None
+
+    def is_expired(self, now: float | None = None,
+                   default_ttl_s: int | None = None) -> bool:
+        """Freshness measured against local receipt, not the publisher's clock."""
+        ttl = self.effective_ttl(default_ttl_s)
+        if not ttl:
             return False
-        return (now if now is not None else time.time()) > self.received_at + self.ttl_s
+        return (now if now is not None else time.time()) > self.received_at + ttl
 
     def describe(self) -> str:
         bits = [f"LOAD level={self.level}", f"source={self.source}"]
@@ -417,6 +442,7 @@ class LoadConfig:
     username: str = ""
     password: str = ""
     failsafe: str = FAILSAFE_HOLD
+    max_age_s: int = DEFAULT_MAX_AGE_SECONDS
     cache_path: Path | None = None
 
     def topics(self) -> list[str]:
@@ -443,6 +469,24 @@ def _read_yaml_config(root: Path) -> dict:
             section = data.get("inference_load")
             return section if isinstance(section, dict) else data
     return {}
+
+
+def _max_age(raw: str) -> int:
+    """Parse ANCHOR_LOAD_MAX_AGE. Empty → the default; 0/none → no ceiling."""
+    text = str(raw or "").strip().lower()
+    if not text:
+        return DEFAULT_MAX_AGE_SECONDS
+    if text in {"0", "none", "off", "never"}:
+        return 0
+    try:
+        value = int(text)
+    except ValueError:
+        raise LoadPolicyError(
+            f"ANCHOR_LOAD_MAX_AGE must be whole seconds (or 0/none), got {raw!r}"
+        ) from None
+    if value < 0:
+        raise LoadPolicyError(f"ANCHOR_LOAD_MAX_AGE cannot be negative, got {raw!r}")
+    return value
 
 
 def load_config(root: Path | str = ".", env: dict | None = None) -> LoadConfig:
@@ -478,6 +522,7 @@ def load_config(root: Path | str = ".", env: dict | None = None) -> LoadConfig:
         username=pick("ANCHOR_MQTT_USERNAME", "username"),
         password=env.get("ANCHOR_MQTT_PASSWORD", "") or str(filecfg.get("password", "") or ""),
         failsafe=normalize_failsafe(pick("ANCHOR_LOAD_FAILSAFE", "failsafe") or None),
+        max_age_s=_max_age(pick("ANCHOR_LOAD_MAX_AGE", "max_age")),
         cache_path=cache_path,
     )
     # Opt-in: a broker, an explicit topic, or an existing mirror turns it on.
@@ -492,36 +537,90 @@ def load_config(root: Path | str = ".", env: dict | None = None) -> LoadConfig:
 # Cache mirror (the read path every consumer uses)
 # ---------------------------------------------------------------------------
 
-def read_cache(path: Path) -> LoadPolicy | None:
-    """Read the mirrored policy, or None when absent/unreadable/malformed."""
+SCOPE_SITE = "site"
+SCOPE_PROJECT = "project"
+# Project beats site — the whole point of a per-project topic is a stricter local
+# cap. Listed most-specific first; resolution takes the first fresh entry.
+SCOPE_ORDER = (SCOPE_PROJECT, SCOPE_SITE)
+
+
+def _entry_to_policy(entry: dict, fallback_source: str) -> LoadPolicy | None:
+    payload = entry.get("policy") if isinstance(entry.get("policy"), dict) else entry
     try:
-        raw = json.loads(Path(path).read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
-        return None
-    if not isinstance(raw, dict):
-        return None
-    payload = raw.get("policy") if isinstance(raw.get("policy"), dict) else raw
-    try:
-        policy = LoadPolicy.from_payload(
+        return LoadPolicy.from_payload(
             payload,
-            source=str(raw.get("source") or "file"),
-            received_at=float(raw.get("received_at") or 0.0),
+            source=str(entry.get("source") or fallback_source),
+            received_at=float(entry.get("received_at") or 0.0),
         )
     except (LoadPolicyError, TypeError, ValueError):
         return None
-    return policy
 
 
-def write_cache(path: Path, policy: LoadPolicy) -> Path:
-    """Mirror *policy* to *path* atomically. Returns the path written."""
+def read_cache_entries(path: Path) -> dict[str, LoadPolicy]:
+    """Every mirrored policy by scope. Empty when absent/unreadable/malformed.
+
+    Accepts the single-policy form too (a hand-written mirror, or ``--set``),
+    reading it as the site scope — so a sidecar that knows nothing about scopes
+    keeps working.
+    """
+    try:
+        raw = json.loads(Path(path).read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+    if not isinstance(raw, dict):
+        return {}
+    out: dict[str, LoadPolicy] = {}
+    scoped = raw.get("policies")
+    if isinstance(scoped, dict):
+        for scope, entry in scoped.items():
+            if scope not in SCOPE_ORDER or not isinstance(entry, dict):
+                continue
+            policy = _entry_to_policy(entry, f"file:{scope}")
+            if policy is not None:
+                out[scope] = policy
+        return out
+    policy = _entry_to_policy(raw, "file")
+    if policy is not None:
+        out[SCOPE_SITE] = policy
+    return out
+
+
+def read_cache(path: Path) -> LoadPolicy | None:
+    """The most specific mirrored policy, ignoring freshness.
+
+    Freshness and fail-safe live in :func:`get_load_policy`, which has the config.
+    """
+    entries = read_cache_entries(path)
+    for scope in SCOPE_ORDER:
+        if scope in entries:
+            return entries[scope]
+    return None
+
+
+def write_cache(path: Path, policy: LoadPolicy, scope: str = SCOPE_SITE) -> Path:
+    """Mirror *policy* into *path* under *scope*, atomically.
+
+    Merges rather than replaces: a site heartbeat must not erase a standing
+    per-project override (which is what made the documented precedence inert).
+    """
+    if scope not in SCOPE_ORDER:
+        raise LoadPolicyError(f"unknown scope {scope!r} (expected {SCOPE_ORDER})")
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
-    doc = {
+    doc: dict = {"policies": {}}
+    existing = read_cache_entries(path)
+    for known, known_policy in existing.items():
+        doc["policies"][known] = {
+            "policy": known_policy.to_payload(),
+            "source": known_policy.source,
+            "received_at": known_policy.received_at,
+        }
+    doc["policies"][scope] = {
         "policy": policy.to_payload(),
         "source": policy.source,
         "received_at": policy.received_at or time.time(),
     }
-    tmp = path.with_suffix(path.suffix + ".tmp")
+    tmp = path.with_suffix(path.suffix + f".{os.getpid()}.tmp")
     tmp.write_text(json.dumps(doc, indent=2) + "\n", encoding="utf-8")
     tmp.replace(path)
     return path
@@ -541,12 +640,22 @@ def get_load_policy(root: Path | str = ".", config: LoadConfig | None = None,
     cfg = config if config is not None else load_config(root)
     if not cfg.enabled:
         return UNRESTRICTED
-    policy = read_cache(cfg.cache_path) if cfg.cache_path else None
-    if policy is None:
+    entries = read_cache_entries(cfg.cache_path) if cfg.cache_path else {}
+    if not entries:
         return _failsafe_policy(cfg.failsafe, None)
-    if policy.is_expired(now):
-        return _failsafe_policy(cfg.failsafe, policy)
-    return policy
+    # Project override beats the site policy while it is fresh; a stale override
+    # falls through to the site rather than to the fail-safe, so an abandoned
+    # per-project topic cannot strand a project the site is still governing.
+    newest: LoadPolicy | None = None
+    for scope in SCOPE_ORDER:
+        policy = entries.get(scope)
+        if policy is None:
+            continue
+        if not policy.is_expired(now, cfg.max_age_s):
+            return policy
+        if newest is None or policy.received_at > newest.received_at:
+            newest = policy
+    return _failsafe_policy(cfg.failsafe, newest)
 
 
 def check_local_work(tier: str | None, root: Path | str = ".",
@@ -607,19 +716,27 @@ def endpoint_refusal(endpoint, root: Path | str = ".",
 # MQTT subscriber (the only thing that needs paho-mqtt)
 # ---------------------------------------------------------------------------
 
+def scope_for_topic(cfg: LoadConfig, topic: str) -> str:
+    """Which scope a topic writes to. Anything unrecognized is site-scoped."""
+    if cfg.project_topic and topic == cfg.project_topic:
+        return SCOPE_PROJECT
+    return SCOPE_SITE
+
+
 def apply_message(cfg: LoadConfig, topic: str, payload: str | bytes) -> LoadPolicy | None:
     """Validate one received message and mirror it. Returns None if rejected.
 
     Split out from the paho callback so the accept/reject contract is testable
     without a broker: a malformed payload is dropped, never applied, and can
-    never widen the cap.
+    never widen the cap. The topic decides the scope, so a periodic site
+    heartbeat no longer overwrites a standing project override.
     """
     try:
         policy = LoadPolicy.from_payload(payload, source=f"mqtt:{topic}")
     except LoadPolicyError as exc:
         print(f"[inference_load] ignored bad payload on {topic}: {exc}", file=sys.stderr)
         return None
-    write_cache(cfg.cache_path, policy)
+    write_cache(cfg.cache_path, policy, scope_for_topic(cfg, topic))
     return policy
 
 
@@ -761,7 +878,13 @@ def main(argv: list[str] | None = None) -> int:
 
     print(policy.describe())
     print(f"allowed local tiers: {', '.join(policy.tiers()) or 'none'}")
-    print(f"enabled={cfg.enabled} failsafe={cfg.failsafe} cache={cfg.cache_path}")
+    ceiling = f"{cfg.max_age_s}s" if cfg.max_age_s else "none"
+    print(f"enabled={cfg.enabled} failsafe={cfg.failsafe} max_age={ceiling} "
+          f"cache={cfg.cache_path}")
+    if cfg.enabled and not policy.ttl_s and policy.source.startswith(("mqtt", "file")):
+        note = (f"capped at max_age={cfg.max_age_s}s" if cfg.max_age_s
+                else "NO expiry — the fail-safe cannot engage")
+        print(f"warning: publisher set no ttl_s; {note}")
     if cfg.broker_url:
         print(f"broker={sanitize_broker_url(cfg.broker_url)}")
     if args.tier:

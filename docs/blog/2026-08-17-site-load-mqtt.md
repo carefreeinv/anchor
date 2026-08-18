@@ -61,6 +61,10 @@ First, `ttl_s` is measured against **local receipt time**, not the publisher's
 `ts` field. A publisher with a skewed clock — or a stale retained message —
 cannot hand out an immortal "full load".
 
+A payload that omits `ttl_s` doesn't get to skip expiry either — it ages out
+after `ANCHOR_LOAD_MAX_AGE` (default 15 minutes). Freshness is the consumer's
+guarantee, not something a publisher opts into.
+
 Second, when no fresh policy is available, the default fail-safe is `hold`:
 treat it as `off`. A broker that dies at 2am doesn't silently un-cap your rack.
 Labs that would rather keep working can set `ANCHOR_LOAD_FAILSAFE=last_known`,
