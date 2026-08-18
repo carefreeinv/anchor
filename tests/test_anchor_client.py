@@ -525,3 +525,35 @@ def test_min_completion_tokens_floors_max_tokens(mock_post):
     ep.chat([{"role": "user", "content": "hi"}], max_tokens=32)
 
     assert mock_post.call_args.kwargs["json"]["max_tokens"] == 256
+
+
+def test_endpoint_locality_inferred_from_base_url():
+    private = Endpoint(name="n", tier="executor", base_url="http://10.0.1.10:8000/v1", model="m")
+    cloud = Endpoint(name="n", tier="frontier", base_url="https://api.example.com/v1", model="m")
+    assert private.is_local
+    assert not cloud.is_local
+
+
+def test_endpoint_explicit_local_flag_wins():
+    # A tunnelled public URL that really is your hardware, and a private-range
+    # address that is someone else's problem to power.
+    assert Endpoint(name="n", tier="executor", base_url="https://tunnel.example.com/v1",
+                    model="m", local=True).is_local
+    assert not Endpoint(name="n", tier="executor", base_url="http://10.0.1.10:8000/v1",
+                        model="m", local=False).is_local
+
+
+def test_registry_parses_the_local_field(tmp_path):
+    reg = tmp_path / "endpoints.yaml"
+    reg.write_text(
+        "endpoints:\n"
+        "  - name: box\n    tier: swarm\n    base_url: http://127.0.0.1:11434/v1\n"
+        "    model: qwen3\n    local: true\n"
+        "  - name: cloud\n    tier: frontier\n    base_url: https://api.example.com/v1\n"
+        "    model: big\n",
+        encoding="utf-8",
+    )
+    fleet = Fleet(reg)
+    by_name = {e.name: e for e in fleet.endpoints}
+    assert by_name["box"].is_local
+    assert not by_name["cloud"].is_local

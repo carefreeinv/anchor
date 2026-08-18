@@ -152,3 +152,81 @@ def test_cli_emit_systemd(tmp_path, capsys):
     out = capsys.readouterr().out
     assert ".service" in out
     assert "enable-linger" in out
+
+
+# -- site inference-load passthrough ---------------------------------------
+
+LOAD_ENV = {
+    "ANCHOR_MQTT_URL": "mqtt://broker:1883",
+    "ANCHOR_MQTT_SITE": "garage",
+    "ANCHOR_LOAD_FAILSAFE": "hold",
+    "ANCHOR_MQTT_PASSWORD": "hunter2",
+}
+
+
+def test_unit_carries_load_env_when_configured(tmp_path):
+    project = tmp_path / "app"
+    project.mkdir()
+    (project / ".plans").mkdir()
+    workers = [fw.parse_worker("tier=mid,agent=mid-1,interval=5m")]
+    body = next(
+        c for n, c in fw.emit_systemd(project, Path(fw.SCRIPTS_DIR), workers,
+                                      python="/usr/bin/python3", env=LOAD_ENV)
+        if n.endswith(".service")
+    )
+    assert "Environment=ANCHOR_MQTT_URL=mqtt://broker:1883" in body
+    assert "Environment=ANCHOR_MQTT_SITE=garage" in body
+    assert "Environment=ANCHOR_LOAD_FAILSAFE=hold" in body
+
+
+def test_unit_never_writes_the_broker_password(tmp_path):
+    project = tmp_path / "app"
+    project.mkdir()
+    (project / ".plans").mkdir()
+    workers = [fw.parse_worker("tier=mid,agent=mid-1,interval=5m")]
+    body = next(
+        c for n, c in fw.emit_systemd(project, Path(fw.SCRIPTS_DIR), workers,
+                                      python="/usr/bin/python3", env=LOAD_ENV)
+        if n.endswith(".service")
+    )
+    assert "hunter2" not in body
+    assert "ANCHOR_MQTT_PASSWORD" not in body
+
+
+def test_unit_has_no_load_env_when_unconfigured(tmp_path):
+    project = tmp_path / "app"
+    project.mkdir()
+    (project / ".plans").mkdir()
+    workers = [fw.parse_worker("tier=mid,agent=mid-1,interval=5m")]
+    body = next(
+        c for n, c in fw.emit_systemd(project, Path(fw.SCRIPTS_DIR), workers,
+                                      python="/usr/bin/python3", env={})
+        if n.endswith(".service")
+    )
+    assert "ANCHOR_MQTT" not in body
+    assert "ExecStart=" in body
+
+
+def test_cron_lines_carry_load_env(tmp_path):
+    project = tmp_path / "app"
+    project.mkdir()
+    (project / ".plans").mkdir()
+    workers = [fw.parse_worker("tier=small,agent=swarm-1,interval=10m")]
+    lines = fw.emit_cron_lines(project, Path(fw.SCRIPTS_DIR), workers,
+                               python="/usr/bin/python3", env=LOAD_ENV)
+    body = "\n".join(lines)
+    assert "ANCHOR_MQTT_SITE=garage" in body
+    assert "hunter2" not in body
+
+
+def test_worker_spec_local_flag_reaches_work_once(tmp_path):
+    project = tmp_path / "app"
+    project.mkdir()
+    w = fw.parse_worker("tier=small,agent=swarm-1,local=1")
+    assert w.local is True
+    cmd = fw.work_once_cmd(Path(fw.SCRIPTS_DIR), project, w, python="/usr/bin/python3")
+    assert "--local-worker" in cmd
+    plain = fw.parse_worker("tier=small,agent=swarm-2")
+    assert "--local-worker" not in fw.work_once_cmd(
+        Path(fw.SCRIPTS_DIR), project, plain, python="/usr/bin/python3"
+    )

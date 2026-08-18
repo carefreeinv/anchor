@@ -129,6 +129,27 @@ python work_once.py --path .plans/in-progress/x.md --park blocked --agent-id mid
 
 Shared selection: `plan_select.py` (fit + deps, built on `plan_parse.py`). Claims + moves: `plan_lease.claim_and_move` / `park` / `return_to_ready`.
 
+A worker bound to a **local** endpoint also honors the site inference-load policy: when the published level bars its tier it refuses **before** claiming and exits idle. `--local-worker` marks a tier-only worker as local; `--ignore-load` overrides for one run. See [Site load via MQTT](/tooling/site-load).
+
+## inference_load.py
+
+Site inference-load policy: honor a centrally published cap on **local** inference. Stdlib-only read path — consumers read a JSON mirror (`.anchor/inference-load.json`), and only `--watch` needs `paho-mqtt`. Levels `off|low|mid|high` map to allowed fit tiers; `ttl_s` is measured against local receipt, and a missing/stale/corrupt policy falls back to the configured fail-safe (`hold` by default — treat as `off`). Opt-in: unconfigured projects resolve to `high` from source `disabled`. Cloud tiers are never capped. Full contract: [Site load via MQTT](/tooling/site-load).
+
+```bash
+python inference_load.py --status --tier mid
+python inference_load.py --watch                    # subscribe + mirror
+python inference_load.py --set low --reason grid-peak   # no broker needed
+```
+
+## mqtt_load_publish.py
+
+Operator-side publisher for the level above — same configuration, so a publisher and consumer on one host agree by construction. `--retain` so late workers see the current level (pair it with `--ttl`), `--dry-run` to print the payload, `--mirror` to also write the local cache.
+
+```bash
+python mqtt_load_publish.py off  --reason grid-peak
+python mqtt_load_publish.py high --reason solar-surplus --ttl 900 --retain
+```
+
 ## plan_board.py
 
 Read-only, zero-dependency terminal kanban board for a project's `.plans/`: **Drafts | Ready | In Progress | Review Needed | Completed**, each column sorted by the same Priority → Value → mtime order as `/work`. Header shows rolling 7-day throughput (**Completed** / **Processed** into `review-needed/`), preferring `.plans/logs/*.csv` event files when present and falling back to git-commit-time/mtime otherwise. Each card shows a brief label for its most recent logged event, if any. Never writes to `.plans/`.

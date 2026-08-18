@@ -329,4 +329,5 @@ You should see the same paths with different **fit** columns (`good` / `overqual
 - [Playbook — orchestrator pattern](/playbook)
 - [Model fitness](/model-fitness) — who should take which work
 - [Utility scripts](/tooling/scripts) — `work_once`, `orchestrate`, registry
+- [Site load via MQTT](/tooling/site-load) — cap local inference fleet-wide from one published level
 - Source: `scripts/work_once.py`, `scripts/plan_select.py`, `scripts/plan_lease.py`

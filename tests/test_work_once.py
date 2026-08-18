@@ -409,3 +409,151 @@ def test_park_via_cli(tmp_path, capsys):
     assert code == 0
     assert (root / ".plans" / "ambiguous" / "thin.md").is_file()
     assert "ambiguous" in capsys.readouterr().out
+
+
+# -- site inference-load policy --------------------------------------------
+
+def _registry(tmp_path: Path, *, base_url: str = "http://127.0.0.1:11434/v1",
+              local: str = "") -> Path:
+    reg = tmp_path / "endpoints.yaml"
+    reg.write_text(
+        "endpoints:\n"
+        "  - name: box\n    tier: swarm\n"
+        f"    base_url: {base_url}\n    model: qwen3:4b\n{local}",
+        encoding="utf-8",
+    )
+    return reg
+
+
+def _set_level(root: Path, level: str) -> None:
+    import inference_load as il
+
+    il.write_cache(root / il.DEFAULT_CACHE_REL, il.LoadPolicy(level=level, source="test"))
+
+
+def test_local_worker_does_not_claim_when_level_is_off(tmp_path, capsys):
+    root = _root(tmp_path)
+    _plan(root / ".plans" / "features" / "a.md", preferred="small")
+    _set_level(root, "off")
+    code = work_once.main([
+        "--root", str(root), "--once", "--endpoint", "box",
+        "--registry", str(_registry(tmp_path)), "--agent-id", "w",
+    ])
+    assert code == 1
+    assert "capped" in capsys.readouterr().err
+    # The plan is left in the ready lane, unclaimed and unleased.
+    assert (root / ".plans" / "features" / "a.md").is_file()
+    assert not list((root / ".plans" / ".leases").glob("*.json"))
+
+
+def test_local_worker_claims_when_level_is_full(tmp_path):
+    root = _root(tmp_path)
+    _plan(root / ".plans" / "features" / "a.md", preferred="small")
+    _set_level(root, "high")
+    code = work_once.main([
+        "--root", str(root), "--once", "--endpoint", "box",
+        "--registry", str(_registry(tmp_path)), "--agent-id", "w",
+    ])
+    assert code == 0
+    assert (root / ".plans" / "in-progress" / "a.md").is_file()
+
+
+def test_level_low_bars_a_mid_tier_local_worker(tmp_path, capsys):
+    root = _root(tmp_path)
+    _plan(root / ".plans" / "features" / "a.md", preferred="mid")
+    _set_level(root, "low")
+    reg = _registry(tmp_path)
+    code = work_once.main([
+        "--root", str(root), "--once", "--endpoint", "box", "--tier", "mid",
+        "--registry", str(reg), "--agent-id", "w",
+    ])
+    assert code == 1
+    assert "not allowed at level=low" in capsys.readouterr().err
+
+
+def test_cloud_endpoint_is_never_capped_by_site_load(tmp_path):
+    root = _root(tmp_path)
+    _plan(root / ".plans" / "features" / "a.md", preferred="small")
+    _set_level(root, "off")
+    reg = _registry(tmp_path, base_url="https://api.example.com/v1")
+    code = work_once.main([
+        "--root", str(root), "--once", "--endpoint", "box",
+        "--registry", str(reg), "--agent-id", "w",
+    ])
+    assert code == 0
+    assert (root / ".plans" / "in-progress" / "a.md").is_file()
+
+
+def test_explicit_local_false_opts_a_private_endpoint_out(tmp_path):
+    root = _root(tmp_path)
+    _plan(root / ".plans" / "features" / "a.md", preferred="small")
+    _set_level(root, "off")
+    reg = _registry(tmp_path, base_url="http://10.0.1.10:8000/v1", local="    local: false\n")
+    code = work_once.main([
+        "--root", str(root), "--once", "--endpoint", "box",
+        "--registry", str(reg), "--agent-id", "w",
+    ])
+    assert code == 0
+
+
+def test_ignore_load_overrides_the_cap(tmp_path):
+    root = _root(tmp_path)
+    _plan(root / ".plans" / "features" / "a.md", preferred="small")
+    _set_level(root, "off")
+    code = work_once.main([
+        "--root", str(root), "--once", "--endpoint", "box", "--ignore-load",
+        "--registry", str(_registry(tmp_path)), "--agent-id", "w",
+    ])
+    assert code == 0
+
+
+def test_local_worker_flag_gates_without_an_endpoint(tmp_path, capsys):
+    root = _root(tmp_path)
+    _plan(root / ".plans" / "features" / "a.md", preferred="small")
+    _set_level(root, "off")
+    code = work_once.main([
+        "--root", str(root), "--once", "--tier", "small", "--local-worker",
+        "--agent-id", "w",
+    ])
+    assert code == 1
+    assert "capped" in capsys.readouterr().err
+
+
+def test_tier_worker_without_local_flag_is_not_gated(tmp_path):
+    root = _root(tmp_path)
+    _plan(root / ".plans" / "features" / "a.md", preferred="small")
+    _set_level(root, "off")
+    code = work_once.main([
+        "--root", str(root), "--once", "--tier", "small", "--agent-id", "w",
+    ])
+    assert code == 0
+
+
+def test_unconfigured_site_leaves_local_workers_alone(tmp_path):
+    root = _root(tmp_path)
+    _plan(root / ".plans" / "features" / "a.md", preferred="small")
+    code = work_once.main([
+        "--root", str(root), "--once", "--endpoint", "box",
+        "--registry", str(_registry(tmp_path)), "--agent-id", "w",
+    ])
+    assert code == 0
+    assert (root / ".plans" / "in-progress" / "a.md").is_file()
+
+
+def test_stale_policy_holds_local_work_by_default(tmp_path, capsys):
+    import time
+
+    import inference_load as il
+
+    root = _root(tmp_path)
+    _plan(root / ".plans" / "features" / "a.md", preferred="small")
+    il.write_cache(
+        root / il.DEFAULT_CACHE_REL,
+        il.LoadPolicy(level="high", ttl_s=30, received_at=time.time() - 600),
+    )
+    code = work_once.main([
+        "--root", str(root), "--once", "--endpoint", "box",
+        "--registry", str(_registry(tmp_path)), "--agent-id", "w",
+    ])
+    assert code == 1
+    assert "failsafe:hold" in capsys.readouterr().err

@@ -161,6 +161,8 @@ FLEET_FILES: list[str] = [
     "scripts/worktree_for_agent.py",
     "scripts/batch_dispatch.py",
     "scripts/fleet_watch.py",
+    "scripts/inference_load.py",
+    "scripts/mqtt_load_publish.py",
     "scripts/prompt_tuner.py",
     "scripts/router.py",
     "scripts/benchmark.py",

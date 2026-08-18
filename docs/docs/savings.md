@@ -204,6 +204,8 @@ Hardware is capex or rent (Mac Mini → H100). Payback is often weeks to a few m
 
 Once Anchor has moved a large slice of work **off API meters**, the residual cost of that slice is mostly **hardware amort + electricity**. Solar does not replace the orchestrator pattern — it attacks the **power line** of owned iron so always-on executors (Mac Minis, desktop towers, small GPU boxes, even denser fleets) run closer to pure amort.
 
+Power policy has an operational half too: [Site load via MQTT](/tooling/site-load) lets one published level cap **local inference** across every Anchor project on a site, so grid peaks, thermal limits, or a shared UPS throttle the fleet instead of the fleet throttling the site.
+
 ```mermaid
 flowchart LR
   api["Frontier / mid API bill"]

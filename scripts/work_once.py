@@ -28,9 +28,14 @@ Usage:
   python work_once.py --max-plans 3 --tier small --print-only
   python work_once.py --slug fix-login --no-fit-check --run
 
+A worker bound to a **local** endpoint also honors the site inference-load policy
+(``inference_load.py``): when the published level bars this worker's tier, the run
+refuses **before** claiming and exits idle, so a capped site never leaves plans
+parked under a lease nobody is running. Opt-in; unconfigured sites are unaffected.
+
 Exit codes:
   0  listed or at least one plan picked/claimed (or --max-plans completed)
-  1  nothing to do (empty backlog / no fit / claim failures only)
+  1  nothing to do (empty backlog / no fit / load-capped / claim failures only)
   2  usage or hard error (missing tree, blocked path, etc.)
 """
 from __future__ import annotations
@@ -41,6 +46,7 @@ import subprocess
 import sys
 from pathlib import Path
 
+from inference_load import check_local_work, endpoint_is_local, load_config
 import plan_store
 from plan_lease import (
     DEFAULT_TTL_SECONDS,
@@ -68,8 +74,8 @@ from plan_select import (
 )
 
 
-def _load_endpoint(registry: Path | None, name: str) -> tuple[str, str]:
-    """Return (model_or_name, fit_tier) from endpoints.yaml."""
+def _load_endpoint(registry: Path | None, name: str) -> tuple[str, str, bool]:
+    """Return (model_or_name, fit_tier, is_local) from endpoints.yaml."""
     try:
         import yaml  # type: ignore
     except ImportError:
@@ -94,7 +100,7 @@ def _load_endpoint(registry: Path | None, name: str) -> tuple[str, str]:
             reg_tier = str(ep.get("tier") or "executor")
             fit = REGISTRY_TIER_TO_FIT.get(reg_tier, normalize_fit_tier(reg_tier))
             model = str(ep.get("model") or name)
-            return model, fit
+            return model, fit, endpoint_is_local(ep)
     raise SystemExit(f"endpoint {name!r} not found in {path}")
 
 
@@ -112,6 +118,12 @@ def _parse_endpoints_crude(text: str) -> list[dict]:
             current["tier"] = stripped.split(":", 1)[1].strip()
         elif current is not None and stripped.startswith("model:"):
             current["model"] = stripped.split(":", 1)[1].strip()
+        elif current is not None and stripped.startswith("base_url:"):
+            # Needed for locality: without it the load governor could not tell a
+            # local box from a cloud tier when PyYAML is unavailable.
+            current["base_url"] = stripped.split(":", 1)[1].strip()
+        elif current is not None and stripped.startswith("local:"):
+            current["local"] = stripped.split(":", 1)[1].strip()
     if current:
         endpoints.append(current)
     return endpoints
@@ -122,9 +134,10 @@ def resolve_worker(args: argparse.Namespace) -> Worker:
 
     effort = getattr(args, "effort", None)
     if args.endpoint:
-        model, tier = _load_endpoint(
+        model, tier, is_local = _load_endpoint(
             Path(args.registry) if args.registry else None, args.endpoint
         )
+        args.endpoint_is_local = is_local
         name = args.model or model
         if args.tier:
             tier = normalize_fit_tier(args.tier)
@@ -134,6 +147,28 @@ def resolve_worker(args: argparse.Namespace) -> Worker:
     name = args.model or "work-once"
     tier = normalize_fit_tier(args.tier or "mid")
     return worker_with_effort(name, tier, effort)
+
+
+def load_gate(root: Path, worker: Worker, args: argparse.Namespace) -> str | None:
+    """Refusal reason when the site load policy bars this worker, else None.
+
+    Only **local-bound** workers are gated: one resolved to a local endpoint, or
+    one told it is local with ``--local-worker``. A worker driving a cloud tier
+    is never blocked by a site power policy — that is the constraint the whole
+    governor rests on.
+    """
+    if getattr(args, "ignore_load", False):
+        return None
+    is_local = bool(getattr(args, "local_worker", False)) or bool(
+        getattr(args, "endpoint_is_local", False)
+    )
+    if not is_local:
+        return None
+    cfg = load_config(root)
+    if not cfg.enabled:
+        return None
+    allowed, reason, _policy = check_local_work(worker.tier, root, cfg)
+    return None if allowed else reason
 
 
 def run_orchestrate(plan_path: Path, extra: list[str]) -> int:
@@ -399,6 +434,19 @@ def main(argv: list[str] | None = None) -> int:
         "--endpoint",
         help="resolve model+tier from endpoints.yaml by endpoint name",
     )
+    ap.add_argument(
+        "--local-worker",
+        action="store_true",
+        help=(
+            "treat this worker as local inference even without --endpoint, so the "
+            "site load policy (inference_load.py) can cap it"
+        ),
+    )
+    ap.add_argument(
+        "--ignore-load",
+        action="store_true",
+        help="bypass the site inference-load policy for this run (operator override)",
+    )
     ap.add_argument("--registry", help="path to endpoints.yaml")
     ap.add_argument(
         "--agent-id",
@@ -614,6 +662,14 @@ def main(argv: list[str] | None = None) -> int:
         return cmd_triage(
             plans_root, worker, args.agent_id, ignore_deps=args.no_dep_check
         )
+
+    # Site load policy: refuse *before* claiming, so a capped site leaves the
+    # backlog untouched rather than parking plans under a lease it cannot run.
+    # Idle (exit 1), not failure — systemd units already treat 1 as "nothing to do".
+    refusal = load_gate(root, worker, args)
+    if refusal is not None:
+        print(f"[work_once] {refusal} — not claiming", file=sys.stderr)
+        return 1
 
     max_n = args.max_plans
     if max_n is None:

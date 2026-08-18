@@ -5,6 +5,12 @@
 #   swarm→small, executor|executor-heavy|detached→mid, reasoner→reasoner, frontier→frontier
 # Example: python scripts/work_once.py --once --endpoint h100-executor --registry scripts/endpoints.yaml
 #
+# local: true|false                 optional, per endpoint (NOT a quirk) — does this run on
+#                                  hardware you power? Only local endpoints are capped by the
+#                                  site inference-load governor (scripts/inference_load.py).
+#                                  Unset = inferred from base_url (loopback / private ranges /
+#                                  .local hostnames). Cloud tiers are never local.
+#
 # quirks (full reference in anchor_client.py; per-model guidance in platforms/local-models/):
 #   system_role: fold_into_user      Gemma 3 (no system slot) AND DeepSeek-R1 distills
 #                                    (official guidance: no system prompt)
@@ -24,6 +30,7 @@ endpoints:
     tier: executor-heavy
     base_url: http://10.0.1.10:8000/v1
     model: Qwen/Qwen3-32B-FP8
+    local: true          # your rack, your power bill — subject to the load governor
     quirks:
       think_toggle: qwen3
       strip_think: true

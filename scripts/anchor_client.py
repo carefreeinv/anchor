@@ -27,6 +27,12 @@ model-agnostic. Supported quirk keys (set per endpoint in endpoints.yaml):
   reasoning_effort: low|medium|high|xhigh
                                 Grok-family dial; sent as reasoning_effort on
                                 the OpenAI-compatible request body
+
+Endpoints also carry an optional top-level ``local: true|false`` (not a quirk) —
+whether this endpoint runs on hardware the operator powers. It is what the site
+inference-load governor caps (see ``inference_load.py``); when unset, locality is
+inferred from the base URL. Cloud tiers are never local, so a load policy can
+never silently block them.
 """
 from __future__ import annotations
 
@@ -38,6 +44,11 @@ from pathlib import Path
 
 import requests
 import yaml
+
+try:
+    from inference_load import endpoint_is_local
+except ImportError:  # standalone copy of this file, without the load governor
+    endpoint_is_local = None
 
 
 class EmptyAssistantText(RuntimeError):
@@ -171,6 +182,21 @@ class Endpoint:
     quirks: dict = field(default_factory=dict)
     # Set after a 400 on body `think` so later calls (and budget retries) skip it.
     _think_unsupported: bool = field(default=False, init=False, repr=False)
+    local: bool | None = None
+
+    @property
+    def is_local(self) -> bool:
+        """Does this endpoint run on hardware the operator powers?
+
+        Explicit ``local:`` in the registry wins; otherwise the base URL decides
+        (loopback / private ranges / ``.local``-style hostnames). Only local
+        endpoints are subject to the site inference-load cap.
+        """
+        if self.local is not None:
+            return bool(self.local)
+        if endpoint_is_local is None:
+            return False
+        return endpoint_is_local({"base_url": self.base_url})
 
     def chat(self, messages: list[dict], *, thinking: bool = False,
              temperature: float | None = None, max_tokens: int = 4096,

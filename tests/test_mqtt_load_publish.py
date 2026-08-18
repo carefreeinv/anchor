@@ -1,0 +1,87 @@
+"""Publisher → subscriber round trip, without a broker.
+
+``apply_message`` is exactly what the paho callback runs on a received message,
+so feeding it the publisher's own payload proves the two halves agree on the
+wire format.
+"""
+from __future__ import annotations
+
+import json
+
+import inference_load as il
+import mqtt_load_publish as pub
+
+
+def test_published_payload_is_accepted_by_the_subscriber(tmp_path):
+    cfg = il.LoadConfig(enabled=True, cache_path=tmp_path / "cache.json")
+    policy = pub.build_policy("low", reason="grid-peak", ttl=300, max_concurrent=1,
+                              site_id="garage")
+    wire = json.dumps(policy.to_payload())
+
+    applied = il.apply_message(cfg, "anchor/v1/sites/garage/inference/load", wire)
+    assert applied is not None
+    assert applied.level == "low"
+    assert applied.reason == "grid-peak"
+    assert applied.ttl_s == 300
+    assert applied.max_concurrent_local == 1
+
+    # …and the consumer path now reports it
+    resolved = il.get_load_policy(tmp_path, cfg)
+    assert resolved.level == "low"
+    assert resolved.allows_tier("small")
+    assert not resolved.allows_tier("mid")
+
+
+def test_subscriber_drops_a_malformed_message_without_widening_the_cap(tmp_path):
+    cfg = il.LoadConfig(enabled=True, cache_path=tmp_path / "cache.json")
+    il.write_cache(cfg.cache_path, pub.build_policy("off", reason="grid-peak"))
+
+    assert il.apply_message(cfg, "site/topic", "{ not json") is None
+    assert il.apply_message(cfg, "site/topic", '{"level": "wide-open"}') is None
+    # The standing cap survives the bad messages.
+    assert il.get_load_policy(tmp_path, cfg).level == "off"
+
+
+def test_allowed_tiers_survive_the_round_trip(tmp_path):
+    cfg = il.LoadConfig(enabled=True, cache_path=tmp_path / "cache.json")
+    policy = pub.build_policy("low", allowed_tiers=["small", "MID"])
+    applied = il.apply_message(cfg, "t", json.dumps(policy.to_payload()))
+    assert applied.allowed_tiers == ("small", "mid")
+    assert il.get_load_policy(tmp_path, cfg).allows_tier("mid")
+
+
+def test_build_policy_stamps_an_iso_timestamp():
+    policy = pub.build_policy("high")
+    assert policy.ts.endswith("Z")
+    assert policy.level == "high"
+
+
+def test_build_policy_rejects_an_unknown_level():
+    import pytest
+
+    with pytest.raises(il.LoadPolicyError):
+        pub.build_policy("medium")
+
+
+def test_cli_dry_run_prints_payload_and_sends_nothing(tmp_path, capsys):
+    code = pub.main(["off", "--root", str(tmp_path), "--reason", "grid-peak", "--dry-run"])
+    assert code == 0
+    out = capsys.readouterr()
+    doc = json.loads(out.out)
+    assert doc["level"] == "off"
+    assert doc["reason"] == "grid-peak"
+
+
+def test_cli_rejects_an_unknown_level(tmp_path, capsys):
+    assert pub.main(["medium", "--root", str(tmp_path), "--dry-run"]) == 2
+    assert "unknown load level" in capsys.readouterr().err
+
+
+def test_cli_warns_when_retaining_without_a_ttl(tmp_path, capsys):
+    pub.main(["high", "--root", str(tmp_path), "--retain", "--dry-run"])
+    assert "without --ttl" in capsys.readouterr().err
+
+
+def test_cli_refuses_without_a_broker(tmp_path, capsys):
+    assert pub.main(["off", "--root", str(tmp_path)]) == 2
+    assert "no broker" in capsys.readouterr().err

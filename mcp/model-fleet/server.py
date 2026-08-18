@@ -41,6 +41,11 @@ for _scripts in (REPO / ".anchor" / "scripts", REPO / "scripts"):
         break
 
 from anchor_client import Fleet, has_required_footer, load_prompt, project_root_from  # noqa: E402
+from inference_load import (  # noqa: E402
+    endpoint_refusal,
+    get_load_policy,
+    load_config,
+)
 from router import endpoint_detail, summarize_endpoints  # noqa: E402
 
 REPO = project_root_from(Path(__file__))
@@ -56,14 +61,29 @@ def fleet() -> Fleet:
     return _fleet
 
 
+def load_refusal(endpoint, root=None) -> str | None:  # noqa: ANN001 — anchor_client.Endpoint
+    """Site-load refusal for *endpoint* (see inference_load.endpoint_refusal)."""
+    return endpoint_refusal(endpoint, root or REPO)
+
+
 @mcp.tool()
 def list_fleet() -> str:
     """One capped summary line per fleet endpoint (name, tier, context size, capability
     phrase) plus role→tier routing. Deliberately no base_url/model/quirk detail — call
-    lookup_endpoint(name) for full non-secret detail on one endpoint you actually need."""
+    lookup_endpoint(name) for full non-secret detail on one endpoint you actually need.
+
+    Local endpoints and the site inference-load level are appended when a load
+    policy is configured."""
     f = fleet()
     lines = summarize_endpoints(f)
     lines.append("\nroles: " + ", ".join(f"{r}→{t}" for r, t in f.roles.items()))
+    cfg = load_config(REPO)
+    if cfg.enabled:
+        policy = get_load_policy(REPO, cfg)
+        lines.append(
+            f"\nsite load: {policy.describe()} — local tiers allowed: "
+            f"{', '.join(policy.tiers()) or 'none'}"
+        )
     return "\n".join(lines)
 
 
@@ -82,8 +102,13 @@ def delegate(task_spec: str, role: str = "executor", thinking: bool = False) -> 
     """Send a self-contained Anchor task spec to the fleet; returns the worker's output.
     role: executor | critic | tuner | planner. The spec must contain everything the
     worker needs — fleet workers have NO access to this conversation.
-    Output is format-checked; a missing footer is returned as an error for retry."""
+    Output is format-checked; a missing footer is returned as an error for retry.
+    If the picked endpoint is local and the site inference-load policy bars it, the
+    call returns a LOAD-LIMITED refusal immediately instead of sending work."""
     ep = fleet().pick(role)
+    refused = load_refusal(ep)
+    if refused:
+        return refused
     system = load_prompt("anchor/system-prompts/mythos-core.md")
     out = ep.chat([{"role": "system", "content": system},
                    {"role": "user", "content": task_spec}],
@@ -107,6 +132,11 @@ def delegate_parallel_review(task_spec: str, work: str) -> str:
     verdicts = []
     for i in range(2):
         ep = f.pick("critic")
+        # Two independent passes are the point; running only one because the
+        # other endpoint is capped would silently weaken the check.
+        refused = load_refusal(ep)
+        if refused:
+            return refused
         out = ep.chat([{"role": "system", "content": system},
                        {"role": "user", "content": prompt}], thinking=True)
         v = "ACCEPT" if "ACCEPT" in out.upper() else ("REVISE" if "REVISE" in out.upper() else "ESCALATE")
@@ -120,14 +150,18 @@ def delegate_parallel_review(task_spec: str, work: str) -> str:
 
 @mcp.tool()
 def fleet_health() -> str:
-    """Ping every endpoint with a 1-token request; report reachable/unreachable."""
+    """Ping every endpoint with a 1-token request; report reachable/unreachable.
+
+    Diagnostics stay ungated by the load policy — you need to see a box come back
+    before the cap lifts — but capped endpoints are labelled."""
     results = []
     for e in fleet().endpoints:
+        capped = " CAPPED" if load_refusal(e) else ""
         try:
             e.chat([{"role": "user", "content": "ping"}], max_tokens=1, timeout=15)
-            results.append(f"OK    {e.name} [{e.tier}]")
+            results.append(f"OK    {e.name} [{e.tier}]{capped}")
         except Exception as ex:
-            results.append(f"DOWN  {e.name} [{e.tier}] — {str(ex)[:80]}")
+            results.append(f"DOWN  {e.name} [{e.tier}]{capped} — {str(ex)[:80]}")
     return "\n".join(results)
 
 
