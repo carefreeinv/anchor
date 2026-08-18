@@ -11,6 +11,7 @@ Usage:
   python scripts/mqtt_load_publish.py low  --ttl 300 --max-concurrent 1
   python scripts/mqtt_load_publish.py high --reason solar-surplus --retain
   python scripts/mqtt_load_publish.py mid  --dry-run          # print, don't send
+  python scripts/mqtt_load_publish.py off  --project          # one project only
 
 Broker and topic come from the same configuration ``inference_load`` reads
 (``ANCHOR_MQTT_URL``, ``ANCHOR_MQTT_SITE``, ``ANCHOR_MQTT_TOPIC``, …), so a
@@ -41,6 +42,25 @@ from inference_load import (
 )
 
 
+def resolve_topic(cfg, *, scope: str = "auto", explicit: str = "") -> tuple[str, str]:
+    """``(topic, scope)`` to publish to.
+
+    ``ANCHOR_MQTT_PROJECT`` is the same variable consumers set, so defaulting to
+    the project topic silently narrowed a site-wide cap to one project. The
+    default is now the **site** topic; ``--project`` opts into the override and
+    ``--topic`` forces a literal one.
+    """
+    if explicit:
+        return explicit, "explicit"
+    if scope == "project":
+        if not cfg.project_topic:
+            raise LoadPolicyError(
+                "--project needs ANCHOR_MQTT_SITE and ANCHOR_MQTT_PROJECT set"
+            )
+        return cfg.project_topic, "project"
+    return cfg.topic, "site"
+
+
 def build_policy(level: str, *, reason: str = "", ttl: int | None = None,
                  max_concurrent: int | None = None,
                  allowed_tiers: list[str] | None = None,
@@ -59,7 +79,7 @@ def build_policy(level: str, *, reason: str = "", ttl: int | None = None,
     )
 
 
-def publish(cfg, policy: LoadPolicy, *, retain: bool = False,
+def publish(cfg, policy: LoadPolicy, topic: str, *, retain: bool = False,
             timeout: float = 10.0) -> int:
     """Send one message. Returns an exit code."""
     try:
@@ -71,7 +91,6 @@ def publish(cfg, policy: LoadPolicy, *, retain: bool = False,
     if not cfg.broker_url:
         print("[mqtt_load_publish] no broker: set ANCHOR_MQTT_URL", file=sys.stderr)
         return 2
-    topic = cfg.project_topic or cfg.topic
     if not topic:
         print("[mqtt_load_publish] no topic: set ANCHOR_MQTT_SITE or ANCHOR_MQTT_TOPIC",
               file=sys.stderr)
@@ -122,9 +141,14 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--ttl", type=int, default=None,
                     help="ttl_s — consumers fall back to their fail-safe after this")
     ap.add_argument("--max-concurrent", type=int, default=None,
-                    help="max_concurrent_local hint for consumers")
+                    help="max_concurrent_local — ADVISORY metadata only; no consumer "
+                         "enforces a concurrency cap today")
     ap.add_argument("--allowed-tiers", default="",
                     help="comma-separated fit tiers, overriding the level default")
+    ap.add_argument("--project", action="store_true",
+                    help="publish the per-project override topic instead of the site topic")
+    ap.add_argument("--topic", default="",
+                    help="publish to this literal topic (overrides --project)")
     ap.add_argument("--retain", action="store_true",
                     help="retain the message so late-starting workers see it")
     ap.add_argument("--dry-run", action="store_true", help="print the payload; send nothing")
@@ -150,15 +174,36 @@ def main(argv: list[str] | None = None) -> int:
         print("[mqtt_load_publish] warning: --retain without --ttl leaves this level "
               "standing until it is replaced", file=sys.stderr)
 
+    try:
+        topic, scope = resolve_topic(
+            cfg, scope="project" if args.project else "site", explicit=args.topic
+        )
+    except LoadPolicyError as exc:
+        print(f"[mqtt_load_publish] {exc}", file=sys.stderr)
+        return 2
+
+    # Always say where this is going — narrowing a site cap to one project by
+    # accident is the kind of mistake that only shows up as an unexplained
+    # still-running fleet.
+    print(f"topic: {topic or '(unset)'} [{scope}]", file=sys.stderr)
+
     if args.dry_run:
         print(json.dumps(policy.to_payload(), indent=2))
-        print(f"topic: {cfg.project_topic or cfg.topic or '(unset)'}", file=sys.stderr)
         return 0
 
-    code = publish(cfg, policy, retain=args.retain)
+    code = publish(cfg, policy, topic, retain=args.retain)
     if args.mirror and cfg.cache_path:
-        write_cache(cfg.cache_path, policy)
-        print(f"mirrored → {cfg.cache_path}")
+        if code != 0:
+            print(
+                "[mqtt_load_publish] publish failed — not mirroring locally "
+                "(a local-only level would leave this project out of step with "
+                "the rest of the site)",
+                file=sys.stderr,
+            )
+        else:
+            write_cache(cfg.cache_path, policy,
+                        "project" if scope == "project" else "site")
+            print(f"mirrored → {cfg.cache_path}")
     return code
 
 

@@ -88,7 +88,7 @@ abandoned per-project topic cannot strand a project the site is still governing.
 ```json
 {
   "level": "low",
-  "max_concurrent_local": 1,
+  "max_concurrent_local": 1,          // advisory only — see below
   "allowed_tiers": ["small", "mid"],
   "reason": "grid-peak",
   "site_id": "garage",
@@ -99,6 +99,11 @@ abandoned per-project topic cannot strand a project the site is still governing.
 
 Only `level` is required. An explicit `allowed_tiers` replaces the level's
 default row; `level: off` denies regardless.
+
+`max_concurrent_local` is **advisory metadata**: it is carried, mirrored, and
+shown, but nothing enforces a concurrency cap today — a per-invocation, file-only
+read path cannot count what other processes are doing. Use `level` and
+`allowed_tiers` for anything that must actually bite.
 
 ## Freshness and fail-safe
 
@@ -186,7 +191,16 @@ python scripts/inference_load.py --watch
 python scripts/mqtt_load_publish.py off  --reason grid-peak
 python scripts/mqtt_load_publish.py high --reason solar-surplus --ttl 900 --retain
 python scripts/mqtt_load_publish.py mid  --dry-run        # print the payload only
+
+# Cap one project instead of the whole site
+python scripts/mqtt_load_publish.py off  --project --reason thermal
 ```
+
+The publisher defaults to the **site** topic even when `ANCHOR_MQTT_PROJECT` is
+exported (that variable is what *consumers* set, so defaulting to it would
+silently narrow a site-wide cap to one project). `--project` opts into the
+override topic and `--topic` forces a literal one; the resolved topic is always
+printed.
 
 Retained messages are recommended so a worker starting later still sees the
 current level — pair `--retain` with `--ttl` so a retained `high` cannot outlive
@@ -199,6 +213,21 @@ any `user:pass@` userinfo in `ANCHOR_MQTT_URL` is **stripped** before the value 
 written (that credential is not used for auth anyway — only the host and port are
 read from the URL). Supply credentials through `ANCHOR_MQTT_USERNAME` /
 `ANCHOR_MQTT_PASSWORD` via a credential file or a systemd drop-in.
+
+## Supervise the writer
+
+The readers are timers; the **mirror writer** is a daemon. If a broker is
+configured and nothing runs `--watch`, the default `hold` fail-safe leaves the
+fleet permanently capped with no explanation beyond `source=failsafe:hold` — so
+emit a unit for it alongside the workers:
+
+```bash
+python scripts/fleet_watch.py --project . --emit systemd --load-watcher \
+  --worker tier=mid,agent=mid-1,interval=5m
+```
+
+That adds `anchor-load-watch-<project>.service` (`Type=simple`, `Restart=always`)
+next to the worker timers.
 
 ## Security
 

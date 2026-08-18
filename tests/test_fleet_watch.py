@@ -262,3 +262,31 @@ def test_cron_lines_strip_credentials_embedded_in_the_broker_url(tmp_path):
                                         python="/usr/bin/python3", env=env))
     assert "s3cret" not in body
     assert "mqtt://broker.example:8883" in body
+
+
+# -- M7: the mirror writer gets supervised too -----------------------------
+
+def test_load_watcher_unit_is_emitted_on_request(tmp_path):
+    project = tmp_path / "app"
+    project.mkdir()
+    (project / ".plans").mkdir()
+    workers = [fw.parse_worker("tier=mid,agent=mid-1,interval=5m")]
+    files = fw.emit_systemd(project, Path(fw.SCRIPTS_DIR), workers,
+                            python="/usr/bin/python3", env=LOAD_ENV, load_watcher=True)
+    names = [n for n, _ in files]
+    assert any("anchor-load-watch-" in n for n in names)
+    body = next(c for n, c in files if "anchor-load-watch-" in n)
+    assert "inference_load.py" in body and "--watch" in body
+    assert "Restart=always" in body          # the readers are timers; this is a daemon
+    assert "Type=simple" in body
+    assert "hunter2" not in body and "opuser" not in body
+
+
+def test_no_load_watcher_unit_by_default(tmp_path):
+    project = tmp_path / "app"
+    project.mkdir()
+    (project / ".plans").mkdir()
+    workers = [fw.parse_worker("tier=mid,agent=mid-1,interval=5m")]
+    files = fw.emit_systemd(project, Path(fw.SCRIPTS_DIR), workers,
+                            python="/usr/bin/python3", env={})
+    assert not any("anchor-load-watch-" in n for n, _ in files)

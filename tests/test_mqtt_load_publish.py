@@ -85,3 +85,67 @@ def test_cli_warns_when_retaining_without_a_ttl(tmp_path, capsys):
 def test_cli_refuses_without_a_broker(tmp_path, capsys):
     assert pub.main(["off", "--root", str(tmp_path)]) == 2
     assert "no broker" in capsys.readouterr().err
+
+
+# -- M4: the publisher must not silently narrow to one project -------------
+
+def _cfg_with_project(tmp_path):
+    return il.load_config(tmp_path, env={
+        "ANCHOR_MQTT_URL": "mqtt://broker:1883",
+        "ANCHOR_MQTT_SITE": "garage",
+        "ANCHOR_MQTT_PROJECT": "anchor",
+    })
+
+
+def test_default_scope_is_the_site_even_when_a_project_is_configured(tmp_path):
+    cfg = _cfg_with_project(tmp_path)
+    topic, scope = pub.resolve_topic(cfg)
+    assert scope == "site"
+    assert topic == "anchor/v1/sites/garage/inference/load"
+
+
+def test_project_flag_opts_into_the_override_topic(tmp_path):
+    cfg = _cfg_with_project(tmp_path)
+    topic, scope = pub.resolve_topic(cfg, scope="project")
+    assert scope == "project"
+    assert topic == "anchor/v1/sites/garage/projects/anchor/load"
+
+
+def test_project_flag_without_config_is_refused(tmp_path):
+    import pytest
+
+    cfg = il.load_config(tmp_path, env={"ANCHOR_MQTT_SITE": "garage"})
+    with pytest.raises(il.LoadPolicyError):
+        pub.resolve_topic(cfg, scope="project")
+
+
+def test_explicit_topic_wins(tmp_path):
+    cfg = _cfg_with_project(tmp_path)
+    assert pub.resolve_topic(cfg, scope="project", explicit="x/y") == ("x/y", "explicit")
+
+
+def test_cli_always_reports_the_resolved_topic(tmp_path, capsys, monkeypatch):
+    monkeypatch.setenv("ANCHOR_MQTT_SITE", "garage")
+    monkeypatch.setenv("ANCHOR_MQTT_PROJECT", "anchor")
+    pub.main(["off", "--root", str(tmp_path), "--dry-run"])
+    err = capsys.readouterr().err
+    assert "anchor/v1/sites/garage/inference/load [site]" in err
+
+
+# -- M5: a failed publish must not leave a local-only level ----------------
+
+def test_mirror_is_not_written_when_the_publish_fails(tmp_path, capsys, monkeypatch):
+    monkeypatch.setenv("ANCHOR_MQTT_SITE", "garage")
+    monkeypatch.setattr(pub, "publish", lambda *a, **k: 1)   # broker unreachable
+    code = pub.main(["off", "--root", str(tmp_path), "--mirror"])
+    assert code == 1
+    assert not (tmp_path / il.DEFAULT_CACHE_REL).exists()
+    assert "not mirroring locally" in capsys.readouterr().err
+
+
+def test_mirror_is_written_on_a_successful_publish(tmp_path, monkeypatch):
+    monkeypatch.setenv("ANCHOR_MQTT_SITE", "garage")
+    monkeypatch.setattr(pub, "publish", lambda *a, **k: 0)
+    assert pub.main(["low", "--root", str(tmp_path), "--mirror"]) == 0
+    entries = il.read_cache_entries(tmp_path / il.DEFAULT_CACHE_REL)
+    assert entries[il.SCOPE_SITE].level == "low"

@@ -557,3 +557,16 @@ def test_registry_parses_the_local_field(tmp_path):
     by_name = {e.name: e for e in fleet.endpoints}
     assert by_name["box"].is_local
     assert not by_name["cloud"].is_local
+
+
+def test_endpoint_locality_agrees_with_the_shared_helper():
+    # The two used to disagree on string values: `local: "false"` was falsy to
+    # one and truthy to the other, so a project could be governed differently
+    # by work_once and by the MCP.
+    import inference_load as il
+
+    for raw in ("true", "false", "yes", "no", "on", "off", "1", "0", "bogus", None):
+        entry = {"local": raw, "base_url": "http://10.0.1.10:8000/v1"}
+        ep = Endpoint(name="n", tier="swarm", base_url=entry["base_url"], model="m",
+                      local=raw)
+        assert ep.is_local == il.endpoint_is_local(entry), f"disagreement for {raw!r}"

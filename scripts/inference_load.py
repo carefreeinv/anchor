@@ -161,6 +161,22 @@ DEFAULT_TOPIC_TMPL = "anchor/v1/sites/{site_id}/inference/load"
 PROJECT_TOPIC_TMPL = "anchor/v1/sites/{site_id}/projects/{project}/load"
 
 
+def _parse_ts(value: str) -> float | None:
+    """Epoch seconds for an ISO-8601 publisher timestamp, or None if unusable."""
+    text = str(value or "").strip()
+    if not text:
+        return None
+    from datetime import datetime, timezone
+
+    try:
+        parsed = datetime.fromisoformat(text.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.timestamp()
+
+
 class LoadPolicyError(ValueError):
     """Malformed load payload. Never resolved by guessing a level."""
 
@@ -224,20 +240,39 @@ class LoadPolicy:
     def effective_ttl(self, default_ttl_s: int | None = None) -> int | None:
         """The freshness window that actually applies to this policy.
 
-        The publisher's ``ttl_s`` when it set one, else the consumer's configured
-        ceiling. A publisher cannot opt out of expiry by omitting the field.
+        The publisher's ``ttl_s`` when it set one — **including ``0``**, which
+        means "stale on arrival" rather than "no expiry" — else the consumer's
+        configured ceiling. A publisher cannot opt out of expiry by omitting the
+        field.
         """
-        if self.ttl_s:
+        if self.ttl_s is not None:
             return self.ttl_s
         return default_ttl_s or None
 
+    def age(self, now: float | None = None) -> float:
+        """Seconds since this policy was current, erring **older**.
+
+        Normally local receipt time. When the publisher stamped a ``ts``, an older
+        publisher clock wins: a retained message redelivered after a broker
+        reconnect gets a fresh ``received_at``, which would otherwise revive an
+        abandoned level indefinitely. The publisher's timestamp can only make a
+        message look older, never fresher — so a skewed or future ``ts`` still
+        cannot extend anything.
+        """
+        now = now if now is not None else time.time()
+        local_age = now - self.received_at
+        published = _parse_ts(self.ts)
+        if published is not None:
+            return max(local_age, now - published)
+        return local_age
+
     def is_expired(self, now: float | None = None,
                    default_ttl_s: int | None = None) -> bool:
-        """Freshness measured against local receipt, not the publisher's clock."""
+        """Freshness measured against local receipt, never extended by a publisher."""
         ttl = self.effective_ttl(default_ttl_s)
-        if not ttl:
+        if ttl is None:
             return False
-        return (now if now is not None else time.time()) > self.received_at + ttl
+        return self.age(now) > ttl
 
     def describe(self) -> str:
         bits = [f"LOAD level={self.level}", f"source={self.source}"]
@@ -740,8 +775,7 @@ def apply_message(cfg: LoadConfig, topic: str, payload: str | bytes) -> LoadPoli
     return policy
 
 
-def watch(cfg: LoadConfig, *, once: bool = False, timeout: float | None = None,
-          on_update=None) -> int:
+def watch(cfg: LoadConfig, *, timeout: float | None = None, on_update=None) -> int:
     """Subscribe and mirror accepted messages to the cache. Returns an exit code."""
     try:
         import paho.mqtt.client as mqtt  # type: ignore
@@ -767,7 +801,12 @@ def watch(cfg: LoadConfig, *, once: bool = False, timeout: float | None = None,
     tls = parts.scheme in {"mqtts", "ssl", "mqtt+ssl"}
     port = parts.port or (8883 if tls else 1883)
 
-    client = mqtt.Client()
+    # paho's callback API v1 is deprecated and goes away in paho 3.x; ask for v2
+    # when the installed version offers it, and keep working when it does not.
+    try:
+        client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)
+    except (AttributeError, TypeError):
+        client = mqtt.Client()
     if cfg.username:
         client.username_pw_set(cfg.username, cfg.password or None)
     if tls:
@@ -775,15 +814,18 @@ def watch(cfg: LoadConfig, *, once: bool = False, timeout: float | None = None,
 
     state = {"received": 0}
 
-    def _on_connect(cli, _userdata, _flags, rc):  # noqa: ANN001 — paho callback shape
-        if rc != 0:
+    def _on_connect(cli, _userdata, _flags, rc, *_):  # noqa: ANN001 — v1 and v2 shapes
+        # v1 gives an int, v2 a ReasonCode; both compare cleanly against 0/success.
+        if getattr(rc, "is_failure", None) is True or (
+            isinstance(rc, int) and rc != 0
+        ):
             print(f"[inference_load] connect failed rc={rc}", file=sys.stderr)
             return
         for topic in cfg.topics():
             cli.subscribe(topic)
             print(f"[inference_load] subscribed {topic}", file=sys.stderr)
 
-    def _on_message(_cli, _userdata, msg):  # noqa: ANN001 — paho callback shape
+    def _on_message(_cli, _userdata, msg):  # noqa: ANN001 — same in v1 and v2
         # Project topic wins over site topic; both are mirrored to the same file
         # and the last fresh message decides.
         policy = apply_message(cfg, msg.topic, msg.payload)
@@ -807,8 +849,6 @@ def watch(cfg: LoadConfig, *, once: bool = False, timeout: float | None = None,
     try:
         while True:
             time.sleep(0.2)
-            if once and state["received"]:
-                break
             if deadline is not None and time.time() > deadline:
                 break
     except KeyboardInterrupt:
@@ -816,7 +856,7 @@ def watch(cfg: LoadConfig, *, once: bool = False, timeout: float | None = None,
     finally:
         client.loop_stop()
         client.disconnect()
-    return 0 if state["received"] or not once else 1
+    return 0
 
 
 # ---------------------------------------------------------------------------
@@ -881,7 +921,7 @@ def main(argv: list[str] | None = None) -> int:
     ceiling = f"{cfg.max_age_s}s" if cfg.max_age_s else "none"
     print(f"enabled={cfg.enabled} failsafe={cfg.failsafe} max_age={ceiling} "
           f"cache={cfg.cache_path}")
-    if cfg.enabled and not policy.ttl_s and policy.source.startswith(("mqtt", "file")):
+    if cfg.enabled and policy.ttl_s is None and policy.source.startswith(("mqtt", "file")):
         note = (f"capped at max_age={cfg.max_age_s}s" if cfg.max_age_s
                 else "NO expiry — the fail-safe cannot engage")
         print(f"warning: publisher set no ttl_s; {note}")

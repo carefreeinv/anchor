@@ -192,11 +192,11 @@ class Endpoint:
         (loopback / private ranges / ``.local``-style hostnames). Only local
         endpoints are subject to the site inference-load cap.
         """
-        if self.local is not None:
-            return bool(self.local)
-        if endpoint_is_local is None:
-            return False
-        return endpoint_is_local({"base_url": self.base_url})
+        if endpoint_is_local is None:  # standalone copy without the governor
+            return bool(self.local) if self.local is not None else False
+        # One implementation of "is this local", so a value like `local: "false"`
+        # cannot mean different things to work_once and to the MCP.
+        return endpoint_is_local({"local": self.local, "base_url": self.base_url})
 
     def chat(self, messages: list[dict], *, thinking: bool = False,
              temperature: float | None = None, max_tokens: int = 4096,

@@ -546,3 +546,49 @@ def test_single_policy_mirror_still_reads_as_the_site_scope(tmp_path):
 def test_write_cache_refuses_an_unknown_scope(tmp_path):
     with pytest.raises(il.LoadPolicyError):
         il.write_cache(tmp_path / "c.json", il.LoadPolicy(level="off"), "galaxy")
+
+
+# -- M3 / N4: freshness edge cases -----------------------------------------
+
+def test_publisher_timestamp_can_only_make_a_message_look_older():
+    now = time.time()
+    # A retained message redelivered after a broker reconnect gets a fresh
+    # received_at; the publisher's own (older) ts must still age it out.
+    from datetime import datetime, timezone
+    old_ts = datetime.fromtimestamp(now - 600, timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    redelivered = il.LoadPolicy(level="high", ttl_s=60, ts=old_ts, received_at=now)
+    assert redelivered.is_expired(now)
+    # …while a future ts cannot extend anything.
+    future = il.LoadPolicy(level="high", ttl_s=60, ts="2099-01-01T00:00:00Z",
+                           received_at=now - 120)
+    assert future.is_expired(now)
+
+
+def test_unparseable_timestamp_is_ignored_not_fatal():
+    now = time.time()
+    policy = il.LoadPolicy(level="high", ttl_s=60, ts="whenever", received_at=now)
+    assert not policy.is_expired(now)
+    assert il._parse_ts("whenever") is None
+    assert il._parse_ts("") is None
+
+
+def test_ttl_zero_means_stale_on_arrival_not_never():
+    now = time.time()
+    policy = il.LoadPolicy(level="high", ttl_s=0, received_at=now)
+    assert policy.effective_ttl(900) == 0
+    assert policy.is_expired(now + 1)
+
+
+def test_ttl_zero_falls_back_to_the_failsafe(tmp_path):
+    cfg = _cfg(tmp_path, failsafe=il.FAILSAFE_HOLD)
+    il.write_cache(cfg.cache_path,
+                   il.LoadPolicy(level="high", ttl_s=0, received_at=time.time() - 1))
+    assert il.get_load_policy(tmp_path, cfg).level == "off"
+
+
+# -- N5: the dead parameter is gone ----------------------------------------
+
+def test_watch_has_no_unused_once_parameter():
+    import inspect
+
+    assert "once" not in inspect.signature(il.watch).parameters
