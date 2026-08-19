@@ -103,7 +103,13 @@ def publish(cfg, policy: LoadPolicy, topic: str, *, retain: bool = False,
     tls = parts.scheme in {"mqtts", "ssl", "mqtt+ssl"}
     port = parts.port or (8883 if tls else 1883)
 
-    client = mqtt.Client()
+    # paho's callback API v1 is deprecated and goes away in paho 3.x; ask for v2
+    # when the installed version offers it, and keep working when it does not.
+    # (Same treatment as inference_load.watch — the publisher was missed there.)
+    try:
+        client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)
+    except (AttributeError, TypeError):
+        client = mqtt.Client()
     if cfg.username:
         client.username_pw_set(cfg.username, cfg.password or None)
     if tls:

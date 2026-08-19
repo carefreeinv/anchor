@@ -149,3 +149,27 @@ def test_mirror_is_written_on_a_successful_publish(tmp_path, monkeypatch):
     assert pub.main(["low", "--root", str(tmp_path), "--mirror"]) == 0
     entries = il.read_cache_entries(tmp_path / il.DEFAULT_CACHE_REL)
     assert entries[il.SCOPE_SITE].level == "low"
+
+
+# -- N3: neither MQTT client may use the deprecated callback API ------------
+
+def test_no_module_constructs_a_bare_paho_client():
+    # paho's callback API v1 warns today and is removed in paho 3.x. The
+    # subscriber was fixed and the publisher was missed, so assert on both —
+    # a per-module fix is exactly what gets forgotten.
+    import pathlib
+
+    scripts = pathlib.Path(pub.__file__).resolve().parent
+    for name in ("inference_load.py", "mqtt_load_publish.py"):
+        source = (scripts / name).read_text(encoding="utf-8")
+        assert "mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)" in source, (
+            f"{name} never requests callback API v2"
+        )
+        # The bare form may survive only as the except-branch fallback.
+        for i, line in enumerate(source.splitlines()):
+            if line.strip() == "client = mqtt.Client()":
+                context = source.splitlines()[max(0, i - 2):i]
+                assert any("except" in c for c in context), (
+                    f"{name}:{i + 1} constructs a bare paho client outside the "
+                    f"version fallback"
+                )
