@@ -48,7 +48,7 @@ Never auto-promotes, force-claims, or rewrites Preferred models.
 ## Install / run
 
 ```bash
-pip install "mcp[cli]" PyYAML
+pip install "mcp[cli]>=1.2.0,<3" PyYAML
 # From Anchor repo (scripts/ must be importable):
 python mcp/project-orchestrator/server.py \
   --project /path/to/myapp \

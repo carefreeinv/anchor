@@ -28,6 +28,28 @@ flowchart LR
 
 Until a Preferred orchestrator is set for a project, a frontier session may act as temporary coordinator (see [CLI — Preferred orchestrator](/tooling/cli#preferred-orchestrator-per-project)).
 
+## Supported SDK versions
+
+The servers work against **both** MCP Python SDK majors: `mcp[cli]>=1.2.0,<3`.
+
+SDK 2.0 removed `mcp.server.fastmcp` and renamed `FastMCP` to `MCPServer`. Because
+the decorator surface (`tool`, `prompt`, `resource`) and `run()` are unchanged
+across the rename, each server resolves the class once at import and works either
+way — so a fresh install gets 2.x and an operator pinned to 1.x is not broken.
+
+Install with the bound, not bare:
+
+```bash
+pip install "mcp[cli]>=1.2.0,<3" requests pyyaml
+```
+
+:::caution Running from the Anchor checkout
+This repository has its own top-level `mcp/` **directory**, which shadows the
+installed `mcp` package for anything started from the repo root. Run a server by
+its path from another directory, or the import will fail for a reason that has
+nothing to do with your SDK version.
+:::
+
 ## anchor-prompts
 
 The discipline as callable tools, so weak models fetch structure instead of having to remember it:

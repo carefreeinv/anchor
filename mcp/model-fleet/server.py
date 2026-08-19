@@ -3,7 +3,7 @@
 local planner) delegate work to the hardware fleet (swarm tier, H100 tier, Space-1)
 instead of burning frontier credits on keystrokes.
 
-Run: python server.py    (needs: pip install "mcp[cli]" requests pyyaml)
+Run: python server.py    (needs: pip install "mcp[cli]>=1.2.0,<3" requests pyyaml)
 Claude Code: claude mcp add model-fleet -- python /path/to/mcp/model-fleet/server.py
 """
 from __future__ import annotations
@@ -11,7 +11,15 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-from mcp.server.fastmcp import FastMCP
+# MCP SDK 2.0 renamed FastMCP to MCPServer and moved it out of
+# `mcp.server.fastmcp`, which no longer exists. The decorator surface this server
+# uses (tool/prompt/resource) and `run()` are identical across both majors, so a
+# two-name shim keeps one implementation working on either — rather than pinning
+# operators to a line that is already end-of-life, or breaking everyone still on v1.
+try:  # SDK 2.x
+    from mcp.server import MCPServer as MCPServerClass
+except ImportError:  # SDK 1.x
+    from mcp.server.fastmcp import FastMCP as MCPServerClass
 
 
 def _project_root() -> Path:
@@ -31,7 +39,7 @@ for _scripts in (REPO / ".anchor" / "scripts", REPO / "scripts"):
 
 from anchor_client import Fleet, has_required_footer, load_prompt  # noqa: E402
 
-mcp = FastMCP("model-fleet")
+mcp = MCPServerClass("model-fleet")
 _fleet: Fleet | None = None
 
 
