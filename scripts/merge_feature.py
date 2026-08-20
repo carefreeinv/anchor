@@ -375,24 +375,74 @@ def probe_conflicts(root: Path, target: str, branch: str) -> tuple[str, ...]:
         _git(root, "checkout", original, check=False)
 
 
-def land(root: Path, branch: str, target: str, *, title: str = "") -> str:
-    """Merge ``branch`` into ``target``; return the target's new HEAD.
+STAGED = "STAGED"
 
-    Mirrors /review §11's semantics exactly (ff-only preferred, --no-ff fallback,
-    abort on conflict) so the two authorization paths cannot drift into different
-    merge behavior. Never pushes.
+
+def land(root: Path, branch: str, target: str, *, title: str = "") -> str:
+    """Merge ``branch`` into ``target``; return the target's new HEAD, or ``STAGED``.
+
+    Mirrors /review §11's semantics exactly so the two authorization paths cannot
+    drift into different merge behavior — including the prep obligation:
+
+    * **Fast-forward** creates no commit and cannot conflict, so its content is the
+      branch tip that was already prepped. It lands here and returns the new HEAD.
+    * **Non-fast-forward creates a merge commit**, and the merged tree is state
+      neither branch was prepped in. This function will not commit it. It leaves the
+      merge **staged** (``--no-commit``) and returns :data:`STAGED`; the caller runs
+      ``/commit-prep`` against the merged tree and then calls :func:`commit_staged`
+      or :func:`abort_staged`. Prep is a skill, so only a caller can run it — this
+      module stays git plumbing.
+
+    The target branch is left checked out when a merge is staged, because an
+    unfinished merge cannot survive a checkout. Never pushes.
     """
     original = _restore_point(root)
+    restore = True
     try:
         _git(root, "checkout", target)
-        if _git(root, "merge", "--ff-only", branch, check=False).returncode != 0:
-            msg = f"Merge {branch}" + (f": {title}" if title else "")
-            p = _git(root, "merge", "--no-ff", branch, "-m", msg, check=False)
-            if p.returncode != 0:
-                _git(root, "merge", "--abort", check=False)
-                raise GitError(f"merge conflicted: {p.stdout.strip()} {p.stderr.strip()}")
+        if _git(root, "merge", "--ff-only", branch, check=False).returncode == 0:
+            return head_sha(root, "HEAD")
+        p = _git(root, "merge", "--no-ff", "--no-commit", branch, check=False)
+        if p.returncode != 0:
+            _git(root, "merge", "--abort", check=False)
+            raise GitError(f"merge conflicted: {p.stdout.strip()} {p.stderr.strip()}")
+        restore = False  # a staged merge must stay on the target branch
+        return STAGED
+    finally:
+        if restore:
+            _git(root, "checkout", original, check=False)
+
+
+def commit_staged(root: Path, branch: str, target: str, *, title: str = "",
+                  original: str = "") -> str:
+    """Commit a merge staged by :func:`land`, after ``/commit-prep`` came back green.
+
+    Stages **everything** first: prep edits the *working tree* (CHANGELOG entry, test
+    fixes, a new blog file), and a bare ``git commit`` during a merge commits only
+    the index — silently dropping prep's own output from the merge commit and
+    leaving it dirty in the tree.
+    """
+    try:
+        msg = f"Merge {branch}" + (f": {title}" if title else "")
+        _git(root, "add", "-A")
+        _git(root, "commit", "-m", msg)
         return head_sha(root, "HEAD")
     finally:
+        if original:
+            _git(root, "checkout", original, check=False)
+
+
+def abort_staged(root: Path, *, original: str = "") -> None:
+    """Undo a merge staged by :func:`land`, after ``/commit-prep`` came back red.
+
+    ``git merge --abort`` **refuses** when a file involved in the merge has unstaged
+    modifications — which is exactly what prep's fix-the-tests gate produces — so
+    fall back to a hard reset. Either way nothing was committed, but prep's own edits
+    are discarded along with the merge.
+    """
+    if _git(root, "merge", "--abort", check=False).returncode != 0:
+        _git(root, "reset", "--hard", "HEAD", check=False)
+    if original:
         _git(root, "checkout", original, check=False)
 
 

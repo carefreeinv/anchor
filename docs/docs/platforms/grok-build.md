@@ -1,4 +1,4 @@
-<!-- synced-from: platforms/grok-build/GROK.md @ 3653b7af43453218c1c065b49d4f832abea270d1 -->
+<!-- synced-from: platforms/grok-build/GROK.md @ cfdd052795ff6bb6550028292bd8ae7361124f91 -->
 ---
 sidebar_position: 2
 sidebar_label: Grok Build
@@ -45,7 +45,7 @@ Scaffold installs [**`/draft`**](/skills/draft), [**`/work`**](/skills/work), [*
 
 ## /commit-prep
 
-**Required before any commit that touches a path outside `.plans/`, and before any merge commit.** Agents run `/commit-prep` (discover this project’s tests/CI; CHANGELOG; blog-if-warranted — no Docusaurus required). **Prep only** — does not commit.
+**Required before any commit that touches a path outside `.plans/`, and before any merge commit.** A commit whose paths are *entirely* under `.plans/` takes the **light path**: state what moved and why, then `git add .plans/` and `git commit -- .plans/`; no CHANGELOG, no blog, no test run. The pathspec matters — a bare `git commit` commits the whole index. Agents run `/commit-prep` (discover this project’s tests/CI; CHANGELOG; blog-if-warranted — no Docusaurus required). **Prep only** — does not commit.
 
 A commit whose paths are *entirely* under `.plans/` — a lane move, review notes, a `## Handoff` line — takes the **light path** instead: state what moved and why, then commit. No CHANGELOG, no blog, no test run; a lane move cannot break a test. Skills that rearrange `.plans/` commit that themselves rather than leaving it staged for an unrelated commit to swallow.
 

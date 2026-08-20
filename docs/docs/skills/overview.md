@@ -55,7 +55,7 @@ flowchart TD
 
 | Command | Best used | Notes |
 |---------|-----------|--------|
-| **`/commit-prep`** | Before **any** `git commit` in Anchor-using projects | Scaffolded into every project. Prep only (tests, CHANGELOG, blog-if-warranted); does not commit. Project-agnostic — discovers this repo's CI, changelog, and blog conventions. See platform docs. |
+| **`/commit-prep`** | Before any commit outside `.plans/`, and before any merge commit (plans-only commits take the light path) | Scaffolded into every project. Prep only (tests, CHANGELOG, blog-if-warranted); does not commit. Project-agnostic — discovers this repo's CI, changelog, and blog conventions. See platform docs. |
 | **`/config`** | From the **Anchor** checkout (or with Anchor checkout available) | Saves global platform/fleet/model-priority defaults via `config.sh`. |
 
 ## Packaging reminder

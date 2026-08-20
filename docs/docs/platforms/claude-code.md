@@ -1,4 +1,4 @@
-<!-- synced-from: platforms/claude-code/CLAUDE.md @ 1b46a0727812f719b71acd2760829c802bc8b18d -->
+<!-- synced-from: platforms/claude-code/CLAUDE.md @ 2b4b5dc0b2555f86b405fe055950fd31f889b70c -->
 ---
 sidebar_position: 1
 sidebar_label: Claude Code
@@ -47,7 +47,7 @@ Scaffold installs [**`/draft`**](/skills/draft), [**`/work`**](/skills/work), [*
 
 ## /commit-prep
 
-**Required before any commit that touches a path outside `.plans/`, and before any merge commit.** Agents run `/commit-prep` (discover this project’s tests/CI; CHANGELOG; blog-if-warranted — no Docusaurus required). **Prep only** — does not commit.
+**Required before any commit that touches a path outside `.plans/`, and before any merge commit.** A commit whose paths are *entirely* under `.plans/` takes the **light path**: state what moved and why, then `git add .plans/` and `git commit -- .plans/`; no CHANGELOG, no blog, no test run. The pathspec matters — a bare `git commit` commits the whole index. Agents run `/commit-prep` (discover this project’s tests/CI; CHANGELOG; blog-if-warranted — no Docusaurus required). **Prep only** — does not commit.
 
 A commit whose paths are *entirely* under `.plans/` — a lane move, review notes, a `## Handoff` line — takes the **light path** instead: state what moved and why, then commit. No CHANGELOG, no blog, no test run; a lane move cannot break a test. Skills that rearrange `.plans/` commit that themselves rather than leaving it staged for an unrelated commit to swallow.
 

@@ -144,7 +144,7 @@ optional reconfigure draft. **Dual-use:** lives in the Anchor checkout base
 
 ## /commit-prep
 
-**Required before any `git commit`.** Run `/commit-prep` (command:
+**Required before any commit that touches a path outside `.plans/`, and before any merge commit.** A commit whose paths are *entirely* under `.plans/` takes the **light path** instead: state what moved and why, then `git add .plans/` and `git commit -- .plans/`; no CHANGELOG, no blog, no test run. Run `/commit-prep` (command:
 `.claude/commands/commit-prep.md`): tests → CHANGELOG → blog-if-warranted.
 **Prep only** — does not commit. After a green prep, commit policy is under
 **`/work`** / standing rules (feature branch + worktree; merge to `dev` only via `/work`'s culmination answer + scoped gate; never to `main`).

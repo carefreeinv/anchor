@@ -122,18 +122,74 @@ def test_fast_forward_merge_lands_on_dev(repo):
     assert _git(repo, "rev-parse", "--abbrev-ref", "HEAD") == "feature/my-plan"  # restored
 
 
-def test_non_ff_clean_merge_creates_a_merge_commit(repo):
-    """dev moved on an unrelated file — still clean, so it lands as a merge commit."""
+def test_non_ff_merge_is_staged_not_committed(repo):
+    """dev moved on an unrelated file — clean, but a merge COMMIT needs prep first.
+
+    The merged tree is state neither branch was prepped in, so `land` stops with the
+    merge staged and hands control back. Committing here would be exactly the
+    unprepped merge commit the hard rule forbids.
+    """
+    from merge_feature import STAGED
+
+    _git(repo, "checkout", "dev")
+    dev_before = _git(repo, "rev-parse", "dev")
+    _commit(repo, "app/other.py", "y = 2\n", "dev moved")
+    dev_before = _git(repo, "rev-parse", "dev")
+    _git(repo, "checkout", "feature/my-plan")
+
+    verdict, result = run(repo, "my-plan", TOUCHED, expect_head=_head(repo))
+
+    assert verdict.ok
+    assert "no-ff" in verdict.message
+    assert result == STAGED
+    assert _git(repo, "rev-parse", "dev") == dev_before      # no commit created
+    assert (Path(repo) / ".git" / "MERGE_HEAD").exists()     # merge really is staged
+    assert _git(repo, "rev-parse", "--abbrev-ref", "HEAD") == "dev"  # stays on target
+
+
+def test_commit_staged_includes_preps_working_tree_edits(repo):
+    """A bare `git commit` during a merge commits only the index, dropping prep's own
+    output. commit_staged stages everything first."""
+    import merge_feature as mf
+
     _git(repo, "checkout", "dev")
     _commit(repo, "app/other.py", "y = 2\n", "dev moved")
     _git(repo, "checkout", "feature/my-plan")
 
-    verdict, new_head = run(repo, "my-plan", TOUCHED, expect_head=_head(repo))
+    assert mf.land(repo, "feature/my-plan", "dev") == mf.STAGED
+    (Path(repo) / "CHANGELOG.md").write_text("prep added this", encoding="utf-8")
+    new_head = mf.commit_staged(repo, "feature/my-plan", "dev",
+                                original="feature/my-plan")
 
-    assert verdict.ok
-    assert "no-ff" in verdict.message
-    parents = _git(repo, "rev-list", "--parents", "-n", "1", "dev").split()
-    assert len(parents) == 3  # commit + two parents = a real merge commit
+    assert _git(repo, "rev-parse", "dev") == new_head
+    # `git show --stat` on a merge prints a condensed combined diff, so assert
+    # against the committed tree instead of the diff rendering.
+    # commit_staged restores the original branch, so inspect `dev`, not HEAD.
+    tree = _git(repo, "ls-tree", "-r", "--name-only", "dev")
+    assert "CHANGELOG.md" in tree                       # prep's own edit landed
+    assert "app/other.py" in tree                       # and so did dev's side
+    assert _git(repo, "status", "--short") == ""        # tree left clean
+    assert _git(repo, "rev-parse", "--abbrev-ref", "HEAD") == "feature/my-plan"
+
+
+def test_abort_staged_recovers_even_when_merge_abort_refuses(repo):
+    """`git merge --abort` refuses once prep has edited a file involved in the merge —
+    exactly what its fix-the-tests gate does. abort_staged falls back to a reset."""
+    import merge_feature as mf
+
+    _git(repo, "checkout", "dev")
+    _commit(repo, "app/other.py", "y = 2\n", "dev moved")
+    dev_before = _git(repo, "rev-parse", "dev")
+    _git(repo, "checkout", "feature/my-plan")
+
+    assert mf.land(repo, "feature/my-plan", "dev") == mf.STAGED
+    (Path(repo) / "app" / "x.py").write_text("prep touched a merged file\n",
+                                             encoding="utf-8")
+    mf.abort_staged(repo, original="feature/my-plan")
+
+    assert _git(repo, "rev-parse", "dev") == dev_before          # nothing committed
+    assert not (Path(repo) / ".git" / "MERGE_HEAD").exists()     # merge state cleared
+    assert _git(repo, "rev-parse", "--abbrev-ref", "HEAD") == "feature/my-plan"
 
 
 def test_conflict_aborts_and_leaves_dev_untouched(repo):

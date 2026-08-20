@@ -273,13 +273,18 @@ Needs Work with still-empty feedback → **refuse move**; stay in
    ```bash
    git merge --no-ff --no-commit feature/<slug>   # stage it; do not commit yet
    # run /commit-prep against the merged working tree
-   #   green → git commit -m "Merge feature/<slug>: <plan title>"
-   #   red   → git merge --abort
+   #   green → git add -A && git commit -m "Merge feature/<slug>: <plan title>"
+   #            (-A matters: prep EDITS the working tree; a bare `git commit`
+   #             commits only the index and drops prep's own output)
+   #   red   → git merge --abort || git reset --hard HEAD
    ```
 
-   **Red prep on the staged merge:** `git merge --abort`, leave the plan in
-   `review-needed/`, and report which gate failed. Nothing was committed, so there
-   is nothing to undo — say that plainly rather than implying a rollback happened.
+   **Red prep on the staged merge:** abort, leave the plan in `review-needed/`, and
+   report which gate failed. Note `git merge --abort` **refuses** when prep modified
+   a file involved in the merge (`error: Entry '<path>' not uptodate`) — which is
+   precisely what its fix-the-tests gate does — so fall back to
+   `git reset --hard HEAD`. Either way nothing was **committed**, but prep's own
+   edits are discarded with the merge. Say that, rather than "nothing to undo".
 
 6. **On conflict:** `git merge --abort` if in progress; leave plan in
    `review-needed/`; report conflict paths; **do not** move to `completed/`.
@@ -305,8 +310,15 @@ CHANGELOG, no blog, no test run — a lane move cannot break a test. If `.plans/
 untracked in this project, say "lane move (untracked)" and commit nothing.
 
 ```bash
-git add .plans/ && git commit -m "Plans: <slug> → <lane> (/review <choice>)"
+git add .plans/
+git commit -- .plans/ -m "Plans: <slug> → <lane> (/review <choice>)"
 ```
+
+The `-- .plans/` pathspec is load-bearing: a bare `git commit` commits **everything
+already in the index**, so an unrelated pre-staged file would land under the light
+path with no tests, no CHANGELOG and no blog decision. If `git diff --cached
+--name-only` lists anything outside `.plans/`, this is not a plans-only commit —
+stop and run the full gate.
 
 | Choice | Move |
 |--------|------|
@@ -372,8 +384,9 @@ If not ahead: report and stop (with `--promote`, say why).
    ```bash
    git merge --no-ff --no-commit <integration>
    # run /commit-prep against the merged working tree
-   #   green → git commit -m "Merge <integration> into <mainline>"
-   #   red   → git merge --abort, report the failing gate, promote nothing
+   #   green → git add -A && git commit -m "Merge <integration> into <mainline>"
+   #   red   → git merge --abort || git reset --hard HEAD; report the failing
+   #            gate, promote nothing (prep's edits are discarded with the merge)
    ```
 3. Conflict → abort; no push; report files.
 4. Success → report SHAs. Push `origin <mainline>` only with confirm / `--push`.

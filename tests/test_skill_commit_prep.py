@@ -21,17 +21,24 @@ import pytest
 REPO = Path(__file__).resolve().parents[1]
 SKILL_GLOBS = (".claude/commands/*.md", ".grok/skills/*/SKILL.md")
 
-# Commands that create a commit or stage a tracked change. Reads (`git checkout`,
-# `git status`, `git log`) do not qualify — and neither does `git push`, which
-# publishes commits that were already gated when they were made.
-MUTATING = re.compile(r"git\s+(commit|merge|mv|cherry-pick|revert|rebase)\b")
+# How close a `/commit-prep` reference must sit to a mutating command.
+PROXIMITY = 25
+
+# Commands that create a commit or stage a tracked change, including the
+# `git -C <path>` / `git -c k=v` forms and `gh pr merge` (which lands a merge
+# commit on the remote). Reads (`git checkout`, `git status`, `git log`) do not
+# qualify — and neither does `git push`, which only publishes commits that were
+# already gated when they were made. `git mv` is here because it stages, not
+# because it commits.
+MUTATING = re.compile(
+    r"git\s+(?:-[Cc]\s+\S+\s+)*(commit|merge|mv|cherry-pick|revert|rebase)\b"
+    r"|gh\s+pr\s+merge\b"
+)
 
 # Skills that legitimately name a mutating command without owing a prep reference.
 EXEMPT = {
     # commit-prep IS the gate; it documents what it does not do.
     "commit-prep": "is the gate itself",
-    # Documents the merge ladder for orientation; performs no commit of its own.
-    "how-work-reaches-dev": "explanatory only",
 }
 
 
@@ -40,6 +47,13 @@ def _skills() -> list[Path]:
     for pattern in SKILL_GLOBS:
         found.extend(sorted(REPO.glob(pattern)))
     return found
+
+
+def test_every_exemption_names_a_real_skill():
+    # An EXEMPT entry that matches nothing is inert config that reads as coverage.
+    names = {p.stem if p.stem != "SKILL" else p.parent.name for p in _skills()}
+    dead = sorted(set(EXEMPT) - names)
+    assert not dead, f"EXEMPT names no discovered skill: {dead}"
 
 
 def test_skills_were_discovered():
@@ -57,10 +71,22 @@ def test_mutating_skill_names_commit_prep(path: Path):
     hits = sorted({m.group(0) for m in MUTATING.finditer(text)})
     if not hits:
         return
-    assert "commit-prep" in text, (
+    # A bare mention anywhere in the file is weak evidence — /deploy passes on four
+    # mentions that are all exclusions. Require one within PROXIMITY lines of an
+    # actual mutating command, so the reference sits where the obligation applies.
+    lines = text.splitlines()
+    mutating_lines = [i for i, ln in enumerate(lines) if MUTATING.search(ln)]
+    prep_lines = [i for i, ln in enumerate(lines) if "commit-prep" in ln]
+    assert prep_lines, (
         f"{path.relative_to(REPO)} runs {hits} but never references `/commit-prep`. "
         f"Either name the prep obligation (see CLAUDE.md's hard rule) or add the "
         f"skill to EXEMPT in this file with a reason."
+    )
+    near = any(abs(m - pl) <= PROXIMITY for m in mutating_lines for pl in prep_lines)
+    assert near, (
+        f"{path.relative_to(REPO)} mentions `/commit-prep`, but never within "
+        f"{PROXIMITY} lines of {hits} — the reference does not sit where the "
+        f"obligation applies. State the obligation at the command, not elsewhere."
     )
 
 

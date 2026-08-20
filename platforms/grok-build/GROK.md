@@ -192,7 +192,7 @@ Uses `scripts/fit_device.py --probe` when fleet/scripts are available.
 
 ## /commit-prep
 
-**Required before any `git commit`.** Run `/commit-prep`: tests → CHANGELOG →
+**Required before any commit that touches a path outside `.plans/`, and before any merge commit.** A commit whose paths are *entirely* under `.plans/` takes the **light path** instead: state what moved and why, then `git add .plans/` and `git commit -- .plans/`; no CHANGELOG, no blog, no test run. Run `/commit-prep`: tests → CHANGELOG →
 blog-if-warranted. **Prep only** — does not commit. After a green prep, follow
 **`/work`** / hard rules for feature-branch commit (worktree preferred; never
 merge to `dev`/`main`). Skill: `.grok/skills/commit-prep/SKILL.md`.

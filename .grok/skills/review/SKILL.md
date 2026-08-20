@@ -267,20 +267,25 @@ Empty Needs Work feedback → refuse move; stay in `review-needed/`.
    ```
 
    If that fails (not FF-able), the merge **creates a commit**, and a commit needs
-   **`/commit-prep`** first (see `CLAUDE.md`'s hard rule). A clean textual merge
+   **`/commit-prep`** first (see the platform brief's hard rule). A clean textual merge
    can still be semantically broken, and the merged tree is state neither branch
    was prepped in — so stage the merge, prep *that*, and only then commit:
 
    ```bash
    git merge --no-ff --no-commit feature/<slug>   # stage it; do not commit yet
    # run /commit-prep against the merged working tree
-   #   green → git commit -m "Merge feature/<slug>: <plan title>"
-   #   red   → git merge --abort
+   #   green → git add -A && git commit -m "Merge feature/<slug>: <plan title>"
+   #            (-A matters: prep EDITS the working tree; a bare `git commit`
+   #             commits only the index and drops prep's own output)
+   #   red   → git merge --abort || git reset --hard HEAD
    ```
 
-   **Red prep on the staged merge:** `git merge --abort`, leave the plan in
-   `review-needed/`, and report which gate failed. Nothing was committed, so there
-   is nothing to undo — say that plainly rather than implying a rollback happened.
+   **Red prep on the staged merge:** abort, leave the plan in `review-needed/`, and
+   report which gate failed. Note `git merge --abort` **refuses** when prep modified
+   a file involved in the merge (`error: Entry '<path>' not uptodate`) — which is
+   precisely what its fix-the-tests gate does — so fall back to
+   `git reset --hard HEAD`. Either way nothing was **committed**, but prep's own
+   edits are discarded with the merge. Say that, rather than "nothing to undo".
 
 6. **On conflict:** `git merge --abort` if in progress; leave plan in
    `review-needed/`; report conflict paths; **do not** move to `completed/`.
@@ -294,8 +299,6 @@ another branch checked out in a second worktree that blocks checkout.
 
 ## 12. Lane moves (plan mode)
 
-| Choice | Move |
-|--------|------|
 **Lane moves are commits too — `/review` makes them, and does not leave them
 staged.** A scaffolded project **tracks** `.plans/` (only `*.local.md` and
 `.leases/` are ignored), so a lane move is a real tracked change; leaving it staged
@@ -306,9 +309,18 @@ state what moved and why, then commit. No CHANGELOG, no blog, no test run. If
 `.plans/` is untracked here, say "lane move (untracked)" and commit nothing.
 
 ```bash
-git add .plans/ && git commit -m "Plans: <slug> → <lane> (/review <choice>)"
+git add .plans/
+git commit -- .plans/ -m "Plans: <slug> → <lane> (/review <choice>)"
 ```
 
+The `-- .plans/` pathspec is load-bearing: a bare `git commit` commits **everything
+already in the index**, so an unrelated pre-staged file would land under the light
+path with no tests, no CHANGELOG and no blog decision. If `git diff --cached
+--name-only` lists anything outside `.plans/`, this is not a plans-only commit —
+stop and run the full gate.
+
+| Choice | Move |
+|--------|------|
 | **Approve** (merge OK or nothing to merge) | → `completed/` (optional `YYYY-MM-DD-` prefix); drop stale lease if any; **then commit it** (light path) |
 | **Approve** (merge required and failed) | **No move** — stay in `review-needed/` |
 | **Needs Work** | → **`bugs/` or `features/`** (same basename); **never** `in-progress/` |
@@ -371,8 +383,9 @@ If not ahead: report and stop (with `--promote`, say why).
    ```bash
    git merge --no-ff --no-commit <integration>
    # run /commit-prep against the merged working tree
-   #   green → git commit -m "Merge <integration> into <mainline>"
-   #   red   → git merge --abort, report the failing gate, promote nothing
+   #   green → git add -A && git commit -m "Merge <integration> into <mainline>"
+   #   red   → git merge --abort || git reset --hard HEAD; report the failing
+   #            gate, promote nothing (prep's edits are discarded with the merge)
    ```
 3. Conflict → abort; no push; report files.
 4. Success → report SHAs. Push `origin <mainline>` only with confirm / `--push`.

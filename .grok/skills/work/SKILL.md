@@ -458,6 +458,14 @@ where the integration branch is **free** — git will not check out a branch liv
 another worktree, so from `var/worktrees/<agent>` run it against the main checkout;
 the gate detects the conflict up front and names the path to use.
 
+**A non-fast-forward merge comes back `STAGED`, not committed** — the merged tree is
+state neither branch was prepped in, so the helper stages it and hands control back:
+run `/commit-prep` against the merged tree, then `commit_staged(...)` on green or
+`abort_staged(...)` on red. `commit_staged` stages everything first (prep edits the
+working tree; a bare `git commit` during a merge drops its output), and
+`abort_staged` falls back to a hard reset because `git merge --abort` refuses once
+prep has touched a merged file. A fast-forward creates no commit and owes nothing.
+
 Drop `--dry-run` to land it. Never pass the operator's answer to the helper — check
 6 is yours to hold. **Rejected by design:** landing only the in-scope paths when the
 scope check fails; that fabricates a commit matching no branch state.
@@ -482,7 +490,13 @@ handed to /review 2026-08-01
 #### Answers 1 and 3
 
 `git mv` the plan from `in-progress/` to `.plans/review-needed/` (create if needed)
-and drop its lease — *agent asserts Done when*, not a final archive. Tell the human
+and drop its lease — *agent asserts Done when*, not a final archive. **Then commit
+that move** via the light path — the `/commit-prep` exemption for plans-only commits
+(see the platform brief): state what moved and why, then `git add .plans/` and
+`git commit -- .plans/`; no CHANGELOG, no blog, no test run. The pathspec matters —
+a bare `git commit` would sweep in anything else already staged. If this plan is
+untracked (`*.local.md`, or a project that ignores `.plans/`), say “lane move
+(untracked)” and commit nothing. Tell the human
 to run **`/review`**: Approve merges `feature/<slug>` → dev then → `completed/`;
 Needs Work → `bugs|features/`; Skip. Never move `review-needed/` → `completed/`
 yourself.

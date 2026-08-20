@@ -141,7 +141,9 @@ Worktree: parallel agents use scripts/worktree_for_agent.py ensure
           --agent-id … [--slug …] (var/worktrees/<id>/); or work_once --ensure-worktree
 Branch:   from **dev** (else **develop**); if neither exists, **create dev**
           from **main** (else **master**) and push origin when possible
-Commit:   **/commit-prep** first (prep only: tests + CHANGELOG + blog); if green
+Commit:   **/commit-prep** first for anything outside `.plans/` (prep only: tests +
+          CHANGELOG + blog); a plans-only commit — a lane move, review notes — takes
+          the light path: state what moved and why, then `git commit -- .plans/`. If green
           and plan complete, commit on feature branch (see /work); optional push
           of that branch only. **Agents never merge on their own initiative**;
           `/work` may land on **dev only** via the operator's in-session answer +

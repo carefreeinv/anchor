@@ -480,8 +480,25 @@ live in another worktree, so with `/work` in `var/worktrees/<agent>` and your ma
 checkout on `dev`, run it against the main checkout. The gate detects that conflict
 up front and names the path to re-run against instead of failing mid-merge.
 
-Drop `--dry-run` to land it. The helper never pushes, never force-updates, never
-deletes a branch, and refuses mainline targets. **Do not** pass the operator's
+Drop `--dry-run` to land it. **A non-fast-forward merge comes back `STAGED`, not
+committed** — the merged tree is state neither branch was prepped in, so the helper
+stages it and hands control back:
+
+```text
+land(...) → a SHA      fast-forward; no commit created, nothing further owed
+land(...) → "STAGED"   run /commit-prep against the merged tree, then
+                       commit_staged(...)  on green
+                       abort_staged(...)   on red   (nothing was committed, but
+                                                     prep's edits go with the merge)
+```
+
+`commit_staged` stages everything before committing — prep edits the *working tree*,
+and a bare `git commit` during a merge would drop its output. `abort_staged` falls
+back to a hard reset because `git merge --abort` refuses once prep has touched a
+merged file.
+
+The helper never pushes, never force-updates, never deletes a branch, and refuses
+mainline targets. **Do not** pass the operator's
 answer to it — check 6 is yours to hold, and a flag would be exactly the inference
 this path forbids.
 
@@ -514,7 +531,12 @@ The merged form is what makes a skipped review **auditable** — `/review --list
 #### Answers 1 and 3
 
 `git mv` the plan from `in-progress/` to `.plans/review-needed/` (create the dir if
-needed) and drop its lease. That move means *agent asserts Done when* — it is not a
+needed) and drop its lease. **Then commit that move** via the light path — the
+`/commit-prep` exemption for plans-only commits: state what moved and why, then
+`git add .plans/` and `git commit -- .plans/`; no CHANGELOG, no blog, no test run.
+The pathspec matters — a bare `git commit` would sweep in anything else already
+staged. If this plan is untracked (`*.local.md`, or a project that ignores
+`.plans/`), say “lane move (untracked)” and commit nothing. That move means *agent asserts Done when* — it is not a
 final archive. Tell the human to run **`/review`** (or `/review <slug>`): AI critic
 + survey — Approve merges `feature/<slug>` → `dev` then → `completed/`; Needs Work →
 `bugs|features/`; Skip. Never move `review-needed/` → `completed/` yourself.
