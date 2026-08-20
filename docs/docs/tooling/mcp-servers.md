@@ -43,11 +43,16 @@ Install with the bound, not bare:
 pip install "mcp[cli]>=1.2.0,<3" requests pyyaml
 ```
 
-:::caution Running from the Anchor checkout
-This repository has its own top-level `mcp/` **directory**, which shadows the
-installed `mcp` package for anything started from the repo root. Run a server by
-its path from another directory, or the import will fail for a reason that has
-nothing to do with your SDK version.
+:::note If `mcp` seems missing
+This repository has its own top-level `mcp/` **directory**. It has no
+`__init__.py`, so it is only a PEP 420 namespace *portion* — an installed `mcp`
+package found later on `sys.path` still wins, and running from the repo root with
+the SDK installed resolves the real package normally.
+
+It matters only when the SDK is **not** installed: from the repo root the
+directory turns the honest `No module named 'mcp'` into the more confusing
+`No module named 'mcp.server'`. If you see that, install the SDK — do not go
+looking for a path problem.
 :::
 
 ## anchor-prompts

@@ -1,18 +1,20 @@
 """Every MCP server imports against the SDK that is actually installed.
 
-This is deliberately **not** the stubbed-`FastMCP` approach used in
-`test_model_fleet_load.py`. That stub satisfies the import no matter what the real
-SDK does, which is right for testing the delegate gate and useless for catching an
-SDK break — and an SDK break is exactly what shipped: `mcp.server.fastmcp` was
+This deliberately imports the **real** installed SDK. A test that stubs `FastMCP`
+into `sys.modules` satisfies the import no matter what the real SDK does — useful
+for exercising a server's own logic without an install, and useless for catching
+an SDK break. An SDK break is exactly what shipped: `mcp.server.fastmcp` was
 removed in SDK 2.0, while the servers declared an unbounded `mcp[cli]>=1.2.0`, so
 a fresh install crashed at import.
 
 Two hazards this test has to dodge, both of which hid the original bug:
 
-1. Anchor has its own top-level ``mcp/`` **directory**, which shadows the installed
-   ``mcp`` package for anything running from the repo root — where pytest runs. So
-   each import happens in a subprocess with cwd set elsewhere, and the child
-   asserts it resolved a site-packages ``mcp`` before trusting the result.
+1. The child must be importing the **real** SDK, not something local. Anchor has a
+   top-level ``mcp/`` directory; it is only a PEP 420 namespace portion, so an
+   installed package still wins — but it does mask the honest "not installed"
+   error when the SDK is absent. Each import therefore runs in a subprocess with
+   cwd set elsewhere, and the child asserts it resolved a site-packages ``mcp``
+   before trusting the result.
 2. Skipping on a missing SDK must not become skipping always. The skip is keyed to
    a real probe, and `requirements-dev.txt` installs the SDK so CI does not skip.
 """
@@ -29,10 +31,21 @@ import pytest
 REPO = Path(__file__).resolve().parents[1]
 SERVERS = ("model-fleet", "anchor-prompts", "project-orchestrator")
 
+# Exit codes are distinct on purpose: only a genuinely ABSENT SDK may skip.
+# A present-but-broken SDK that skipped would recreate the very failure mode this
+# file exists to remove — a test that never runs looks exactly like one that passes.
+_PROBE_ABSENT, _PROBE_UNUSABLE = 3, 4
+
 _PROBE = """
-import mcp, sys
-if "site-packages" not in (mcp.__file__ or ""):
-    sys.exit(3)          # shadowed by some local directory, not the real package
+import sys
+try:
+    import mcp
+except ModuleNotFoundError as exc:
+    if (exc.name or "").split(".")[0] == "mcp":
+        sys.exit(3)                      # genuinely not installed -> skip
+    raise                                # something else is broken -> fail
+if not (mcp.__file__ or ""):
+    sys.exit(3)          # namespace portion only: the SDK is not installed
 print(getattr(mcp, "__version__", "unknown"))
 """
 
@@ -43,23 +56,40 @@ def _run(code: str, cwd: Path) -> subprocess.CompletedProcess:
 
 
 @pytest.fixture(scope="module")
-def sdk_available(tmp_path_factory) -> bool:
+def sdk_probe(tmp_path_factory) -> subprocess.CompletedProcess:
     outside = tmp_path_factory.mktemp("outside-repo")
-    return _run(_PROBE, outside).returncode == 0
+    return _run(_PROBE, outside)
+
+
+def _require_sdk(probe: subprocess.CompletedProcess) -> None:
+    """Skip only when the SDK is absent; a broken one must fail loudly."""
+    if probe.returncode == 0:
+        return
+    if probe.returncode == _PROBE_ABSENT:
+        pytest.skip("MCP SDK not installed (requirements-dev.txt installs it in CI)")
+    pytest.fail(
+        f"MCP SDK is present but unusable (probe exit {probe.returncode}):\n"
+        f"{probe.stderr[-1500:]}"
+    )
 
 
 @pytest.mark.parametrize("server_name", SERVERS)
-def test_server_imports_against_the_installed_sdk(server_name, tmp_path, sdk_available):
-    if not sdk_available:
-        pytest.skip("MCP SDK not installed (requirements-dev.txt installs it in CI)")
+def test_server_imports_against_the_installed_sdk(server_name, tmp_path, sdk_probe):
+    _require_sdk(sdk_probe)
     server_dir = REPO / "mcp" / server_name
     assert (server_dir / "server.py").is_file(), server_dir
+    # Importing is not enough. project-orchestrator defers its SDK import into
+    # build_server(), so `import server` succeeds even on code that cannot run —
+    # proven when this file was replayed against the pre-fix tree, where that one
+    # server passed while the other two failed. Force the server object to exist.
     result = _run(
         f"""
         import mcp, sys
         assert "site-packages" in mcp.__file__, mcp.__file__
         sys.path.insert(0, {str(server_dir)!r})
         import server
+        built = getattr(server, "mcp", None) or server.build_server()
+        assert built is not None
         print("OK")
         """,
         tmp_path,
@@ -117,13 +147,24 @@ def _guarded_nodes(tree: ast.AST) -> set[int]:
 
 
 def _imports_of(tree: ast.AST, module: str) -> list[ast.stmt]:
+    """Every import that reaches *module*, in any of the shapes Python allows.
+
+    Asymmetry here was a real hole: matching `ImportFrom` on exact equality let
+    ``from mcp.server.fastmcp.prompts import base`` and ``from mcp.server import
+    fastmcp`` through untouched, and SDK 1 genuinely exposes both paths.
+    """
+    parent, _, leaf = module.rpartition(".")
     found = []
     for node in ast.walk(tree):
-        if isinstance(node, ast.ImportFrom) and node.module == module:
-            found.append(node)
+        if isinstance(node, ast.ImportFrom):
+            mod = node.module or ""
+            if mod == module or mod.startswith(module + "."):
+                found.append(node)                      # from mcp.server.fastmcp[...] import X
+            elif mod == parent and any(a.name == leaf for a in node.names):
+                found.append(node)                      # from mcp.server import fastmcp
         elif isinstance(node, ast.Import):
-            if any(alias.name == module or alias.name.startswith(module + ".")
-                   for alias in node.names):
+            if any(a.name == module or a.name.startswith(module + ".")
+                   for a in node.names):
                 found.append(node)
     return found
 
@@ -144,7 +185,7 @@ def test_removed_module_is_only_imported_as_a_guarded_fallback(server_name):
         )
 
 
-def test_the_guard_detector_actually_detects(tmp_path):
+def test_the_guard_detector_actually_detects():
     # A test whose failure mode is "silently passes" is worth testing itself.
     unguarded = ast.parse("from mcp.server.fastmcp import FastMCP\n")
     assert _imports_of(unguarded, REMOVED_MODULE)
@@ -163,3 +204,36 @@ def test_the_guard_detector_actually_detects(tmp_path):
     )
     node = _imports_of(shim, REMOVED_MODULE)[0]
     assert id(node) in _guarded_nodes(shim)
+
+
+@pytest.mark.parametrize("source", [
+    "from mcp.server.fastmcp import FastMCP",            # the shape that broke
+    "import mcp.server.fastmcp",
+    "import mcp.server.fastmcp.prompts",
+    "from mcp.server.fastmcp.prompts import base",       # submodule from-import
+    "from mcp.server import fastmcp",                    # bind the module itself
+])
+def test_every_route_to_the_removed_module_is_detected(source):
+    # Matching ImportFrom on exact equality let the last two through untouched,
+    # and SDK 1 really does expose mcp.server.fastmcp.Context and
+    # mcp.server.fastmcp.prompts.base — so a type hint would have sailed past.
+    assert _imports_of(ast.parse(source), REMOVED_MODULE), source
+
+
+@pytest.mark.parametrize("source", [
+    "from mcp.server import MCPServer",
+    "import mcp.server.mcpserver",
+    "from mcp.server.mcpserver import MCPServer",
+])
+def test_the_replacement_module_is_not_flagged(source):
+    assert not _imports_of(ast.parse(source), REMOVED_MODULE), source
+
+
+def test_a_sibling_handler_does_not_launder_an_unguarded_import():
+    # try/except ValueError around it is not an import guard.
+    tree = ast.parse(
+        "try:\n    pass\nexcept ValueError:\n"
+        "    from mcp.server.fastmcp import FastMCP\n"
+    )
+    node = _imports_of(tree, REMOVED_MODULE)[0]
+    assert id(node) not in _guarded_nodes(tree)

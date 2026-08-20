@@ -39,13 +39,7 @@ servers against 1.29.0 and 2.0.0.
 
 ## Why it took so long to notice
 
-Three things hid it, and each is worth knowing about independently.
-
-**Anchor has its own top-level `mcp/` directory.** It shadows the installed `mcp`
-package for anything started from the repo root — so local attempts failed for a
-reason that had nothing to do with the SDK version, and pointed the wrong way. If
-you are running a server from the Anchor checkout and seeing strange import
-errors, run it from another directory first.
+Two things hid it, and both are worth knowing about independently.
 
 **Nothing in CI installed the SDK.** No test ever imported a server, so no test
 could fail.

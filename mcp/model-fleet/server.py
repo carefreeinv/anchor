@@ -17,9 +17,9 @@ from pathlib import Path
 # two-name shim keeps one implementation working on either — rather than pinning
 # operators to a line that is already end-of-life, or breaking everyone still on v1.
 try:  # SDK 2.x
-    from mcp.server import MCPServer as MCPServerClass
+    from mcp.server import MCPServer
 except ImportError:  # SDK 1.x
-    from mcp.server.fastmcp import FastMCP as MCPServerClass
+    from mcp.server.fastmcp import FastMCP as MCPServer
 
 
 def _project_root() -> Path:
@@ -39,7 +39,7 @@ for _scripts in (REPO / ".anchor" / "scripts", REPO / "scripts"):
 
 from anchor_client import Fleet, has_required_footer, load_prompt  # noqa: E402
 
-mcp = MCPServerClass("model-fleet")
+mcp = MCPServer("model-fleet")
 _fleet: Fleet | None = None
 
 
