@@ -1,4 +1,4 @@
-<!-- synced-from: platforms/claude-code/CLAUDE.md @ 8b70cafd542dc934815d3705928d0041672e5ca3 -->
+<!-- synced-from: platforms/claude-code/CLAUDE.md @ 1b46a0727812f719b71acd2760829c802bc8b18d -->
 ---
 sidebar_position: 1
 sidebar_label: Claude Code
@@ -39,7 +39,7 @@ flowchart TB
 
 **Fleet offload.** With `model-fleet` connected, mechanical steps go to your own hardware (`delegate` tool) before spending plan-limit tokens. The frontier agent stays the judge, your fleet becomes the hands.
 
-**Standing rules** apply to every tier: fit-check-first **dual-axis** (weak column / orchestration → `SUGGEST-ESCALATE:`; wrong specialty/profile → `SUGGEST-REROUTE:` e.g. coding-agent — see [model fitness](/model-fitness); good on both axes → silence; a stronger model merely existing, a plan naming one, or one hard-looking step are not reasons to hand work back), restate-first, **surface the best-fit skill** (before acting, offer an available skill or command that would do the request faster in a single line, then proceed — a suggestion, not a gate; only skills actually loaded, at most once per capability per session), one step at a time, verify-don't-claim, two-failures-then-escalate, scope is sacred, required output footer, **docs describe current state not plans** (never document `.plans/` contents as product docs; document shipped code only), **`/commit-prep` before any `git commit`**, and **capacity limits are a scheduling problem** — on a session/weekly cap or a forced tier downgrade, checkpoint and then reroute to the next model that clears the task's fitness floor, wait for a near reset, or stop and report (see [capacity routing](/capacity-routing)); never finish on a silently downgraded tier and never weaken the work to beat a cap.
+**Standing rules** apply to every tier: fit-check-first **dual-axis** (weak column / orchestration → `SUGGEST-ESCALATE:`; wrong specialty/profile → `SUGGEST-REROUTE:` e.g. coding-agent — see [model fitness](/model-fitness); good on both axes → silence; a stronger model merely existing, a plan naming one, or one hard-looking step are not reasons to hand work back), restate-first, **surface the best-fit skill** (before acting, offer an available skill or command that would do the request faster in a single line, then proceed — a suggestion, not a gate; only skills actually loaded, at most once per capability per session), one step at a time, verify-don't-claim, two-failures-then-escalate, scope is sacred, required output footer, **docs describe current state not plans** (never document `.plans/` contents as product docs; document shipped code only), **`/commit-prep` before any commit outside `.plans/` and before any merge commit** (plans-only commits take the light path), and **capacity limits are a scheduling problem** — on a session/weekly cap or a forced tier downgrade, checkpoint and then reroute to the next model that clears the task's fitness floor, wait for a near reset, or stop and report (see [capacity routing](/capacity-routing)); never finish on a silently downgraded tier and never weaken the work to beat a cap.
 
 ## Tracked plans
 
@@ -47,7 +47,11 @@ Scaffold installs [**`/draft`**](/skills/draft), [**`/work`**](/skills/work), [*
 
 ## /commit-prep
 
-**Required before any `git commit`.** Agents run `/commit-prep` (discover this project’s tests/CI; CHANGELOG; blog-if-warranted — no Docusaurus required). **Prep only** — does not commit. After a green prep, [**`/work`**](/skills/work) / standing rules cover feature-branch commit (worktree preferred; merge to `dev` only via `/work`'s culmination answer + scoped gate; never to `main`).
+**Required before any commit that touches a path outside `.plans/`, and before any merge commit.** Agents run `/commit-prep` (discover this project’s tests/CI; CHANGELOG; blog-if-warranted — no Docusaurus required). **Prep only** — does not commit.
+
+A commit whose paths are *entirely* under `.plans/` — a lane move, review notes, a `## Handoff` line — takes the **light path** instead: state what moved and why, then commit. No CHANGELOG, no blog, no test run; a lane move cannot break a test. Skills that rearrange `.plans/` commit that themselves rather than leaving it staged for an unrelated commit to swallow.
+
+A **merge commit** is gated *before* it exists — `git merge --no-ff --no-commit`, run prep against the merged tree, then commit if green or `git merge --abort` if red. A fast-forward creates no commit and cannot conflict, so it needs no additional prep. After a green prep, [**`/work`**](/skills/work) / standing rules cover feature-branch commit (worktree preferred; merge to `dev` only via `/work`'s culmination answer + scoped gate; never to `main`).
 
 ## Suggested automation
 

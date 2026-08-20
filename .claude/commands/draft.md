@@ -73,7 +73,13 @@ Resolve draft under `drafts/`; read fully; **infer** ready lane:
 | Pure defect language in Goal | Expansion of product surface |
 
 If ambiguous: ask once (bug vs feature), then stop. Optional user wording
-(“as a bug”, “as a feature”) overrides. Then `git mv` (or `mv`) to
+(“as a bug”, “as a feature”) overrides. A promote is a **tracked change** in any
+project that tracks `.plans/` (the scaffold ignores only `*.local.md` and
+`.leases/`), so commit it via the **light path** — the `/commit-prep` exemption for plans-only
+commits (see `CLAUDE.md`) — state what moved and why, then
+`git add .plans/ && git commit`; no CHANGELOG, no blog, no test run. If `.plans/`
+is untracked here, say “promoted (untracked)” and commit nothing. Then `git mv`
+(or `mv`) to
 `.plans/bugs/` or `.plans/features/` with the **same basename** (keep
 `.local.md` if present — do not drop it). Refuse if target exists; warn if
 Goal/Done when thin or Depends on unmet; do not auto-`/work`. Report path +

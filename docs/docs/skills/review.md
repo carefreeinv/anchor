@@ -38,6 +38,22 @@ the empty-queue **dev → main** gate.
 | `/review` | On `main`/`dev` with both a queue **and** `dev` ahead of `main`: asks which to review. Else plan mode if queue non-empty; else promotion mode if `dev` ahead of `main` |
 | `/review <slug>` | Session for that plan only (must be under `review-needed/`) |
 | `/review --list` | Inventory queue + ahead-of-mainline advisory; no merge |
+
+## What `/review` commits
+
+Every `/review` outcome that changes a tracked file commits it — it does not leave
+the change staged for an unrelated commit to swallow. Which gate applies depends on
+what the commit contains, per the [`/commit-prep` hard rule](/platforms/claude-code):
+
+| `/review` does | Gate |
+|---|---|
+| Fast-forward merge into integration | none — creates no commit; the content was already prepped on the branch, and a fast-forward cannot conflict |
+| `--no-ff` merge (feature → integration, or integration → mainline) | **full `/commit-prep`**, run against the *staged* merge before it becomes a commit: `git merge --no-ff --no-commit`, prep, then commit if green or `git merge --abort` if red |
+| Lane move + review notes (Approve / Needs Work / Defer) | **light path** — state what moved and why, then commit. No CHANGELOG, no blog, no test run; a lane move cannot break a test |
+
+A project that leaves `.plans/` untracked (as the Anchor repo itself does) has
+nothing to commit for the third row, and `/review` says so rather than pretending.
+
 | `/review --skip-ai` | Evidence + survey only (still one decision) |
 | `/review --no-launch` | Skip auto-launch of local systems |
 | `/review --promote` | Force promotion review (refuses if not ahead) |

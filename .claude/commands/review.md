@@ -256,14 +256,30 @@ Needs Work with still-empty feedback → **refuse move**; stay in
    merge”; proceed to lane move.
 4. If already fully contained in integration: skip merge; note “already on
    integration”; proceed to lane move.
-5. Otherwise, with a clean tree:
+5. Otherwise, with a clean tree. **Fast-forward first — it creates no commit**,
+   so its content is byte-identical to what was already prepped on the branch and
+   needs no further gate:
 
    ```bash
    git checkout <integration>
    git merge --ff-only feature/<slug>
-   # if that fails (not FF-able):
-   git merge --no-ff feature/<slug> -m "Merge feature/<slug>: <plan title>"
    ```
+
+   If that fails (not FF-able), the merge **creates a commit**, and a commit needs
+   **`/commit-prep`** first (see `CLAUDE.md`'s hard rule). A clean textual merge
+   can still be semantically broken, and the merged tree is state neither branch
+   was prepped in — so stage the merge, prep *that*, and only then commit:
+
+   ```bash
+   git merge --no-ff --no-commit feature/<slug>   # stage it; do not commit yet
+   # run /commit-prep against the merged working tree
+   #   green → git commit -m "Merge feature/<slug>: <plan title>"
+   #   red   → git merge --abort
+   ```
+
+   **Red prep on the staged merge:** `git merge --abort`, leave the plan in
+   `review-needed/`, and report which gate failed. Nothing was committed, so there
+   is nothing to undo — say that plainly rather than implying a rollback happened.
 
 6. **On conflict:** `git merge --abort` if in progress; leave plan in
    `review-needed/`; report conflict paths; **do not** move to `completed/`.
@@ -277,9 +293,24 @@ another worktree.
 
 ## 12. Lane moves (plan mode)
 
+**Lane moves are commits too — `/review` makes them, and does not leave them
+staged.** In this repo `.plans/` is gitignored, but a scaffolded project **tracks**
+it (only `*.local.md` and `.leases/` are ignored), so a `git mv` here is a real
+tracked change. Leaving it staged is how plan bookkeeping ends up inside somebody's
+next unrelated commit.
+
+A commit whose paths are **entirely** under `.plans/` takes the **light path**:
+state what moved and why (the survey answer is the reason), then commit. No
+CHANGELOG, no blog, no test run — a lane move cannot break a test. If `.plans/` is
+untracked in this project, say "lane move (untracked)" and commit nothing.
+
+```bash
+git add .plans/ && git commit -m "Plans: <slug> → <lane> (/review <choice>)"
+```
+
 | Choice | Move |
 |--------|------|
-| **Approve** (merge OK or nothing to merge) | `git mv` (or `mv`) `review-needed/<file>` → `completed/` (optional `YYYY-MM-DD-` prefix). Drop any stale lease for the plan if present. |
+| **Approve** (merge OK or nothing to merge) | `git mv` (or `mv`) `review-needed/<file>` → `completed/` (optional `YYYY-MM-DD-` prefix). Drop any stale lease for the plan if present. **Then commit it** (light path). |
 | **Approve** (merge required and failed) | **No move** — stay in `review-needed/` |
 | **Needs Work** | → **`bugs/` or `features/`** (same basename). See inference below. **Never** `in-progress/`. |
 | **Skip** | No move. |
@@ -333,8 +364,17 @@ If not ahead: report and stop (with `--promote`, say why).
 ### Merge integration → mainline (Promote only)
 
 1. Clean tree required; else stop.
-2. Prefer `git checkout <mainline> && git merge --ff-only <integration>`; if not
-   FF-able, `git merge --no-ff <integration> -m "Merge <integration> into <mainline>"`.
+2. Prefer `git checkout <mainline> && git merge --ff-only <integration>` — a
+   fast-forward creates no commit and needs no further gate. If not FF-able the
+   merge **creates a commit on mainline**, which is the one branch no other path
+   can reach, so it gets the **full** gate before it exists:
+
+   ```bash
+   git merge --no-ff --no-commit <integration>
+   # run /commit-prep against the merged working tree
+   #   green → git commit -m "Merge <integration> into <mainline>"
+   #   red   → git merge --abort, report the failing gate, promote nothing
+   ```
 3. Conflict → abort; no push; report files.
 4. Success → report SHAs. Push `origin <mainline>` only with confirm / `--push`.
 5. If histories have diverged badly: **stop and report** (“integrate main→dev
