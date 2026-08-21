@@ -1,8 +1,9 @@
-<!-- synced-from: anchor/model-fitness.md @ 636b4aa933211a75376a10f9e755d1292216a4bc -->
 ---
 sidebar_position: 4
 sidebar_label: Model Fitness
 ---
+
+<!-- synced-from: anchor/model-fitness.md @ 636b4aa933211a75376a10f9e755d1292216a4bc -->
 
 # Model fitness
 

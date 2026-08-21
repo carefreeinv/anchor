@@ -4,4 +4,11 @@ ruff>=0.6
 shellcheck-py>=0.10
 # The MCP servers under mcp/ are shipped surface; without the SDK here their
 # import test skips, which is how an SDK-2.0 break reached a release unnoticed.
-mcp[cli]>=1.2.0,<3
+#
+# PINNED on purpose. The servers themselves declare `mcp[cli]>=1.2.0,<3` — that is
+# what the software supports. This line is what CI installs, and CI is the only
+# place the import test actually runs, so an unpinned range meant a new SDK release
+# could turn mainline red with no commit of ours. The pin removes that surprise;
+# the `sdk-unpinned` job in ci.yml keeps the detection by resolving the real range
+# on a schedule, where a failure is a signal rather than a blocked push.
+mcp[cli]==2.0.*

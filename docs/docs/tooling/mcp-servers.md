@@ -2,6 +2,10 @@
 sidebar_position: 3
 ---
 
+<!-- synced-from: mcp/model-fleet/README.md @ 8dd49f49367fa8ff484a00e3d14792954560d513 -->
+<!-- synced-from: mcp/anchor-prompts/README.md @ 8bc9f0807b37234758877f8331fa90ccde11e32c -->
+<!-- synced-from: mcp/project-orchestrator/README.md @ c7e54a65928dc5ed40182674164e29198bb44c71 -->
+
 # MCP servers
 
 Three stdio servers ship in `mcp/`, installable into Claude Code, Grok Build (if MCP-capable), or any MCP client:
@@ -42,6 +46,12 @@ Install with the bound, not bare:
 ```bash
 pip install "mcp[cli]>=1.2.0,<3" requests pyyaml
 ```
+
+That range is what the servers **support**, and it is what their `pyproject.toml`
+files declare. Anchor's own CI pins a single major (`requirements-dev.txt`) so a new
+SDK release cannot turn a blocked push red with no code change — and a separate
+weekly `sdk-unpinned` job resolves the real range and imports every server against
+it, so the detection is kept as a signal rather than traded away.
 
 :::note If `mcp` seems missing
 This repository has its own top-level `mcp/` **directory**. It has no

@@ -1,8 +1,9 @@
-<!-- synced-from: platforms/local-models/README.md @ ff795f600d69ccaf82dac26f01c655bd08675e27 -->
 ---
 sidebar_position: 4
 sidebar_label: Local Models
 ---
+
+<!-- synced-from: platforms/local-models/README.md @ ff795f600d69ccaf82dac26f01c655bd08675e27 -->
 
 # Local Models
 

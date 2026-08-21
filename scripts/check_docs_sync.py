@@ -25,7 +25,10 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
 # source (repo-relative) -> docs page (repo-relative) that mirrors it.
-SYNC_MAP: dict[str, str] = {
+# source (repo-relative) -> docs page, or a TUPLE of sources -> docs page when a
+# page mirrors several files. A multi-source page goes stale when **any** of its
+# sources moves, and records one `synced-from:` comment per source.
+SYNC_MAP: dict[object, str] = {
     "anchor/ANCHOR.md": "docs/docs/doctrine.md",
     "anchor/model-fitness.md": "docs/docs/model-fitness.md",
     "anchor/capacity-routing.md": "docs/docs/capacity-routing.md",
@@ -34,7 +37,21 @@ SYNC_MAP: dict[str, str] = {
     "platforms/nvidia-nim/NEMOTRON.md": "docs/docs/platforms/nvidia-nim.md",
     "platforms/local-models/README.md": "docs/docs/platforms/local-models.md",
     "platforms/chat/CHAT.md": "docs/docs/platforms/chat.md",
+    # The install command on this page is copied from all three server READMEs.
+    # Registering only one would give partial coverage that reads as complete —
+    # and an unbounded `pip install "mcp[cli]"` drifting back in is exactly the
+    # bug this page was corrected for.
+    (
+        "mcp/model-fleet/README.md",
+        "mcp/anchor-prompts/README.md",
+        "mcp/project-orchestrator/README.md",
+    ): "docs/docs/tooling/mcp-servers.md",
 }
+
+
+def _sources(key: object) -> tuple[str, ...]:
+    """Normalize a SYNC_MAP key to a tuple of source paths."""
+    return (key,) if isinstance(key, str) else tuple(key)
 
 SYNC_COMMENT_RE = re.compile(r"<!--\s*synced-from:\s*(\S+)\s*@\s*([0-9a-f]{40})\s*-->")
 
@@ -45,49 +62,77 @@ def git_blob_hash(rel_path: str) -> str:
     return result.stdout.strip()
 
 
-def read_recorded_hash(docs_path: Path) -> tuple[str, str] | None:
-    """Return (recorded_source, recorded_hash) from the docs page's sync comment, or None."""
-    match = SYNC_COMMENT_RE.search(docs_path.read_text(encoding="utf-8"))
-    return (match.group(1), match.group(2)) if match else None
+def read_recorded_hashes(docs_path: Path) -> list[tuple[str, str]]:
+    """Every (source, hash) pair recorded in the page's sync comments.
+
+    A page mirroring one file has one comment; a page mirroring several has one
+    per source, so a change to any of them can be detected independently.
+    """
+    text = docs_path.read_text(encoding="utf-8")
+    return [(m.group(1), m.group(2)) for m in SYNC_COMMENT_RE.finditer(text)]
 
 
 def check() -> list[str]:
     """Return a list of human-readable problems; empty means everything is in sync."""
     problems: list[str] = []
-    for source_rel, docs_rel in SYNC_MAP.items():
+    for key, docs_rel in SYNC_MAP.items():
+        sources = _sources(key)
         docs_path = REPO_ROOT / docs_rel
         if not docs_path.exists():
-            problems.append(f"{docs_rel}: file does not exist (expected to mirror {source_rel})")
-            continue
-        recorded = read_recorded_hash(docs_path)
-        if recorded is None:
-            problems.append(f"{docs_rel}: missing 'synced-from' comment (expected one for {source_rel})")
-            continue
-        recorded_source, recorded_hash = recorded
-        if recorded_source != source_rel:
-            problems.append(f"{docs_rel}: synced-from points at '{recorded_source}', expected '{source_rel}'")
-            continue
-        current_hash = git_blob_hash(source_rel)
-        if current_hash != recorded_hash:
             problems.append(
-                f"{docs_rel}: stale — synced from {source_rel} @ {recorded_hash[:12]}, "
-                f"source is now @ {current_hash[:12]}. Review the docs page, then re-stamp."
-            )
+                f"{docs_rel}: file does not exist (expected to mirror {', '.join(sources)})")
+            continue
+        recorded = dict(read_recorded_hashes(docs_path))
+        if not recorded:
+            problems.append(
+                f"{docs_rel}: missing 'synced-from' comment "
+                f"(expected one per source: {', '.join(sources)})")
+            continue
+        for source_rel in sources:
+            if source_rel not in recorded:
+                problems.append(
+                    f"{docs_rel}: no synced-from line for '{source_rel}'. "
+                    f"Review the docs page, then re-stamp.")
+                continue
+            current_hash = git_blob_hash(source_rel)
+            if current_hash != recorded[source_rel]:
+                problems.append(
+                    f"{docs_rel}: stale — synced from {source_rel} @ "
+                    f"{recorded[source_rel][:12]}, source is now @ {current_hash[:12]}. "
+                    f"Review the docs page, then re-stamp."
+                )
+        for extra in sorted(set(recorded) - set(sources)):
+            problems.append(
+                f"{docs_rel}: synced-from names '{extra}', which SYNC_MAP does not "
+                f"list as a source of this page.")
     return problems
 
 
+FRONTMATTER_RE = re.compile(r"\A---\n.*?\n---\n", re.DOTALL)
+
+
 def stamp() -> None:
-    for source_rel, docs_rel in SYNC_MAP.items():
+    """Rewrite each page's synced-from block, leaving the rest of the file alone.
+
+    The block goes **after** any frontmatter, which is where these pages already
+    carry it — normalizing it to the top would churn every mirrored page for no
+    reason and put HTML above a `---` fence.
+    """
+    for key, docs_rel in SYNC_MAP.items():
+        sources = _sources(key)
         docs_path = REPO_ROOT / docs_rel
-        current_hash = git_blob_hash(source_rel)
         text = docs_path.read_text(encoding="utf-8")
-        new_comment = f"<!-- synced-from: {source_rel} @ {current_hash} -->"
-        if SYNC_COMMENT_RE.search(text):
-            text = SYNC_COMMENT_RE.sub(new_comment, text, count=1)
+        # Drop the old block (and the blank line it left behind), wherever it sat.
+        text = re.sub(rf"(?:{SYNC_COMMENT_RE.pattern}\n?)+\n?", "", text, count=1)
+        block = "\n".join(
+            f"<!-- synced-from: {src} @ {git_blob_hash(src)} -->" for src in sources)
+        fm = FRONTMATTER_RE.match(text)
+        if fm:
+            text = f"{fm.group(0)}\n{block}\n\n{text[fm.end():].lstrip(chr(10))}"
         else:
-            text = f"{new_comment}\n{text}"
+            text = f"{block}\n\n{text.lstrip(chr(10))}"
         docs_path.write_text(text, encoding="utf-8")
-        print(f"stamped {docs_rel} @ {current_hash[:12]}")
+        print(f"stamped {docs_rel} @ {len(sources)} source(s)")
 
 
 def main() -> None:
