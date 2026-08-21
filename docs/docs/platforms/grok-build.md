@@ -1,4 +1,4 @@
-<!-- synced-from: platforms/grok-build/GROK.md @ d2bfde389d6de0aa45c8c2d12980a4187f5acf2f -->
+<!-- synced-from: platforms/grok-build/GROK.md @ c6ec4d7acc13fa122ccdcd329ca7812264f71fa9 -->
 ---
 sidebar_position: 2
 sidebar_label: Grok Build
@@ -35,13 +35,19 @@ The hard rules (restate → plan → one-step-per-turn → verify-don't-claim �
 
 ## Grok 4.6 (and 4.5) (reviewed 2026-08-12)
 
+**Session identity** comes only from the harness/system-prompt line (or an
+explicit `/model`/`--model`/endpoint override) — never from training weights or
+from the cost ladder below. A session whose harness says 4.6 reports itself as
+Grok 4.6; the cost ladder governs which product to **open next**, not who a
+running session is.
+
 Prefer **Grok 4.5** for lighter/cheaper mid (file-scoped execute, terminal/CLI); **Grok 4.6** for sustained multi-step agent work. Priority tokens: `grok:4.5`, `grok:4.6`. Play to terminal/CLI and multi-step loops; decompose repo-scale issues to file-scoped specs. Base catalog tier is **mid**. A **reported** `reasoning_effort` sets **effective** Preferred tier (`low`→mid, `medium`/`high`→reasoner, `xhigh`→frontier on 4.6; 4.5 `xhigh` coerces to high → reasoner). Omitted effort stays mid. TUI: **`/effort low|medium|high|xhigh`**. Dual-axis fit: power → `SUGGEST-ESCALATE:`; specialty mismatch → `SUGGEST-REROUTE:`. Mid is a floor Grok clears — do not skip file-scoped `mid` plans because Preferred also names a stronger product. Reported `high` *does* make Grok effective reasoner (skips mid-only Preferred).
 
 If MCP is available, connect `anchor-prompts` and call `tune_prompt` on any vague task before starting, and `preflight_check` before executing any spec.
 
 ## Tracked plans
 
-Scaffold installs [**`/draft`**](/skills/draft), [**`/work`**](/skills/work), [**`/review`**](/skills/review), [**`/audit`**](/skills/audit) (security audit → bug plans; frontier/reasoner), [**`/deploy`**](/skills/deploy) (ship with the project's own tooling), [**`/optimize`**](/skills/optimize) (standards scan → checkbox-picked improvement plans), [**`/fleet-watch`**](/skills/fleet-watch), [**`/install-anchor`**](/skills/install-anchor), [**`/anchor`**](/skills/anchor) (conform **this** project; CWD default), and [**`/local-models`**](/skills/local-models) (dual-use: also in the Anchor checkout). Draft: create/list/load/`--promote <slug>` (infer bugs vs features); optional `--local`. `/work` finishes → `review-needed/`; human `/review` Approve merges feature→`dev` then → `completed/` (empty queue may Promote `dev`→`main`). Git: **worktree per agent** (`worktree_for_agent.py`), feature branches from `dev`/`develop` (**create `dev` from main/master if missing**); `/work` merges only on the operator's in-session culmination answer, scoped, `dev` only. Grok 4.5 may act as temporary coordinator when Preferred orchestrator is unset. `/install-anchor` registers the CLI on PATH (user-local symlink, no sudo). Full contract: source `platforms/grok-build/GROK.md`.
+Scaffold installs [**`/draft`**](/skills/draft), [**`/work`**](/skills/work), [**`/review`**](/skills/review), [**`/audit`**](/skills/audit) (security audit → bug plans; frontier/reasoner), [**`/deploy`**](/skills/deploy) (ship with the project's own tooling), [**`/optimize`**](/skills/optimize) (standards scan → checkbox-picked improvement plans), [**`/fleet-watch`**](/skills/fleet-watch), [**`/install-anchor`**](/skills/install-anchor), [**`/anchor`**](/skills/anchor) (conform **this** project; CWD default), and [**`/local-models`**](/skills/local-models) (dual-use: also in the Anchor checkout). Draft: create/list/load/`--promote <slug>` (infer bugs vs features); optional `--local`. `/work` finishes → `review-needed/`; human `/review` Approve merges feature→`dev` then → `completed/` (empty queue may Promote `dev`→`main`). Git: **worktree per agent** (`worktree_for_agent.py`), feature branches from `dev`/`develop` (**create `dev` from main/master if missing**); `/work` merges only on the operator's in-session culmination answer, scoped, `dev` only. A Grok session (4.5 or 4.6, per its own harness line) may act as temporary coordinator when Preferred orchestrator is unset. `/install-anchor` registers the CLI on PATH (user-local symlink, no sudo). Full contract: source `platforms/grok-build/GROK.md`.
 
 ## /commit-prep
 

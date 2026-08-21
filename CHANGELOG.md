@@ -8,6 +8,19 @@ Newest first.
 
 ### Fixed
 
+- **Grok 4.6 sessions could be instructed to self-report as 4.5** — GROK.md, the
+  `/work` skill (Grok + Claude copies), and one `docs/docs/` mirror told a running
+  session to "pick product by cost ladder" before reporting its own name, and used
+  bare "Grok 4.5" as the canonical self-identity example even though the cost
+  ladder is a **routing** table for which product to open next, not a source of
+  truth for who the current session is. A live Grok 4.6 session following that
+  instruction would report itself (and match `Preferred models`, `plan_fit`
+  eligibility, and the effort→tier map) as Grok 4.5. Session identity is now
+  stated once, up front: the harness/system-prompt line (or an explicit
+  `/model`/`--model`/endpoint override) is the only source of a session's own
+  name; the cost ladder stays for picking which product to open. The 4.5/4.6
+  cost ladder, catalog rows, and effort-coercion tests are unchanged.
+
 - **MCP servers could not start on a fresh install (SDK 2.0 removed `mcp.server.fastmcp`)** — all three servers (`model-fleet`, `anchor-prompts`, `project-orchestrator`) opened with `from mcp.server.fastmcp import FastMCP` while declaring an **unbounded** `mcp[cli]>=1.2.0`, so any new install resolved SDK **2.0.0** — which deleted that module and renamed `FastMCP` to `MCPServer` — and every server died at import with `ModuleNotFoundError`. Our own READMEs and module docstrings instructed the failing `pip install "mcp[cli]"`. Since the decorator surface (`tool`, `prompt`, `resource`) and `run()` are unchanged across the rename, each server now resolves the class once at import (SDK 2 first, SDK 1 as the guarded fallback) and the dependency is bounded `>=1.2.0,<3` — a fresh install works **and** an operator pinned to 1.x is not broken; verified by importing all three against both 1.29.0 and 2.0.0. Install commands in the three READMEs, the three module docstrings, and the docs page now carry the bound. New `tests/test_mcp_servers_import.py` imports each server against the **actually installed** SDK in a subprocess run from outside the repo, asserting it resolved a real site-packages `mcp` before trusting the result, asserts every server declares an upper bound, and rejects an unguarded module-level import of the removed module; `requirements-dev.txt` now installs the SDK so CI exercises it instead of skipping. Documented at [MCP servers](/tooling/mcp-servers), including the shadowing caveat
 
 ### Changed

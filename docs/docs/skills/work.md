@@ -89,7 +89,7 @@ Ready lanes only — bare `/work` never scans `in-progress/` (resume is an expli
 
 Plan headers SHOULD include **Preferred models** (tiers `small | mid | reasoner | frontier` and/or concrete names). Bare `/work` skips plans that are a poor fit for the current model (overqualified or underqualified). Named slug/path or `--no-fit-check` overrides the skip; still state fit in one line when mismatched. See [model fitness](/model-fitness) and the [plan template](https://github.com/carefreeinv/anchor/blob/main/anchor/templates/plan.md).
 
-**Know yourself:** model name + catalog tier (name/table win — e.g. Grok 4.5 is **mid**), cost posture (reasoning effort / thinking toggle), and cheaper capacity on this host.
+**Know yourself:** model name + catalog tier — identity comes from the **harness/system-prompt** name (or an explicit `/model`/`--model` override), never a guess from training weights; e.g. if the harness says "You are Grok 4.6", you are **mid** and report Grok 4.6. Cost posture (reasoning effort / thinking toggle) and cheaper capacity on this host round out the check.
 
 **Cheaper capacity probe:** before hard-skipping overqualified work or burning a high-cost session on `small`/`mid` Preferred, check `scripts/endpoints.yaml` (and product-local / conventions models) for a lesser **reachable** executor. Registry map: `swarm`→`small`, `executor`|`executor-heavy`|`detached`→`mid`. If one fits, leave the plan unclaimed and print a dispatch line (`work_once.py --once --endpoint …`). If none are up, you are the available executor — do not permanent-refuse mid work.
 

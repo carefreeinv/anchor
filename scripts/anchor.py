@@ -640,7 +640,7 @@ Detected/declared language or framework: **{framework}**
         "If the Preferred orchestrator line is **unset** / empty and **no** project "
         "MCP coordinator is registered for this tree:\n\n"
         "1. If **you** are a **frontier or near-frontier** model (e.g. Fable-class, "
-        "Opus-class, GPT-5.x Sol/Terra-class, Grok 4.5 when used as a strong "
+        "Opus-class, GPT-5.x Sol/Terra-class, a Grok session used as a strong "
         "session lead — see `.anchor/model-fitness.md`), you **may take a temporary "
         "coordinator role** for this session only.\n"
         "2. While temporary coordinator: inventory `.plans/**`, propose/fill "
