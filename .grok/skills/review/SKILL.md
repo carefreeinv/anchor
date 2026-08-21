@@ -345,9 +345,9 @@ still in progress; the merge commit and the lane move are always **two** commits
 |--------|------|
 | **Approve** (merge OK or nothing to merge) | → `completed/` (optional `YYYY-MM-DD-` prefix); drop stale lease if any; **then commit it** (light path) |
 | **Approve** (merge required and failed) | **No move** — stay in `review-needed/` |
-| **Needs Work** | → **`bugs/` or `features/`** (same basename); **never** `in-progress/` |
+| **Needs Work** | → **`bugs/` or `features/`** (same basename); **never** `in-progress/`; write the actionable notes first; **then commit it** (light path) |
 | **Skip** | No move |
-| **Defer** | → `blocked/` with note |
+| **Defer** | → `blocked/` with note; **then commit it** (light path) |
 
 ### Needs Work → bugs vs features
 

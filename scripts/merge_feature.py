@@ -34,7 +34,8 @@ Usage:
       --expect-head <sha>
 
 Exit codes: 0 merged (or would merge under --dry-run), 2 git error, 3 scope
-violation, 4 precondition failed, 5 merge conflict.
+violation, 4 precondition failed, 5 merge conflict, 6 merge staged (not committed;
+run --commit-staged or --abort-staged after /commit-prep).
 """
 from __future__ import annotations
 
@@ -62,6 +63,15 @@ MAINLINE = ("main", "master")
 
 class GitError(RuntimeError):
     """git itself failed (not a repo, command error) — distinct from a refusal."""
+
+
+class StagedMergeInvalid(GitError):
+    """The recorded staged-merge state no longer matches reality.
+
+    A stale state file (operator hand-aborted the merge, an interrupted run, a
+    second invocation) must not make ``commit_staged`` ``git add -A`` whatever
+    happens to be lying around and commit it as though it were the recorded merge.
+    """
 
 
 @dataclass(frozen=True)
@@ -421,8 +431,21 @@ def land(root: Path, branch: str, target: str, *, title: str = "") -> str:
 STAGED_STATE = "merge-feature-staged.json"
 
 
+def _git_dir(root: Path) -> Path:
+    """The real git directory for ``root``, resolving linked-worktree indirection.
+
+    In a linked worktree ``<root>/.git`` is a **file** pointing elsewhere, not a
+    directory — ``root / ".git" / STAGED_STATE`` raises ``NotADirectoryError``
+    there, which is exactly the topology ``/work`` recommends
+    (``var/worktrees/<agent-id>/``). ``--absolute-git-dir`` resolves correctly for
+    both a plain repo and a linked worktree, and gives each worktree its own state
+    file, which is right: a staged merge is specific to the tree that staged it.
+    """
+    return Path(_git(root, "rev-parse", "--absolute-git-dir").stdout.strip())
+
+
 def _state_path(root: Path) -> Path:
-    return Path(root) / ".git" / STAGED_STATE
+    return _git_dir(root) / STAGED_STATE
 
 
 def _write_staged_state(root: Path, branch: str, target: str, original: str,
@@ -457,6 +480,30 @@ def clear_staged_state(root: Path) -> None:
     _state_path(root).unlink(missing_ok=True)
 
 
+def _verify_staged_merge(root: Path, target: str) -> None:
+    """Refuse to touch a merge that is not actually what the state file claims.
+
+    Checked before ``commit_staged`` does anything: without ``MERGE_HEAD``, a
+    stale or hand-aborted state would have it ``git add -A`` and commit whatever
+    is lying around (scratch files, an unrelated edit) as a single-parent
+    commit reported as a merge that never happened. Without the branch check, a
+    stale state left after the operator switched branches would commit onto
+    whatever HEAD is now, not the recorded target.
+    """
+    if _git(root, "rev-parse", "-q", "--verify", "MERGE_HEAD", check=False).returncode != 0:
+        raise StagedMergeInvalid(
+            "no merge in progress (MERGE_HEAD missing) — the staged-merge state is "
+            "stale; run --abort-staged to clear it, or resolve manually"
+        )
+    branch = current_branch(root)
+    if branch != target:
+        raise StagedMergeInvalid(
+            f"HEAD is on {branch!r}, not the recorded target {target!r} — refusing "
+            f"to commit onto the wrong branch; run --abort-staged to clear the stale "
+            f"state, or checkout {target!r} first"
+        )
+
+
 def commit_staged(root: Path, branch: str, target: str, *, title: str = "",
                   original: str = "") -> str:
     """Commit a merge staged by :func:`land`, after ``/commit-prep`` came back green.
@@ -466,6 +513,7 @@ def commit_staged(root: Path, branch: str, target: str, *, title: str = "",
     the index — silently dropping prep's own output from the merge commit and
     leaving it dirty in the tree.
     """
+    _verify_staged_merge(root, target)
     try:
         msg = f"Merge {branch}" + (f": {title}" if title else "")
         _git(root, "add", "-A")
@@ -483,8 +531,10 @@ def abort_staged(root: Path, *, original: str = "") -> None:
 
     ``git merge --abort`` **refuses** when a file involved in the merge has unstaged
     modifications — which is exactly what prep's fix-the-tests gate produces — so
-    fall back to a hard reset. Either way nothing was committed, but prep's own edits
-    are discarded along with the merge.
+    fall back to a hard reset. Either way nothing was committed, and prep's *tracked*
+    edits are discarded along with the merge — but ``reset --hard`` does not remove
+    **untracked** files, so a blog post or other new file prep created survives on
+    disk (``?? path`` in ``git status``) even though the merge did not land.
     """
     if _git(root, "merge", "--abort", check=False).returncode != 0:
         _git(root, "reset", "--hard", "HEAD", check=False)
@@ -634,7 +684,12 @@ def main(argv: list[str] | None = None) -> int:
             else:
                 abort_staged(root, original=state.get("original", ""))
                 print(f"aborted; {state['target']} unchanged, nothing committed. "
-                      f"/commit-prep's own edits were discarded with the merge.")
+                      f"/commit-prep's tracked edits were discarded with the merge "
+                      f"(untracked files it created, e.g. a new blog post, survive "
+                      f"on disk — check `git status`).")
+        except StagedMergeInvalid as exc:
+            print(f"merge-feature: {exc}", file=sys.stderr)
+            return EXIT_PRECONDITION
         except GitError as exc:
             print(f"merge-feature: {exc}", file=sys.stderr)
             return EXIT_GIT
@@ -650,8 +705,16 @@ def main(argv: list[str] | None = None) -> int:
         return EXIT_PRECONDITION
 
     try:
+        touched = read_touched(args.touched)
+    except (OSError, UnicodeDecodeError) as exc:
+        # Unreadable or non-text --touched file: the caller's precondition, not
+        # git's fault, and exit 1 from a traceback is outside the documented set.
+        print(f"merge-feature: cannot read --touched: {exc}", file=sys.stderr)
+        return EXIT_PRECONDITION
+
+    try:
         verdict, new_head = run(
-            Path(args.root), args.slug, read_touched(args.touched),
+            Path(args.root), args.slug, touched,
             base=args.base, expect_head=args.expect_head, target=args.target,
             branch=args.branch, dry_run=args.dry_run, title=args.title,
         )
@@ -659,11 +722,6 @@ def main(argv: list[str] | None = None) -> int:
     except GitError as exc:
         print(f"merge-feature: {exc}", file=sys.stderr)
         return EXIT_GIT
-    except (OSError, UnicodeDecodeError) as exc:
-        # Unreadable or non-text --touched file: the caller's precondition, not
-        # git's fault, and exit 1 from a traceback is outside the documented set.
-        print(f"merge-feature: cannot read --touched: {exc}", file=sys.stderr)
-        return EXIT_PRECONDITION
 
     print(verdict.report())
     if verdict.ok and args.dry_run:

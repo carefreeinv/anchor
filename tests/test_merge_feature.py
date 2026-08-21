@@ -3,6 +3,7 @@
 Every refusal path here routes the work back to /review rather than landing
 something unreviewed, so these tests are mostly about *not* merging.
 """
+import json
 import subprocess
 from pathlib import Path
 
@@ -671,3 +672,72 @@ def test_a_fast_forward_merge_still_reports_a_real_sha(repo, tmp_path):
     touched.write_text("app/\n", encoding="utf-8")
     assert main(_merge_argv(repo, touched)) == EXIT_OK
     assert read_staged_state(repo) is None
+
+
+# --- hostile state: the six tests above are all happy-path (B1/B2/B3) --------
+#
+# A stale state file (operator hand-aborted, an interrupted run, a corrupted
+# record) or a linked worktree must not make `--commit-staged` `git add -A` and
+# commit whatever is lying around, or land on the wrong branch, or crash outright.
+
+
+def test_commit_staged_refuses_after_a_hand_aborted_merge(staged):
+    # The operator (or a previous, unfinished run) aborted the merge directly,
+    # bypassing --abort-staged — MERGE_HEAD is gone but the JSON record survives.
+    repo, _code, dev_before, _out = staged
+    _git(repo, "merge", "--abort")
+    assert not (repo / ".git" / "MERGE_HEAD").exists()
+    assert read_staged_state(repo) is not None, "the stale record is still there"
+
+    assert main(["--root", str(repo), "--commit-staged"]) == EXIT_PRECONDITION
+    assert _git(repo, "rev-parse", "dev") == dev_before, "nothing should have landed"
+    assert _git(repo, "status", "--porcelain") == ""
+
+
+def test_commit_staged_refuses_when_the_state_file_names_the_wrong_branch(staged):
+    # A corrupted or stale record whose "target" no longer matches the branch
+    # actually mid-merge (e.g. two staged merges in a row, the second record
+    # overwriting the first before it was finished). MERGE_HEAD is genuinely
+    # present, so this is not the hand-aborted case above.
+    repo, _code, dev_before, _out = staged
+    state_path = repo / ".git" / "merge-feature-staged.json"
+    state = json.loads(state_path.read_text(encoding="utf-8"))
+    assert state["target"] == "dev"
+    state["target"] = "main"
+    state_path.write_text(json.dumps(state), encoding="utf-8")
+
+    assert main(["--root", str(repo), "--commit-staged"]) == EXIT_PRECONDITION
+    assert _git(repo, "rev-parse", "dev") == dev_before, "dev must not move"
+    assert _git(repo, "rev-parse", "--abbrev-ref", "HEAD") == "dev", (
+        "refusing must not itself switch branches"
+    )
+    main_log = _git(repo, "log", "--oneline", "main")
+    assert "Merge" not in main_log, "must not have committed onto the named branch"
+
+
+def test_state_path_works_inside_a_linked_worktree(repo, tmp_path):
+    # B1: `<root>/.git` is a FILE in a linked worktree, not a directory —
+    # `var/worktrees/<agent-id>/` is the topology `/work` itself recommends, so
+    # this is a regression in Anchor's own recommended setup, not an edge case.
+    _git(repo, "checkout", "main")
+    worktree = tmp_path / "linked-worktree"
+    _git(repo, "worktree", "add", str(worktree), "dev")
+    assert (worktree / ".git").is_file(), "a linked worktree's .git must be a file"
+
+    feature_head = _head(repo)
+    _commit(worktree, "docs/note.md", "dev side\n", "dev-side work")
+
+    touched = tmp_path / "touched.txt"
+    touched.write_text("app/\n", encoding="utf-8")
+    code = main(["--root", str(worktree), "--slug", "my-plan", "--touched", str(touched),
+                 "--expect-head", feature_head, "--target", "dev"])
+    assert code == EXIT_STAGED
+
+    assert read_staged_state(worktree) is not None
+    # The state lives under the worktree's own git dir, not the main repo's.
+    assert not (repo / ".git" / "merge-feature-staged.json").exists()
+
+    assert main(["--root", str(worktree), "--commit-staged"]) == EXIT_OK
+    subject = _git(worktree, "log", "-1", "--format=%s", "dev")
+    assert subject.startswith("Merge feature/my-plan")
+    assert _git(worktree, "status", "--porcelain") == ""

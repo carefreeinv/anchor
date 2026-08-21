@@ -45,10 +45,10 @@ git commit -m "Plans: <slug> → <lane> (/review Approve)" -- .plans/
 The pathspec keeps an unrelated pre-staged file out of an ungated commit. But note
 where it sits. Everything after `--` is a pathspec, so the reversed form —
 `git commit -- .plans/ -m "…"` — treats `-m` and the message as *filenames*. It
-exits without complaint and commits nothing. We shipped that form, twice, because
-reading a command is not running one. There is now a test that runs the command
-exactly as the skills ship it, against a throwaway repo, and fails if it succeeds
-without producing a commit.
+exits without complaint and commits nothing — a command that reads correctly but
+silently does nothing when run, caught in review before it reached anyone. There is
+now a test that runs the command exactly as the skills ship it, against a throwaway
+repo, and fails if it succeeds without producing a commit.
 
 This is also the one commit allowed to land on an integration branch rather than a
 feature branch — `/review`, `/work` and `/draft --promote` each make it on whichever
@@ -76,28 +76,26 @@ silently drops prep's own output. And `git merge --abort` *refuses*, with
 merge — which is precisely what its fix-the-tests gate does. Hence the reset
 fallback.
 
-One honest correction to what we wrote earlier: the reset does not discard
-everything prep did. It restores **tracked** files, so a new blog post prep created
-survives as untracked. Check `git status` and decide about it deliberately, rather
-than assuming a clean slate.
+One nuance worth stating plainly: the reset does not discard everything prep did.
+It restores **tracked** files, so a new blog post prep created survives as
+untracked. Check `git status` and decide about it deliberately, rather than
+assuming a clean slate.
 
 A fast-forward creates no commit at all, and its content is byte-identical to what
 was already prepped on the branch, so it needs no additional gate.
 
-## `merge_feature.py` was reporting merges it hadn't made
+## `merge_feature.py` was making the exact commit this rule forbids
 
-Anchor's own scoped-merge tool is bound by the same rule, and it was breaking it in
-a way that looked like success. When a merge could not fast-forward, `land()`
-correctly staged it and stopped — and the CLI printed:
+Anchor's own scoped-merge tool — the machinery behind `/work`'s "merge to dev now"
+answer — was bound by the same rule and broke it outright. When a merge could not
+fast-forward, `land()` ran `git merge --no-ff <branch> -m …` directly: a real merge
+commit, on the merged tree, with no `/commit-prep` pass over it at all. The merged
+tree is state neither branch was ever prepped in, and this is exactly the case the
+rule above exists for.
 
-```text
-merged; dev is now STAGED.
-```
-
-and exited `0`. Every caller was told a merge had landed while the checkout sat
-mid-merge with nothing committed, and no documented way to finish or undo it.
-
-A staged merge now exits **`6`** — neither success nor failure — and says so:
+`land()` now stages a non-fast-forward merge instead of committing it, and stops
+there. The CLI reports that outcome with exit **`6`** — neither success nor
+failure — and says so:
 
 ```text
 STAGED: dev has the merge staged, NOT committed.
@@ -106,11 +104,14 @@ STAGED: dev has the merge staged, NOT committed.
     red   -> python scripts/merge_feature.py --root . --abort-staged
 ```
 
-`--commit-staged` stages prep's own edits along with the merge, commits both, and
+`--commit-staged` checks the merge is genuinely still in progress on the recorded
+target branch, then stages prep's own edits along with the merge, commits both, and
 returns you to the branch you started on. `--abort-staged` unwinds it, with the
-`reset --hard` fallback for the refusing case above. The tool records the pending
-merge under `.git/`, so the finishing run knows which branch to restore without
-being told. The fast-forward path is unchanged and still reports a real SHA.
+`reset --hard` fallback for the refusing case above. The pending merge is recorded
+under the repository's real git directory — resolved with `git rev-parse
+--absolute-git-dir` rather than assumed as `<root>/.git`, so it also works inside a
+linked worktree, the topology `/work` itself recommends per agent. The
+fast-forward path is unchanged and still reports a real SHA.
 
 ## Tests that read the documents
 

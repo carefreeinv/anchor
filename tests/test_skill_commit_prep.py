@@ -57,6 +57,14 @@ NO_COMMIT_CREATED = re.compile(
     r"--abort\b|--ff-only\b|--continue\b|--no-commit\b|merge-base\b"
 )
 
+# Shell clause separators (not `||`, which is itself a no-op-on-failure guard,
+# not a second command worth splitting into). A compressed one-liner like
+# `git merge --no-ff --no-commit X && git add -A && git commit -m "..."` reads
+# as one line but is three commands — checking NO_COMMIT_CREATED against the
+# whole line would let the guarded first clause hide the unguarded `git commit`
+# two clauses later.
+CLAUSE_SPLIT = re.compile(r"&&|;|\|(?!\|)")
+
 # The hard rule is scoped by commit *content*: a commit whose paths are entirely
 # under `.plans/` takes the light path and owes no prep reference. Lane moves are
 # the overwhelming majority of git commands in these documents, and demanding a
@@ -132,11 +140,22 @@ def test_mutating_skill_names_commit_prep(path: Path):
         lo, hi = max(0, i - PLANS_CONTEXT), min(len(lines), i + PLANS_CONTEXT + 1)
         return any(PLANS_ONLY.search(ln) for ln in lines[lo:hi])
 
+    def _creates_commit(ln: str) -> bool:
+        """A line creates or stages a commit if any of its clauses do.
+
+        Evaluated per clause (see CLAUSE_SPLIT): a guarded `--no-commit` merge
+        earlier in a compressed one-liner must not exempt an unguarded `git
+        commit` later in the same line.
+        """
+        return any(
+            MUTATING.search(c) and not NO_COMMIT_CREATED.search(c)
+            and not _is_mention(c)
+            for c in CLAUSE_SPLIT.split(ln)
+        )
+
     mutating_lines = [
         i for i, ln in enumerate(lines)
-        if MUTATING.search(ln)
-        and not NO_COMMIT_CREATED.search(ln)
-        and not _is_mention(ln)
+        if _creates_commit(ln)
         and not _plans_only(i)
     ]
     if not mutating_lines:
@@ -163,15 +182,32 @@ def test_mutating_skill_names_commit_prep(path: Path):
     )
 
 
+MERGE_NO_FF_LINE = re.compile(r"git\s+(?:-[Cc]\s*\S+\s+)*merge\b.*--no-ff\b")
+NO_COMMIT_WINDOW = 2  # lines either side — a trailing comment or a wrapped fence
+
+
 @pytest.mark.parametrize("path", _skills(), ids=lambda p: p.parent.name + "/" + p.name)
 def test_no_skill_creates_a_merge_commit_without_gating_it(path: Path):
-    # `git merge --no-ff` creates a commit. The hard rule gates it *before* it
-    # exists, which in practice means --no-commit, prep, then commit.
+    # `git merge --no-ff` (without `--no-commit`) creates a commit outright. The
+    # hard rule gates it *before* it exists — but checking "does `--no-commit`
+    # appear anywhere in the file" lets one gated occurrence cover an ungated one
+    # elsewhere in the same document, which is exactly how a second, ungated merge
+    # rode along unnoticed. Check each `--no-ff` occurrence on its own.
     text = path.read_text(encoding="utf-8")
-    if "--no-ff" not in text:
-        return
-    assert "--no-commit" in text, (
-        f"{path.relative_to(REPO)} uses `git merge --no-ff`, which creates a commit, "
-        f"without the `--no-commit` staging step that lets /commit-prep gate it "
-        f"before it exists."
+    lines = text.splitlines()
+    offenders = [
+        (i + 1, lines[i].strip())
+        for i, ln in enumerate(lines)
+        if MERGE_NO_FF_LINE.search(ln)
+        and not any(
+            "--no-commit" in lines[j]
+            for j in range(max(0, i - NO_COMMIT_WINDOW),
+                            min(len(lines), i + NO_COMMIT_WINDOW + 1))
+        )
+    ]
+    assert not offenders, (
+        f"{path.relative_to(REPO)}: {len(offenders)} `git merge --no-ff` "
+        f"occurrence(s) create a commit without a `--no-commit` staging step "
+        f"within {NO_COMMIT_WINDOW} lines that lets /commit-prep gate it before "
+        f"it exists:\n" + "\n".join(f"  line {n}: {t}" for n, t in offenders[:8])
     )

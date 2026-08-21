@@ -19,10 +19,14 @@ import pytest
 
 REPO = Path(__file__).resolve().parents[1]
 
-# Every document that ships the plans-only lane-move commit.
+# Every document that ships the plans-only lane-move commit as a standalone,
+# runnable command (not inline prose a human would adapt by hand — /draft's
+# copies embed the same command mid-sentence with a "…" placeholder, which is
+# not a fenced block meant to be copy-pasted verbatim).
 LIGHT_PATH_DOCS = (
     ".claude/commands/review.md",
     ".grok/skills/review/SKILL.md",
+    "platforms/chat/CHAT.md",
 )
 
 # The commit line inside a fenced block: `git commit ...` mentioning .plans/
@@ -51,7 +55,8 @@ def _fill_placeholders(command: str) -> list[str]:
     concrete = (command
                 .replace("<slug>", "my-plan")
                 .replace("<lane>", "completed")
-                .replace("<choice>", "Approve"))
+                .replace("<choice>", "Approve")
+                .replace("<reason>", "moved to completed"))
     assert "<" not in concrete, f"unsubstituted placeholder in: {concrete}"
     return shlex.split(concrete)
 

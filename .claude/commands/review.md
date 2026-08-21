@@ -346,9 +346,9 @@ still in progress; the merge commit and the lane move are always **two** commits
 |--------|------|
 | **Approve** (merge OK or nothing to merge) | `git mv` (or `mv`) `review-needed/<file>` → `completed/` (optional `YYYY-MM-DD-` prefix). Drop any stale lease for the plan if present. **Then commit it** (light path). |
 | **Approve** (merge required and failed) | **No move** — stay in `review-needed/` |
-| **Needs Work** | → **`bugs/` or `features/`** (same basename). See inference below. **Never** `in-progress/`. |
+| **Needs Work** | → **`bugs/` or `features/`** (same basename). See inference below. **Never** `in-progress/`. Write the actionable notes into the plan first. **Then commit it** (light path). |
 | **Skip** | No move. |
-| **Defer** | → `blocked/` with blocker note in the plan. |
+| **Defer** | → `blocked/` with blocker note in the plan. **Then commit it** (light path). |
 
 ### Needs Work → bugs vs features
 
