@@ -138,17 +138,22 @@ floor**: it does not exclude `small`.
 
 Before selecting a plan, identify **all three**:
 
-1. **Model name + fit tier** (product name if known; else closest tier). Use
-   `.anchor/model-fitness.md` and the plan-template table. **Name and catalog
-   tier win over vibes** — e.g. **Grok 4.5 is mid-class** for Preferred matching
-   (listed under `mid`; named “Grok 4.5” is a good hit). Temporary-coordinator
-   eligibility is not the same as “treat every `mid` plan as overqualified.”
+1. **Model name + fit tier** — your identity is the **harness/system-prompt**
+   product name (or an explicit `/model`/`--model`/endpoint override), never a
+   guess from training weights. Use `.anchor/model-fitness.md` and the
+   plan-template table. **Name and catalog tier win over vibes** — e.g. if the
+   harness says "You are Grok 4.6", you report **Grok 4.6** and match Preferred
+   `mid`/named "Grok 4.6"; report Grok 4.5 only when the harness actually says
+   4.5. Temporary-coordinator eligibility is not the same as “treat every `mid`
+   plan as overqualified.”
 2. **Cost posture** when the product supports it: current **reasoning effort** /
    thinking mode if known (`low` | `medium` | `high` | `xhigh` | …). **Grok family
-   (4.5/4.6):** prefer **4.5 for lighter/cheaper mid**, **4.6 for heavier multi-step agent** work; reported effort sets **effective fit tier** (`low`→mid, `medium`/`high`→reasoner, `xhigh`→frontier; **unknown effort → mid**). Report
-   `Grok 4.5|4.6 @ <effort> → effective <tier>` before Preferred matching.
-   **Non-Grok products:** high effort remains a **cost dial only**, not a tier
-   promotion.
+   effort map (4.5/4.6):** reported effort sets **effective fit tier**
+   (`low`→mid, `medium`/`high`→reasoner, `xhigh`→frontier; **unknown effort →
+   mid**). Report `<harness-named product> @ <effort> → effective <tier>` before
+   Preferred matching — e.g. `Grok 4.6 @ high → effective reasoner` (a lookup by
+   harness name, never a pick from the cost ladder). **Non-Grok products:** high
+   effort remains a **cost dial only**, not a tier promotion.
 3. **Cheaper capacity** on this host/fleet (next subsection) — required whenever
    fit is poor **or** the top ready work is `small`/`mid` while this session is
    expensive (true higher tier, or mid model stuck on high effort).
@@ -469,6 +474,7 @@ Checks 1–5 are mechanical; run them with the helper rather than by eye:
 python scripts/merge_feature.py --root <checkout> --slug <slug> \
   --touched <file-with-one-path-per-line> --expect-head <sha you committed> --dry-run
 # exit 0 would merge · 3 scope violation · 4 precondition · 5 conflict · 2 git error
+#      6 merge staged, NOT committed — finish it with the flags below
 ```
 
 `--expect-head` is **required** — provenance is a must-hold condition, and without
@@ -480,8 +486,32 @@ live in another worktree, so with `/work` in `var/worktrees/<agent>` and your ma
 checkout on `dev`, run it against the main checkout. The gate detects that conflict
 up front and names the path to re-run against instead of failing mid-merge.
 
-Drop `--dry-run` to land it. The helper never pushes, never force-updates, never
-deletes a branch, and refuses mainline targets. **Do not** pass the operator's
+Drop `--dry-run` to land it. **A non-fast-forward merge exits `6` — staged, not
+committed** — because the merged tree is state neither branch was prepped in, so
+the helper stages it and hands control back. Exit `6` is neither success nor
+failure: never report it as merged. Run `/commit-prep` against the merged tree,
+then finish it with **one** of:
+
+```bash
+python scripts/merge_feature.py --root <checkout> --commit-staged   # prep green
+python scripts/merge_feature.py --root <checkout> --abort-staged    # prep red
+```
+
+A fast-forward exits `0` with a real SHA and owes nothing further.
+
+`--commit-staged` stages everything before committing — prep edits the *working
+tree*, and a bare `git commit` during a merge would drop its output.
+`--abort-staged` falls back to a hard reset because `git merge --abort` refuses
+once prep has touched a merged file; that discards prep's edits to **tracked**
+files, while anything prep *created* is untracked and survives on disk. Both
+finishers refuse rather than guess if you resolved the merge by hand in between —
+`--abort-staged` then clears the stale record without resetting anything, because
+a reset against a tree the record no longer describes destroys unrelated work
+rather than undoing a merge. The checkout stays mid-merge until one of them runs,
+so never end a session on an exit `6` without saying so.
+
+The helper never pushes, never force-updates, never deletes a branch, and refuses
+mainline targets. **Do not** pass the operator's
 answer to it — check 6 is yours to hold, and a flag would be exactly the inference
 this path forbids.
 
@@ -514,7 +544,12 @@ The merged form is what makes a skipped review **auditable** — `/review --list
 #### Answers 1 and 3
 
 `git mv` the plan from `in-progress/` to `.plans/review-needed/` (create the dir if
-needed) and drop its lease. That move means *agent asserts Done when* — it is not a
+needed) and drop its lease. **Then commit that move** via the light path — the
+`/commit-prep` exemption for plans-only commits: state what moved and why, then
+`git add .plans/` and `git commit -m "…" -- .plans/`; no CHANGELOG, no blog, no test run.
+The pathspec matters — a bare `git commit` would sweep in anything else already
+staged. If this plan is untracked (`*.local.md`, or a project that ignores
+`.plans/`), say “lane move (untracked)” and commit nothing. That move means *agent asserts Done when* — it is not a
 final archive. Tell the human to run **`/review`** (or `/review <slug>`): AI critic
 + survey — Approve merges `feature/<slug>` → `dev` then → `completed/`; Needs Work →
 `bugs|features/`; Skip. Never move `review-needed/` → `completed/` yourself.

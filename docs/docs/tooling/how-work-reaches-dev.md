@@ -54,7 +54,33 @@ proves the branch is exactly what the run thinks it is. All of it must hold:
 python scripts/merge_feature.py --root <checkout> --slug <slug> \
   --touched touched.txt --expect-head <sha> --dry-run
 # 0 would merge · 3 scope violation · 4 precondition · 5 conflict · 2 git error
+#                                              6 merge staged, not committed
 ```
+
+**Exit `6` is not a failure and not a success.** A merge that cannot fast-forward
+creates a commit, and a commit is gated *before* it exists — so the run stages the
+merge and stops, leaving the tree parked on the integration branch with the merge
+in the index. Nothing has been committed yet. Run `/commit-prep` against that
+merged tree, then finish it:
+
+```bash
+python scripts/merge_feature.py --root <checkout> --commit-staged   # prep green
+python scripts/merge_feature.py --root <checkout> --abort-staged    # prep red
+```
+
+`--commit-staged` stages prep's own edits along with the merge and commits both,
+then returns to the branch you started on. `--abort-staged` unwinds the merge and
+leaves the integration branch untouched. Leaving a run at exit `6` without doing
+either leaves the checkout mid-merge, so treat it as work in progress, not a
+result.
+
+Both finishers check that the merge they recorded is still the merge in front of
+them, and refuse rather than guess. If you resolved the merge by hand in between,
+`--commit-staged` refuses (exit `4`) instead of committing whatever is now in the
+tree, and `--abort-staged` clears the stale record **without** resetting anything
+— a `reset --hard` against a tree the record no longer describes would destroy
+unrelated uncommitted work rather than undo a merge. If a merge is in progress on
+a *different* branch than the one recorded, both refuse.
 
 `--expect-head` is **required**: without the SHA the run committed there is no way
 to tell the branch has not moved since, and provenance is a must-hold condition

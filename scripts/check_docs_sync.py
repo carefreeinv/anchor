@@ -10,6 +10,12 @@ means nobody has confirmed it's still right since the source last changed. Fix b
 reviewing the docs page and updating the hash in its comment (this script can do
 that for you with --stamp once you've actually reviewed the content).
 
+**It compares hashes, not content.** A green run says "every mirror was re-read
+since its source last moved" — never "every mirror matches its source". Re-stamping
+makes it green whether or not you reviewed anything, so `--stamp` records an
+assertion you are making, not a check being performed. Do not cite a green run as
+evidence that a page and its source agree.
+
 Usage:
   python scripts/check_docs_sync.py            # report; exit 1 if anything is stale
   python scripts/check_docs_sync.py --stamp    # after reviewing, refresh all recorded hashes

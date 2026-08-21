@@ -34,7 +34,8 @@ Usage:
       --expect-head <sha>
 
 Exit codes: 0 merged (or would merge under --dry-run), 2 git error, 3 scope
-violation, 4 precondition failed, 5 merge conflict.
+violation, 4 precondition failed, 5 merge conflict, 6 merge staged (not committed;
+run --commit-staged or --abort-staged after /commit-prep).
 """
 from __future__ import annotations
 
@@ -51,6 +52,10 @@ EXIT_GIT = 2
 EXIT_SCOPE = 3
 EXIT_PRECONDITION = 4
 EXIT_CONFLICT = 5
+# A non-ff merge is staged, not committed: /commit-prep owes a pass over the merged
+# tree before it becomes a commit. Deliberately NOT 0 — a caller that treats this
+# as success reports a merge that did not happen.
+EXIT_STAGED = 6
 
 INTEGRATION_ORDER = ("dev", "develop")
 MAINLINE = ("main", "master")
@@ -58,6 +63,15 @@ MAINLINE = ("main", "master")
 
 class GitError(RuntimeError):
     """git itself failed (not a repo, command error) — distinct from a refusal."""
+
+
+class StagedMergeInvalid(GitError):
+    """The recorded staged-merge state no longer matches reality.
+
+    A stale state file (operator hand-aborted the merge, an interrupted run, a
+    second invocation) must not make ``commit_staged`` ``git add -A`` whatever
+    happens to be lying around and commit it as though it were the recorded merge.
+    """
 
 
 @dataclass(frozen=True)
@@ -375,25 +389,189 @@ def probe_conflicts(root: Path, target: str, branch: str) -> tuple[str, ...]:
         _git(root, "checkout", original, check=False)
 
 
-def land(root: Path, branch: str, target: str, *, title: str = "") -> str:
-    """Merge ``branch`` into ``target``; return the target's new HEAD.
+STAGED = "STAGED"
 
-    Mirrors /review §11's semantics exactly (ff-only preferred, --no-ff fallback,
-    abort on conflict) so the two authorization paths cannot drift into different
-    merge behavior. Never pushes.
+
+def land(root: Path, branch: str, target: str, *, title: str = "") -> str:
+    """Merge ``branch`` into ``target``; return the target's new HEAD, or ``STAGED``.
+
+    Mirrors /review §11's semantics exactly so the two authorization paths cannot
+    drift into different merge behavior — including the prep obligation:
+
+    * **Fast-forward** creates no commit and cannot conflict, so its content is the
+      branch tip that was already prepped. It lands here and returns the new HEAD.
+    * **Non-fast-forward creates a merge commit**, and the merged tree is state
+      neither branch was prepped in. This function will not commit it. It leaves the
+      merge **staged** (``--no-commit``) and returns :data:`STAGED`; the caller runs
+      ``/commit-prep`` against the merged tree and then calls :func:`commit_staged`
+      or :func:`abort_staged`. Prep is a skill, so only a caller can run it — this
+      module stays git plumbing.
+
+    The target branch is left checked out when a merge is staged, because an
+    unfinished merge cannot survive a checkout. Never pushes.
     """
     original = _restore_point(root)
+    restore = True
     try:
         _git(root, "checkout", target)
-        if _git(root, "merge", "--ff-only", branch, check=False).returncode != 0:
-            msg = f"Merge {branch}" + (f": {title}" if title else "")
-            p = _git(root, "merge", "--no-ff", branch, "-m", msg, check=False)
-            if p.returncode != 0:
-                _git(root, "merge", "--abort", check=False)
-                raise GitError(f"merge conflicted: {p.stdout.strip()} {p.stderr.strip()}")
-        return head_sha(root, "HEAD")
+        if _git(root, "merge", "--ff-only", branch, check=False).returncode == 0:
+            return head_sha(root, "HEAD")
+        p = _git(root, "merge", "--no-ff", "--no-commit", branch, check=False)
+        if p.returncode != 0:
+            _git(root, "merge", "--abort", check=False)
+            raise GitError(f"merge conflicted: {p.stdout.strip()} {p.stderr.strip()}")
+        restore = False  # a staged merge must stay on the target branch
+        _write_staged_state(root, branch, target, original, title)
+        return STAGED
     finally:
+        if restore:
+            _git(root, "checkout", original, check=False)
+
+
+STAGED_STATE = "merge-feature-staged.json"
+
+
+def _git_dir(root: Path) -> Path:
+    """The real git directory for ``root``, resolving linked-worktree indirection.
+
+    In a linked worktree ``<root>/.git`` is a **file** pointing elsewhere, not a
+    directory — ``root / ".git" / STAGED_STATE`` raises ``NotADirectoryError``
+    there, which is exactly the topology ``/work`` recommends
+    (``var/worktrees/<agent-id>/``). ``--absolute-git-dir`` resolves correctly for
+    both a plain repo and a linked worktree, and gives each worktree its own state
+    file, which is right: a staged merge is specific to the tree that staged it.
+    """
+    return Path(_git(root, "rev-parse", "--absolute-git-dir").stdout.strip())
+
+
+def _state_path(root: Path) -> Path:
+    return _git_dir(root) / STAGED_STATE
+
+
+def _write_staged_state(root: Path, branch: str, target: str, original: str,
+                        title: str) -> None:
+    """Record what a staged merge needs in order to be finished.
+
+    `land()` computes the restore point internally, so without this a second CLI
+    invocation could not know which branch to return to — and would silently leave
+    the tree parked on the integration branch.
+    """
+    import json
+
+    _state_path(root).write_text(json.dumps(
+        {"branch": branch, "target": target, "original": original, "title": title}
+    ), encoding="utf-8")
+
+
+def read_staged_state(root: Path) -> dict | None:
+    """The pending staged merge for this repo, or None."""
+    import json
+
+    path = _state_path(root)
+    if not path.is_file():
+        return None
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+
+
+def clear_staged_state(root: Path) -> None:
+    _state_path(root).unlink(missing_ok=True)
+
+
+def _verify_staged_merge(root: Path, target: str) -> None:
+    """Refuse to touch a merge that is not actually what the state file claims.
+
+    Checked before ``commit_staged`` does anything: without ``MERGE_HEAD``, a
+    stale or hand-aborted state would have it ``git add -A`` and commit whatever
+    is lying around (scratch files, an unrelated edit) as a single-parent
+    commit reported as a merge that never happened. Without the branch check, a
+    stale state left after the operator switched branches would commit onto
+    whatever HEAD is now, not the recorded target.
+    """
+    if _git(root, "rev-parse", "-q", "--verify", "MERGE_HEAD", check=False).returncode != 0:
+        raise StagedMergeInvalid(
+            "no merge in progress (MERGE_HEAD missing) — the staged-merge state is "
+            "stale; run --abort-staged to clear it, or resolve manually"
+        )
+    branch = current_branch(root)
+    if branch != target:
+        raise StagedMergeInvalid(
+            f"HEAD is on {branch!r}, not the recorded target {target!r} — refusing "
+            f"to commit onto the wrong branch; run --abort-staged to clear the stale "
+            f"state, or checkout {target!r} first"
+        )
+
+
+def commit_staged(root: Path, branch: str, target: str, *, title: str = "",
+                  original: str = "") -> str:
+    """Commit a merge staged by :func:`land`, after ``/commit-prep`` came back green.
+
+    Stages **everything** first: prep edits the *working tree* (CHANGELOG entry, test
+    fixes, a new blog file), and a bare ``git commit`` during a merge commits only
+    the index — silently dropping prep's own output from the merge commit and
+    leaving it dirty in the tree.
+    """
+    _verify_staged_merge(root, target)
+    try:
+        msg = f"Merge {branch}" + (f": {title}" if title else "")
+        _git(root, "add", "-A")
+        _git(root, "commit", "-m", msg)
+        sha = head_sha(root, "HEAD")
+        clear_staged_state(root)
+        return sha
+    finally:
+        if original:
+            _git(root, "checkout", original, check=False)
+
+
+ABORTED = "aborted"
+CLEARED = "cleared"
+
+
+def abort_staged(root: Path, target: str, *, original: str = "") -> str:
+    """Undo a merge staged by :func:`land`, after ``/commit-prep`` came back red.
+
+    ``git merge --abort`` **refuses** when a file involved in the merge has unstaged
+    modifications — which is exactly what prep's fix-the-tests gate produces — so
+    fall back to a hard reset. Either way nothing was committed, and prep's *tracked*
+    edits are discarded along with the merge — but ``reset --hard`` does not remove
+    **untracked** files, so a blog post or other new file prep created survives on
+    disk (``?? path`` in ``git status``) even though the merge did not land.
+
+    That reset is destructive, so it only ever runs against a merge that is
+    genuinely in progress on the recorded target:
+
+    * **No ``MERGE_HEAD``** — the operator aborted by hand, or an earlier run already
+      finished. There is nothing to undo, so the stale record is cleared and **no
+      tree is touched**; resetting here would destroy whatever unrelated work the
+      operator has since put in the tree. Returns :data:`CLEARED`.
+    * **A merge in progress on a different branch than recorded** — refuse. Resetting
+      a tree this state file does not describe is the same data-loss path.
+    * Otherwise the real abort runs, and returns :data:`ABORTED`.
+    """
+    merging = _git(root, "rev-parse", "-q", "--verify", "MERGE_HEAD",
+                   check=False).returncode == 0
+    if not merging:
+        # Clearing the record is safe and is the operator's escape hatch out of a
+        # stale state file — which is exactly what commit_staged's refusal tells
+        # them to run. A reset on this path would be destroying, not undoing.
+        clear_staged_state(root)
+        return CLEARED
+    branch = current_branch(root)
+    if branch != target:
+        raise StagedMergeInvalid(
+            f"a merge is in progress on {branch!r}, not the recorded target "
+            f"{target!r} — refusing to reset a tree this staged-merge record "
+            f"does not describe; resolve that merge where it is"
+        )
+    if _git(root, "merge", "--abort", check=False).returncode != 0:
+        _git(root, "reset", "--hard", "HEAD", check=False)
+    clear_staged_state(root)
+    if original:
         _git(root, "checkout", original, check=False)
+    return ABORTED
 
 
 def read_touched(source: str) -> tuple[str, ...]:
@@ -501,22 +679,81 @@ def main(argv: list[str] | None = None) -> int:
         description="Gate and land feature/<slug> on the integration branch (never mainline).",
     )
     ap.add_argument("--root", default=".", help="repo or worktree root (default: cwd)")
-    ap.add_argument("--slug", required=True, help="plan slug; branch is feature/<slug>")
+    ap.add_argument("--slug", help="plan slug; branch is feature/<slug> "
+                    "(not needed with --commit-staged/--abort-staged)")
     ap.add_argument("--branch", help="override the branch name (default: feature/<slug>)")
-    ap.add_argument("--touched", required=True,
+    ap.add_argument("--touched",
                     help="file with one touched path/glob per line, or '-' for stdin")
     ap.add_argument("--base", help="merge-base recorded at claim time (default: computed)")
-    ap.add_argument("--expect-head", required=True,
+    ap.add_argument("--expect-head",
                     help="SHA this run committed; refuses if the branch moved since")
     ap.add_argument("--target", help="integration branch (default: dev, else develop)")
     ap.add_argument("--title", default="", help="plan title for the merge commit message")
+    ap.add_argument("--commit-staged", action="store_true",
+                    help="finish a merge left STAGED by an earlier run, after "
+                         "/commit-prep came back GREEN on the merged tree")
+    ap.add_argument("--abort-staged", action="store_true",
+                    help="undo a merge left STAGED by an earlier run, after "
+                         "/commit-prep came back RED (prep's edits go with it)")
     ap.add_argument("--dry-run", action="store_true",
                     help="evaluate the gate and report; merge nothing")
     args = ap.parse_args(argv)
+    root = Path(args.root)
+
+    if args.commit_staged or args.abort_staged:
+        try:
+            # Inside the try: reading the state resolves the repo's real git dir,
+            # so a --root that is not a git repo raises GitError here rather than
+            # reaching the caller as a traceback and exit 1, outside the
+            # documented exit-code set.
+            state = read_staged_state(root)
+            if state is None:
+                print("merge-feature: no staged merge recorded for this repo.",
+                      file=sys.stderr)
+                return EXIT_PRECONDITION
+            if args.commit_staged:
+                sha = commit_staged(root, state["branch"], state["target"],
+                                    title=state.get("title", ""),
+                                    original=state.get("original", ""))
+                print(f"merged; {state['target']} is now {sha[:12]}.")
+            elif abort_staged(root, state["target"],
+                              original=state.get("original", "")) == CLEARED:
+                print(f"no merge in progress; cleared the stale staged-merge record "
+                      f"for {state['target']}. Nothing was reset and no tree was "
+                      f"touched.")
+            else:
+                print(f"aborted; {state['target']} unchanged, nothing committed. "
+                      f"/commit-prep's tracked edits were discarded with the merge "
+                      f"(untracked files it created, e.g. a new blog post, survive "
+                      f"on disk — check `git status`).")
+        except StagedMergeInvalid as exc:
+            print(f"merge-feature: {exc}", file=sys.stderr)
+            return EXIT_PRECONDITION
+        except GitError as exc:
+            print(f"merge-feature: {exc}", file=sys.stderr)
+            return EXIT_GIT
+        return EXIT_OK
+
+    missing = [n for n, v in (("--slug", args.slug), ("--touched", args.touched),
+                              ("--expect-head", args.expect_head)) if not v]
+    if missing:
+        # Required for a merge, meaningless for the two finishers above (which
+        # return before this). argparse cannot express that, so it lives here.
+        print(f"merge-feature: missing required argument(s): {', '.join(missing)}",
+              file=sys.stderr)
+        return EXIT_PRECONDITION
+
+    try:
+        touched = read_touched(args.touched)
+    except (OSError, UnicodeDecodeError) as exc:
+        # Unreadable or non-text --touched file: the caller's precondition, not
+        # git's fault, and exit 1 from a traceback is outside the documented set.
+        print(f"merge-feature: cannot read --touched: {exc}", file=sys.stderr)
+        return EXIT_PRECONDITION
 
     try:
         verdict, new_head = run(
-            Path(args.root), args.slug, read_touched(args.touched),
+            Path(args.root), args.slug, touched,
             base=args.base, expect_head=args.expect_head, target=args.target,
             branch=args.branch, dry_run=args.dry_run, title=args.title,
         )
@@ -524,15 +761,20 @@ def main(argv: list[str] | None = None) -> int:
     except GitError as exc:
         print(f"merge-feature: {exc}", file=sys.stderr)
         return EXIT_GIT
-    except (OSError, UnicodeDecodeError) as exc:
-        # Unreadable or non-text --touched file: the caller's precondition, not
-        # git's fault, and exit 1 from a traceback is outside the documented set.
-        print(f"merge-feature: cannot read --touched: {exc}", file=sys.stderr)
-        return EXIT_PRECONDITION
 
     print(verdict.report())
     if verdict.ok and args.dry_run:
         print("dry run: nothing merged.")
+    elif verdict.ok and new_head == STAGED:
+        # NOT "merged" and NOT exit 0. The merge is staged and uncommitted; a
+        # caller that reads this as success reports a merge that did not happen.
+        print(
+            f"STAGED: {landed_on} has the merge staged, NOT committed.\n"
+            f"  Run /commit-prep against the merged tree, then finish it:\n"
+            f"    green -> python scripts/merge_feature.py --root {args.root} --commit-staged\n"
+            f"    red   -> python scripts/merge_feature.py --root {args.root} --abort-staged"
+        )
+        return EXIT_STAGED
     elif verdict.ok:
         print(f"merged; {landed_on} is now {new_head[:12]}.")
     return verdict.code

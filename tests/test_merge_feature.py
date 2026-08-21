@@ -3,18 +3,22 @@
 Every refusal path here routes the work back to /review rather than landing
 something unreviewed, so these tests are mostly about *not* merging.
 """
+import json
 import subprocess
 from pathlib import Path
 
 import pytest
 from merge_feature import (
     EXIT_CONFLICT,
+    EXIT_GIT,
     EXIT_OK,
     EXIT_PRECONDITION,
     EXIT_SCOPE,
+    EXIT_STAGED,
     changed_files,
     evaluate_gate,
     main,
+    read_staged_state,
     read_touched,
     run,
 )
@@ -122,18 +126,75 @@ def test_fast_forward_merge_lands_on_dev(repo):
     assert _git(repo, "rev-parse", "--abbrev-ref", "HEAD") == "feature/my-plan"  # restored
 
 
-def test_non_ff_clean_merge_creates_a_merge_commit(repo):
-    """dev moved on an unrelated file — still clean, so it lands as a merge commit."""
+def test_non_ff_merge_is_staged_not_committed(repo):
+    """dev moved on an unrelated file — clean, but a merge COMMIT needs prep first.
+
+    The merged tree is state neither branch was prepped in, so `land` stops with the
+    merge staged and hands control back. Committing here would be exactly the
+    unprepped merge commit the hard rule forbids.
+    """
+    from merge_feature import STAGED
+
+    _git(repo, "checkout", "dev")
+    _commit(repo, "app/other.py", "y = 2\n", "dev moved")
+    # Captured *after* dev moves: the divergence is what forces the non-ff path,
+    # and the assertion below is that a staged merge leaves dev where it is now.
+    dev_before = _git(repo, "rev-parse", "dev")
+    _git(repo, "checkout", "feature/my-plan")
+
+    verdict, result = run(repo, "my-plan", TOUCHED, expect_head=_head(repo))
+
+    assert verdict.ok
+    assert "no-ff" in verdict.message
+    assert result == STAGED
+    assert _git(repo, "rev-parse", "dev") == dev_before      # no commit created
+    assert (Path(repo) / ".git" / "MERGE_HEAD").exists()     # merge really is staged
+    assert _git(repo, "rev-parse", "--abbrev-ref", "HEAD") == "dev"  # stays on target
+
+
+def test_commit_staged_includes_preps_working_tree_edits(repo):
+    """A bare `git commit` during a merge commits only the index, dropping prep's own
+    output. commit_staged stages everything first."""
+    import merge_feature as mf
+
     _git(repo, "checkout", "dev")
     _commit(repo, "app/other.py", "y = 2\n", "dev moved")
     _git(repo, "checkout", "feature/my-plan")
 
-    verdict, new_head = run(repo, "my-plan", TOUCHED, expect_head=_head(repo))
+    assert mf.land(repo, "feature/my-plan", "dev") == mf.STAGED
+    (Path(repo) / "CHANGELOG.md").write_text("prep added this", encoding="utf-8")
+    new_head = mf.commit_staged(repo, "feature/my-plan", "dev",
+                                original="feature/my-plan")
 
-    assert verdict.ok
-    assert "no-ff" in verdict.message
-    parents = _git(repo, "rev-list", "--parents", "-n", "1", "dev").split()
-    assert len(parents) == 3  # commit + two parents = a real merge commit
+    assert _git(repo, "rev-parse", "dev") == new_head
+    # `git show --stat` on a merge prints a condensed combined diff, so assert
+    # against the committed tree instead of the diff rendering.
+    # commit_staged restores the original branch, so inspect `dev`, not HEAD.
+    tree = _git(repo, "ls-tree", "-r", "--name-only", "dev")
+    assert "CHANGELOG.md" in tree                       # prep's own edit landed
+    assert "app/other.py" in tree                       # and so did dev's side
+    assert _git(repo, "status", "--short") == ""        # tree left clean
+    assert _git(repo, "rev-parse", "--abbrev-ref", "HEAD") == "feature/my-plan"
+
+
+def test_abort_staged_recovers_even_when_merge_abort_refuses(repo):
+    """`git merge --abort` refuses once prep has edited a file involved in the merge —
+    exactly what its fix-the-tests gate does. abort_staged falls back to a reset."""
+    import merge_feature as mf
+
+    _git(repo, "checkout", "dev")
+    _commit(repo, "app/other.py", "y = 2\n", "dev moved")
+    dev_before = _git(repo, "rev-parse", "dev")
+    _git(repo, "checkout", "feature/my-plan")
+
+    assert mf.land(repo, "feature/my-plan", "dev") == mf.STAGED
+    (Path(repo) / "app" / "x.py").write_text("prep touched a merged file\n",
+                                             encoding="utf-8")
+    mf.abort_staged(repo, "dev", original="feature/my-plan")
+
+    assert _git(repo, "rev-parse", "dev") == dev_before          # nothing committed
+    assert not (Path(repo) / ".git" / "MERGE_HEAD").exists()     # merge state cleared
+    assert _git(repo, "rev-parse", "--abbrev-ref", "HEAD") == "feature/my-plan"
 
 
 def test_conflict_aborts_and_leaves_dev_untouched(repo):
@@ -362,8 +423,14 @@ def test_cli_requires_expect_head(repo, tmp_path):
     touched = tmp_path / "touched.txt"
     touched.write_text("app/\n", encoding="utf-8")
 
-    with pytest.raises(SystemExit):  # argparse: required argument
-        main(["--root", str(repo), "--slug", "my-plan", "--touched", str(touched)])
+    # --expect-head is only mandatory on the merge route (the --commit-staged /
+    # --abort-staged finishers resume a merge and have no use for it), so this is
+    # a checked refusal rather than an argparse SystemExit. What matters is that
+    # it still refuses and still merges nothing.
+    dev_before = _git(repo, "rev-parse", "dev")
+    assert main(["--root", str(repo), "--slug", "my-plan",
+                 "--touched", str(touched)]) == EXIT_PRECONDITION
+    assert _git(repo, "rev-parse", "dev") == dev_before
 
 
 # --- the target may only ever be integration -----------------------------------
@@ -508,3 +575,220 @@ def test_binary_touched_file_exits_four_not_one(repo, tmp_path):
                  "--expect-head", _head(repo)])
 
     assert code == EXIT_PRECONDITION
+
+
+# --- a staged merge is not a merge (B7) ---------------------------------------
+#
+# `land()` returns STAGED when the merge cannot fast-forward: the merge is in the
+# index, uncommitted, waiting for /commit-prep to run against the merged tree.
+# The CLI used to print "merged; dev is now STAGED." and exit 0 — reporting a
+# merge that had not happened, to a caller with no route to finish or undo it.
+
+
+def _diverge(root: Path) -> str:
+    """Put a commit on dev so the feature branch can no longer fast-forward."""
+    _git(root, "checkout", "dev")
+    _commit(root, "docs/note.md", "dev side\n", "dev-side work")
+    _git(root, "checkout", "feature/my-plan")
+    return _head(root, "dev")
+
+
+def _merge_argv(root: Path, touched: Path) -> list[str]:
+    return ["--root", str(root), "--slug", "my-plan", "--touched", str(touched),
+            "--expect-head", _head(root), "--target", "dev"]
+
+
+@pytest.fixture
+def staged(repo: Path, tmp_path: Path, capsys):
+    """A repo parked mid-merge, exactly as a non-ff `land()` leaves it.
+
+    The output is read here and handed back: a test body's own `capsys` starts
+    after fixture setup and would see nothing.
+    """
+    touched = tmp_path / "touched.txt"
+    touched.write_text("app/\n", encoding="utf-8")
+    dev_before = _diverge(repo)
+    code = main(_merge_argv(repo, touched))
+    return repo, code, dev_before, capsys.readouterr().out
+
+
+def test_staged_merge_does_not_report_success(staged):
+    _repo, code, _dev_before, out = staged
+    assert code == EXIT_STAGED, "a staged merge must not exit 0"
+    assert code != EXIT_OK
+    assert "STAGED:" in out and "NOT committed" in out
+    # The old message read "merged; dev is now STAGED." — the word must not
+    # appear as a claim that the merge landed.
+    assert "merged; dev is now" not in out
+
+
+def test_staged_merge_tells_the_caller_how_to_finish_it(staged):
+    *_rest, out = staged
+    assert "--commit-staged" in out
+    assert "--abort-staged" in out
+    assert "/commit-prep" in out
+
+
+def test_commit_staged_includes_preps_own_edits_in_the_merge_commit(staged):
+    repo, _code, _dev_before, _out = staged
+    # /commit-prep updates the CHANGELOG against the merged tree.
+    (repo / "CHANGELOG.md").write_text("- entry\n", encoding="utf-8")
+    assert main(["--root", str(repo), "--commit-staged"]) == EXIT_OK
+
+    assert _git(repo, "rev-parse", "--abbrev-ref", "HEAD") == "feature/my-plan"
+    files = _git(repo, "show", "dev", "--stat", "--format=")
+    assert "CHANGELOG.md" in files, "prep's edits were dropped by the merge commit"
+    assert _git(repo, "status", "--porcelain") == ""
+
+
+def test_abort_staged_restores_dev_even_after_prep_touched_a_merged_file(staged):
+    repo, _code, dev_before, _out = staged
+    # The B2 case: bare `git merge --abort` exits 128 once a merged file has
+    # unstaged modifications, so the abort path needs the reset fallback.
+    (repo / "app/x.py").write_text("x = 1\nprep edit\n", encoding="utf-8")
+    assert main(["--root", str(repo), "--abort-staged"]) == EXIT_OK
+
+    assert _git(repo, "rev-parse", "dev") == dev_before, "dev moved on a red prep"
+    assert _git(repo, "rev-parse", "--abbrev-ref", "HEAD") == "feature/my-plan"
+    assert _git(repo, "status", "--porcelain") == ""
+
+
+def test_finishers_clear_the_staged_state(staged):
+    repo, _code, _dev_before, _out = staged
+    assert read_staged_state(repo) is not None
+    main(["--root", str(repo), "--abort-staged"])
+    assert read_staged_state(repo) is None
+    # A second finisher call has nothing to finish and must say so, not crash.
+    assert main(["--root", str(repo), "--commit-staged"]) == EXIT_PRECONDITION
+
+
+def test_finishers_do_not_require_the_merge_arguments(repo):
+    # --slug/--touched/--expect-head describe a merge; the finishers resume one.
+    # argparse used to make them mandatory on every route.
+    assert main(["--root", str(repo), "--commit-staged"]) == EXIT_PRECONDITION
+
+
+def test_a_fast_forward_merge_still_reports_a_real_sha(repo, tmp_path):
+    touched = tmp_path / "touched.txt"
+    touched.write_text("app/\n", encoding="utf-8")
+    assert main(_merge_argv(repo, touched)) == EXIT_OK
+    assert read_staged_state(repo) is None
+
+
+# --- hostile state: the six tests above are all happy-path (B1/B2/B3) --------
+#
+# A stale state file (operator hand-aborted, an interrupted run, a corrupted
+# record) or a linked worktree must not make `--commit-staged` `git add -A` and
+# commit whatever is lying around, or land on the wrong branch, or crash outright.
+
+
+def test_commit_staged_refuses_after_a_hand_aborted_merge(staged):
+    # The operator (or a previous, unfinished run) aborted the merge directly,
+    # bypassing --abort-staged — MERGE_HEAD is gone but the JSON record survives.
+    repo, _code, dev_before, _out = staged
+    _git(repo, "merge", "--abort")
+    assert not (repo / ".git" / "MERGE_HEAD").exists()
+    assert read_staged_state(repo) is not None, "the stale record is still there"
+
+    assert main(["--root", str(repo), "--commit-staged"]) == EXIT_PRECONDITION
+    assert _git(repo, "rev-parse", "dev") == dev_before, "nothing should have landed"
+    assert _git(repo, "status", "--porcelain") == ""
+
+
+def test_commit_staged_refuses_when_the_state_file_names_the_wrong_branch(staged):
+    # A corrupted or stale record whose "target" no longer matches the branch
+    # actually mid-merge (e.g. two staged merges in a row, the second record
+    # overwriting the first before it was finished). MERGE_HEAD is genuinely
+    # present, so this is not the hand-aborted case above.
+    repo, _code, dev_before, _out = staged
+    state_path = repo / ".git" / "merge-feature-staged.json"
+    state = json.loads(state_path.read_text(encoding="utf-8"))
+    assert state["target"] == "dev"
+    state["target"] = "main"
+    state_path.write_text(json.dumps(state), encoding="utf-8")
+
+    assert main(["--root", str(repo), "--commit-staged"]) == EXIT_PRECONDITION
+    assert _git(repo, "rev-parse", "dev") == dev_before, "dev must not move"
+    assert _git(repo, "rev-parse", "--abbrev-ref", "HEAD") == "dev", (
+        "refusing must not itself switch branches"
+    )
+    main_log = _git(repo, "log", "--oneline", "main")
+    assert "Merge" not in main_log, "must not have committed onto the named branch"
+
+
+def test_abort_staged_does_not_reset_a_tree_it_no_longer_describes(staged):
+    """The mirror of the commit_staged guard, and the more destructive half.
+
+    `git merge --abort` fails when there is no merge, and the fallback is
+    `git reset --hard` — which against a stale record destroys whatever unrelated
+    uncommitted work the operator has since put in the tree, then reports success.
+    """
+    repo, _code, dev_before, _out = staged
+    _git(repo, "merge", "--abort")           # operator aborts by hand
+    assert read_staged_state(repo) is not None, "the record is now stale"
+
+    (repo / "docs/note.md").write_text("dev side\nprecious uncommitted work\n",
+                                       encoding="utf-8")
+    assert main(["--root", str(repo), "--abort-staged"]) == EXIT_OK
+
+    assert "precious" in (repo / "docs/note.md").read_text(encoding="utf-8"), (
+        "abort_staged reset a tree its stale record did not describe, destroying "
+        "the operator's unrelated uncommitted work"
+    )
+    assert _git(repo, "rev-parse", "dev") == dev_before
+    # The record is gone, so this is also the escape hatch commit_staged's
+    # refusal points the operator at.
+    assert read_staged_state(repo) is None
+
+
+def test_abort_staged_refuses_a_merge_in_progress_on_another_branch(staged):
+    repo, _code, _dev_before, _out = staged
+    state_path = repo / ".git" / "merge-feature-staged.json"
+    state = json.loads(state_path.read_text(encoding="utf-8"))
+    state["target"] = "main"
+    state_path.write_text(json.dumps(state), encoding="utf-8")
+
+    assert main(["--root", str(repo), "--abort-staged"]) == EXIT_PRECONDITION
+    assert (repo / ".git" / "MERGE_HEAD").exists(), "the real merge must survive"
+    assert read_staged_state(repo) is not None
+
+
+def test_finishers_report_a_non_repo_root_within_the_documented_exit_codes(tmp_path):
+    """`--root` that is not a git repo must not surface as a traceback.
+
+    Resolving the state file shells out to git (it has to, to find a linked
+    worktree's real git dir), so this path can raise where pure path arithmetic
+    could not. Exit 1 from a traceback is outside the set every doc documents.
+    """
+    plain = tmp_path / "not-a-repo"
+    plain.mkdir()
+    for flag in ("--commit-staged", "--abort-staged"):
+        assert main(["--root", str(plain), flag]) == EXIT_GIT
+
+
+def test_state_path_works_inside_a_linked_worktree(repo, tmp_path):
+    # B1: `<root>/.git` is a FILE in a linked worktree, not a directory —
+    # `var/worktrees/<agent-id>/` is the topology `/work` itself recommends, so
+    # this is a regression in Anchor's own recommended setup, not an edge case.
+    _git(repo, "checkout", "main")
+    worktree = tmp_path / "linked-worktree"
+    _git(repo, "worktree", "add", str(worktree), "dev")
+    assert (worktree / ".git").is_file(), "a linked worktree's .git must be a file"
+
+    feature_head = _head(repo)
+    _commit(worktree, "docs/note.md", "dev side\n", "dev-side work")
+
+    touched = tmp_path / "touched.txt"
+    touched.write_text("app/\n", encoding="utf-8")
+    code = main(["--root", str(worktree), "--slug", "my-plan", "--touched", str(touched),
+                 "--expect-head", feature_head, "--target", "dev"])
+    assert code == EXIT_STAGED
+
+    assert read_staged_state(worktree) is not None
+    # The state lives under the worktree's own git dir, not the main repo's.
+    assert not (repo / ".git" / "merge-feature-staged.json").exists()
+
+    assert main(["--root", str(worktree), "--commit-staged"]) == EXIT_OK
+    subject = _git(worktree, "log", "-1", "--format=%s", "dev")
+    assert subject.startswith("Merge feature/my-plan")
+    assert _git(worktree, "status", "--porcelain") == ""

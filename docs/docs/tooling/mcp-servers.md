@@ -4,7 +4,7 @@ sidebar_position: 3
 
 <!-- synced-from: mcp/model-fleet/README.md @ 8dd49f49367fa8ff484a00e3d14792954560d513 -->
 <!-- synced-from: mcp/anchor-prompts/README.md @ 8bc9f0807b37234758877f8331fa90ccde11e32c -->
-<!-- synced-from: mcp/project-orchestrator/README.md @ c7e54a65928dc5ed40182674164e29198bb44c71 -->
+<!-- synced-from: mcp/project-orchestrator/README.md @ 7483dd3e05094d984f765456a643a5fc4325bf4c -->
 
 # MCP servers
 

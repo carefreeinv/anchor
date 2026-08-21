@@ -75,7 +75,12 @@ Resolve draft under `drafts/`; read fully; **infer** ready lane:
 If ambiguous: ask once (bug vs feature), then stop. Optional user wording
 (“as a bug”, “as a feature”) overrides. Then `git mv` (or `mv`) to
 `.plans/bugs/` or `.plans/features/` with the **same basename** (keep
-`.local.md` if present — do not drop it). Refuse if target exists; warn if
+`.local.md` if present — do not drop it). **Then commit the move** via the light
+path — the `/commit-prep` exemption for plans-only commits (see `CLAUDE.md`):
+state what moved and why, then `git add .plans/` and
+`git commit -m "…" -- .plans/`; no CHANGELOG, no blog, no test run. If this plan is
+untracked (`*.local.md`, or a project that ignores `.plans/`), say “promoted
+(untracked)” and commit nothing. Refuse if target exists; warn if
 Goal/Done when thin or Depends on unmet; do not auto-`/work`. Report path +
 inferred lane + one-line reason (note if still private).
 

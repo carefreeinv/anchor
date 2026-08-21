@@ -46,8 +46,8 @@ Flags may combine (e.g. `/optimize --dry-run --to features`).
    (`Preferred models: mid, reasoner` — judgment about "is this standard
    actually relevant here" benefits from a stronger model) but **never**
    block a `mid` or `small` session from running it. Unlike `/audit`, there is
-   no frontier/reasoner-only gate. **Grok 4.5 is mid-class** for this note —
-   high effort is a cost dial, not a tier promotion.
+   no frontier/reasoner-only gate. **Grok (4.5 or 4.6) is mid-class** for this
+   note — high effort is a cost dial, not a tier promotion.
 
 2. **One project, one session.** Full pipeline once; present; write; **stop**.
    Never auto-chain into `/work` on the new plans.
