@@ -36,6 +36,16 @@ You are one worker in a verified pipeline, not the whole pipeline. Speed is wort
 
 ## Grok product notes (reviewed 2026-08-12)
 
+### Session identity (read first)
+
+Your identity comes only from, in order: (1) this session's harness/system-prompt
+line (e.g. "You are Grok 4.6 released by xAI"), (2) an explicit `/model` /
+`--model` / endpoint override the operator set for this session. If neither
+states a version, say "Grok (version unknown)" — **never** infer 4.5 from
+training weights or from the cost ladder below. The cost ladder is for picking
+which product to **open next**; it never renames the session you are already in.
+A 4.6 harness line means you report `Grok 4.6`, full stop.
+
 ### Pick 4.5 vs 4.6 (cost ladder)
 
 Both stay first-class until 4.5 is retired. **Prefer the cheaper generation when it is enough.**
@@ -68,7 +78,10 @@ Bare `grok` = whatever session you opened; versioned tokens make a 4.5 sunset a 
   | `xhigh` (4.6 only; opt-in) | `frontier` |
 
   **Omitted / unknown effort → effective `mid`** (never silent frontier from API
-  default). Report yourself as `Grok 4.5|4.6 @ <effort> → effective <tier>` before fit (pick product by cost ladder above).
+  default). Report yourself as `<harness-named product> @ <effort> → effective
+  <tier>` before fit — e.g. `Grok 4.6 @ high → effective reasoner` if the harness
+  says 4.6, `Grok 4.5 @ low → effective mid` if it says 4.5 (see Session identity
+  above; this is a lookup by harness name, never a pick from the cost ladder).
 - **Pasteable dials:** TUI **`/effort low|medium|high|xhigh`** (or `/model <id> low`);
   CLI **`--effort …`**; fleet endpoint quirk `reasoning_effort:` in `endpoints.yaml`
   (sent by `anchor_client.py`). Prefer **low** for mechanical steps; reserve
@@ -82,8 +95,9 @@ Bare `grok` = whatever session you opened; versioned tokens make a 4.5 sunset a 
   design doc better on `multimodal`, or pure chat UI with no shell) →
   `SUGGEST-REROUTE: <target or profile> — <reason>`, not a silent attempt. Good on
   both axes → silence. Symmetrically, **mid is a floor you clear, not a ceiling you
-  apologize for**: repo-scale issue resolution is Grok 4.5's documented weak spot,
-  file-scoped `mid` plans are not. Do not skip a plan because its **Preferred
+  apologize for**: repo-scale issue resolution is a documented weak spot for Grok
+  4.5 (check `model-fitness.md` for the row matching your session's harness-named
+  product), file-scoped `mid` plans are not. Do not skip a plan because its **Preferred
   models** also names a stronger product — only listed *tiers* gate power. Reported
   `high` makes Grok **effective reasoner** (skips mid-only Preferred); omitted
   `--effort` stays mid.
@@ -112,7 +126,7 @@ and **Depends on** (skip unmet deps); never execute `drafts/` / `completed/` /
 stuck → `blocked/`; finish `in-progress/` → `review-needed/` (required; human
 **`/review`** → `completed/`).
 Do not promote drafts from `/work` (use `/draft --promote`). If Preferred orchestrator is unset, frontier/near-frontier
-(including Grok 4.5 as session lead) may act as temporary coordinator
+(including a Grok session as lead, 4.5 or 4.6 per its own harness line) may act as temporary coordinator
 (`TEMPORARY-COORDINATOR:`). On Git projects: **worktree per agent**
 (`scripts/worktree_for_agent.py ensure --agent-id … --slug …`); feature-branch
 from **`dev`**/`develop` (**create `dev` from main/master if missing**);

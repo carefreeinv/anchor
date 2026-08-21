@@ -138,17 +138,22 @@ floor**: it does not exclude `small`.
 
 Before selecting a plan, identify **all three**:
 
-1. **Model name + fit tier** (product name if known; else closest tier). Use
-   `.anchor/model-fitness.md` and the plan-template table. **Name and catalog
-   tier win over vibes** — e.g. **Grok 4.5 is mid-class** for Preferred matching
-   (listed under `mid`; named “Grok 4.5” is a good hit). Temporary-coordinator
-   eligibility is not the same as “treat every `mid` plan as overqualified.”
+1. **Model name + fit tier** — your identity is the **harness/system-prompt**
+   product name (or an explicit `/model`/`--model`/endpoint override), never a
+   guess from training weights. Use `.anchor/model-fitness.md` and the
+   plan-template table. **Name and catalog tier win over vibes** — e.g. if the
+   harness says "You are Grok 4.6", you report **Grok 4.6** and match Preferred
+   `mid`/named "Grok 4.6"; report Grok 4.5 only when the harness actually says
+   4.5. Temporary-coordinator eligibility is not the same as “treat every `mid`
+   plan as overqualified.”
 2. **Cost posture** when the product supports it: current **reasoning effort** /
    thinking mode if known (`low` | `medium` | `high` | `xhigh` | …). **Grok family
-   (4.5/4.6):** prefer **4.5 for lighter/cheaper mid**, **4.6 for heavier multi-step agent** work; reported effort sets **effective fit tier** (`low`→mid, `medium`/`high`→reasoner, `xhigh`→frontier; **unknown effort → mid**). Report
-   `Grok 4.5|4.6 @ <effort> → effective <tier>` before Preferred matching.
-   **Non-Grok products:** high effort remains a **cost dial only**, not a tier
-   promotion.
+   effort map (4.5/4.6):** reported effort sets **effective fit tier**
+   (`low`→mid, `medium`/`high`→reasoner, `xhigh`→frontier; **unknown effort →
+   mid**). Report `<harness-named product> @ <effort> → effective <tier>` before
+   Preferred matching — e.g. `Grok 4.6 @ high → effective reasoner` (a lookup by
+   harness name, never a pick from the cost ladder). **Non-Grok products:** high
+   effort remains a **cost dial only**, not a tier promotion.
 3. **Cheaper capacity** on this host/fleet (next subsection) — required whenever
    fit is poor **or** the top ready work is `small`/`mid` while this session is
    expensive (true higher tier, or mid model stuck on high effort).
