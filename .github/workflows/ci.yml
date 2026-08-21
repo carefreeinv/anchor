@@ -58,9 +58,15 @@ jobs:
   # test exists for — so resolve the real supported range here instead, on a
   # schedule, where a failure is a signal to go look rather than a blocked merge.
   sdk-unpinned:
+    # NOT continue-on-error. That made the *run* conclude success, so a real
+    # failure sent no scheduled-workflow notification and showed green in the
+    # Actions list — visible only to someone who opened the run and expanded a
+    # job reporting success. The `if:` above is what keeps this from ever
+    # blocking a push or a merge; it never runs on a PR. With the run allowed to
+    # fail, a genuinely broken SDK range actually reaches the operator.
+    # Note: GitHub disables `schedule` triggers after 60 days of repo inactivity.
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
-    continue-on-error: true          # a signal, never a gate
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5

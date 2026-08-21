@@ -111,3 +111,88 @@ def test_read_recorded_hashes_parses_several_comments(tmp_path):
         ("a/one.md", "a" * 40),
         ("b/two.md", "b" * 40),
     ]
+
+
+# -- behavioural: many sources actually drive check() and stamp() ------------
+#
+# The tests above assert *structure* (normalisation, existence, comment count).
+# None of them ran check() or stamp() against a key with more than one source,
+# so these mutations all survived a full green suite:
+#
+#   check(): `for source_rel in sources:` -> `sources[:1]`   (2nd/3rd source ignored)
+#   stamp(): writes one comment            -> `sources[:1]`   (page under-stamped)
+#   SYNC_MAP: drop a 1:1 entry                                (page silently unguarded)
+#
+# Each test below fails against exactly one of those.
+
+
+def _two_source_map(monkeypatch, tmp_path, docs_text: str):
+    monkeypatch.setattr(check_docs_sync, "REPO_ROOT", tmp_path)
+    monkeypatch.setattr(check_docs_sync, "SYNC_MAP",
+                        {("one.md", "two.md"): "doc.md"})
+    (tmp_path / "doc.md").write_text(docs_text, encoding="utf-8")
+
+
+@patch("check_docs_sync.git_blob_hash")
+def test_check_reports_a_change_to_the_SECOND_source(mock_hash, tmp_path, monkeypatch):
+    # Kills `sources[:1]` in check(): the first source is unchanged, so a
+    # checker that only ever looks at sources[0] reports nothing.
+    _two_source_map(monkeypatch, tmp_path,
+                    f"<!-- synced-from: one.md @ {'a' * 40} -->\n"
+                    f"<!-- synced-from: two.md @ {'b' * 40} -->\n# Title\n")
+    mock_hash.side_effect = lambda src: {"one.md": "a" * 40, "two.md": "c" * 40}[src]
+
+    problems = check_docs_sync.check()
+
+    assert len(problems) == 1, problems
+    assert "two.md" in problems[0] and "stale" in problems[0]
+
+
+@patch("check_docs_sync.git_blob_hash")
+def test_check_passes_when_every_source_matches(mock_hash, tmp_path, monkeypatch):
+    _two_source_map(monkeypatch, tmp_path,
+                    f"<!-- synced-from: one.md @ {'a' * 40} -->\n"
+                    f"<!-- synced-from: two.md @ {'b' * 40} -->\n# Title\n")
+    mock_hash.side_effect = lambda src: {"one.md": "a" * 40, "two.md": "b" * 40}[src]
+
+    assert check_docs_sync.check() == []
+
+
+@patch("check_docs_sync.git_blob_hash")
+def test_stamp_writes_a_comment_for_every_source(mock_hash, tmp_path, monkeypatch):
+    # Kills `sources[:1]` in stamp(): an under-stamped page then reads back as
+    # "no synced-from line for 'two.md'" forever, or silently loses the guard.
+    _two_source_map(monkeypatch, tmp_path, "---\nsidebar_position: 1\n---\n\n# Title\n")
+    mock_hash.side_effect = lambda src: {"one.md": "a" * 40, "two.md": "b" * 40}[src]
+
+    check_docs_sync.stamp()
+
+    assert check_docs_sync.read_recorded_hashes(tmp_path / "doc.md") == [
+        ("one.md", "a" * 40),
+        ("two.md", "b" * 40),
+    ]
+    # And the round trip is clean: stamping then checking reports nothing.
+    assert check_docs_sync.check() == []
+
+
+def test_the_eight_one_to_one_pairs_are_still_registered():
+    # Kills "delete an entry from SYNC_MAP": dropping a page leaves it unguarded
+    # while the checker still reports OK, one page quieter than before. The plan
+    # constraint is that the pre-existing 1:1 entries survive the many-source
+    # change untouched.
+    from check_docs_sync import SYNC_MAP, _sources
+
+    one_to_one = {
+        next(iter(_sources(k))): v for k, v in SYNC_MAP.items() if len(_sources(k)) == 1
+    }
+    expected = {
+        "anchor/ANCHOR.md": "docs/docs/doctrine.md",
+        "anchor/model-fitness.md": "docs/docs/model-fitness.md",
+        "anchor/capacity-routing.md": "docs/docs/capacity-routing.md",
+        "platforms/claude-code/CLAUDE.md": "docs/docs/platforms/claude-code.md",
+        "platforms/grok-build/GROK.md": "docs/docs/platforms/grok-build.md",
+        "platforms/nvidia-nim/NEMOTRON.md": "docs/docs/platforms/nvidia-nim.md",
+        "platforms/local-models/README.md": "docs/docs/platforms/local-models.md",
+        "platforms/chat/CHAT.md": "docs/docs/platforms/chat.md",
+    }
+    assert one_to_one == expected
