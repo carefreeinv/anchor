@@ -1,4 +1,4 @@
-<!-- synced-from: platforms/chat/CHAT.md @ 1b92f994dc012869e258ec5c3b64ac3985d2d410 -->
+<!-- synced-from: platforms/chat/CHAT.md @ f73ef77f6e247dda47c70d2c33fe8c33c704bef3 -->
 ---
 sidebar_position: 5
 sidebar_label: Generic Chat
@@ -50,4 +50,13 @@ the model does the judgment. **Project-agnostic** (no Docusaurus required). Thre
 gates — (1) this project’s tests/CI, (2) changelog, (3) blog under `docs/blog/`
 if warranted. **`/commit-prep` is prep only.** After green gates, follow
 [**`/work`**](/skills/work) for feature-branch commit (dictate `git add` /
-commit / optional push). Chat has no tools, so the human runs every command: you may relay `/work`'s culmination question and dictate the scoped-merge check, but never a merge to `main`.
+commit / optional push).
+
+A commit whose paths are *entirely* under `.plans/` — a lane move, review notes, a
+`## Handoff` line — takes the **light path**: no CHANGELOG, no blog, no test run,
+because a lane move cannot break a test. Say what moved and why, then dictate
+`git add .plans/` followed by `git commit -m "…" -- .plans/`. The pathspec goes
+**after** the message and is load-bearing — a bare `git commit` would sweep
+everything already staged into an ungated commit. This is also the one commit that
+may land on an integration branch rather than a feature branch. Never dictate it
+while a merge is staged: git refuses a partial commit mid-merge. Chat has no tools, so the human runs every command: you may relay `/work`'s culmination question and dictate the scoped-merge check, but never a merge to `main`. A scoped merge that cannot fast-forward exits **`6`** — staged, not committed — so relay that as work in progress and dictate `--commit-staged` (prep green) or `--abort-staged` (prep red) rather than reporting a merge.

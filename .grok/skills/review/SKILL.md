@@ -280,12 +280,21 @@ Empty Needs Work feedback → refuse move; stay in `review-needed/`.
    #   red   → git merge --abort || git reset --hard HEAD
    ```
 
+   `git add -A` stages **every** untracked file in the tree, not only what prep
+   produced. Before running it, check `git status` and confirm the untracked set is
+   prep's output (a CHANGELOG edit, a new blog post) and not a stray scratch file,
+   a local config, or build output — a merge commit is the worst place to discover
+   one. Stage prep's reported paths explicitly if the tree is not clean.
+
    **Red prep on the staged merge:** abort, leave the plan in `review-needed/`, and
    report which gate failed. Note `git merge --abort` **refuses** when prep modified
    a file involved in the merge (`error: Entry '<path>' not uptodate`) — which is
    precisely what its fix-the-tests gate does — so fall back to
-   `git reset --hard HEAD`. Either way nothing was **committed**, but prep's own
-   edits are discarded with the merge. Say that, rather than "nothing to undo".
+   `git reset --hard HEAD`. Either way nothing was **committed**. Prep's edits to
+   *tracked* files go with the merge, but a file prep **created** — typically a new
+   blog post — is untracked and `reset --hard` leaves it in place. Check
+   `git status`, then say which of prep's output survived rather than "nothing to
+   undo" or "everything is gone".
 
 6. **On conflict:** `git merge --abort` if in progress; leave plan in
    `review-needed/`; report conflict paths; **do not** move to `completed/`.
@@ -310,7 +319,7 @@ state what moved and why, then commit. No CHANGELOG, no blog, no test run. If
 
 ```bash
 git add .plans/
-git commit -- .plans/ -m "Plans: <slug> → <lane> (/review <choice>)"
+git commit -m "Plans: <slug> → <lane> (/review <choice>)" -- .plans/
 ```
 
 The `-- .plans/` pathspec is load-bearing: a bare `git commit` commits **everything
@@ -318,6 +327,19 @@ already in the index**, so an unrelated pre-staged file would land under the lig
 path with no tests, no CHANGELOG and no blog decision. If `git diff --cached
 --name-only` lists anything outside `.plans/`, this is not a plans-only commit —
 stop and run the full gate.
+
+**Never take the light path while a merge is staged.** A pathspec commit is a
+*partial* commit, and git refuses one mid-merge:
+
+```text
+fatal: cannot do a partial commit during a merge.
+```
+
+The tempting repair — dropping `-- .plans/` so the command succeeds — is the worst
+available outcome: it commits the **entire staged merge** under a `Plans:` message,
+ungated. Finish or abort the merge first (§11 step 5), then move the lane and commit
+it separately. `git rev-parse -q --verify MERGE_HEAD` succeeding means a merge is
+still in progress; the merge commit and the lane move are always **two** commits.
 
 | Choice | Move |
 |--------|------|
@@ -385,7 +407,9 @@ If not ahead: report and stop (with `--promote`, say why).
    # run /commit-prep against the merged working tree
    #   green → git add -A && git commit -m "Merge <integration> into <mainline>"
    #   red   → git merge --abort || git reset --hard HEAD; report the failing
-   #            gate, promote nothing (prep's edits are discarded with the merge)
+   #            gate, promote nothing. Prep's *tracked* edits go with the merge;
+   #            a file it created (new blog post) is untracked and survives —
+   #            `git status`, then keep or remove it deliberately.
    ```
 3. Conflict → abort; no push; report files.
 4. Success → report SHAs. Push `origin <mainline>` only with confirm / `--push`.

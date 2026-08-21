@@ -115,7 +115,7 @@ what the commit contains, per the [`/commit-prep` hard rule](/platforms/claude-c
 | `/review` does | Gate |
 |---|---|
 | Fast-forward merge into integration | none — creates no commit; the content was already prepped on the branch, and a fast-forward cannot conflict |
-| `--no-ff` merge (feature → integration, or integration → mainline) | **full `/commit-prep`**, run against the *staged* merge before it becomes a commit: `git merge --no-ff --no-commit`, prep, then commit if green or `git merge --abort` if red |
+| `--no-ff` merge (feature → integration, or integration → mainline) | **full `/commit-prep`**, run against the *staged* merge before it becomes a commit: `git merge --no-ff --no-commit`, prep, then `git add -A && git commit` if green (prep edits the working tree; a bare commit drops its output) or `git merge --abort \|\| git reset --hard HEAD` if red |
 | Lane move + review notes (Approve / Needs Work / Defer) | **light path** — state what moved and why, then commit. No CHANGELOG, no blog, no test run; a lane move cannot break a test |
 
 A project that leaves `.plans/` untracked (as the Anchor repo itself does) has

@@ -78,7 +78,7 @@ If ambiguous: ask once (bug vs feature), then stop. Optional user wording
 `.local.md` if present — do not drop it). **Then commit the move** via the light
 path — the `/commit-prep` exemption for plans-only commits (see `CLAUDE.md`):
 state what moved and why, then `git add .plans/` and
-`git commit -- .plans/`; no CHANGELOG, no blog, no test run. If this plan is
+`git commit -m "…" -- .plans/`; no CHANGELOG, no blog, no test run. If this plan is
 untracked (`*.local.md`, or a project that ignores `.plans/`), say “promoted
 (untracked)” and commit nothing. Refuse if target exists; warn if
 Goal/Done when thin or Depends on unmet; do not auto-`/work`. Report path +

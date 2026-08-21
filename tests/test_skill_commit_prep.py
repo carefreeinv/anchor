@@ -19,7 +19,17 @@ from pathlib import Path
 import pytest
 
 REPO = Path(__file__).resolve().parents[1]
-SKILL_GLOBS = (".claude/commands/*.md", ".grok/skills/*/SKILL.md")
+SKILL_GLOBS = (
+    ".claude/commands/*.md",
+    ".grok/skills/*/SKILL.md",
+    # The per-platform briefs and the docs mirrors state the same rule. They
+    # drifted from the skills twice before this test existed, and a stale copy
+    # is what a consumer project actually reads.
+    "platforms/*/CLAUDE.md",
+    "platforms/*/GROK.md",
+    "platforms/*/CHAT.md",
+    "docs/docs/skills/*.md",
+)
 
 # How close a `/commit-prep` reference must sit to a mutating command.
 PROXIMITY = 25
@@ -28,12 +38,44 @@ PROXIMITY = 25
 # `git -C <path>` / `git -c k=v` forms and `gh pr merge` (which lands a merge
 # commit on the remote). Reads (`git checkout`, `git status`, `git log`) do not
 # qualify — and neither does `git push`, which only publishes commits that were
-# already gated when they were made. `git mv` is here because it stages, not
-# because it commits.
+# already gated when they were made. `git add` and `git mv` are here because they
+# stage, not because they commit.
+#
+# Not detected: a skill that delegates the commit to a subagent or another tool
+# without naming a git command. Nothing textual distinguishes that from prose, so
+# it stays a review concern rather than a false sense of coverage here.
 MUTATING = re.compile(
-    r"git\s+(?:-[Cc]\s+\S+\s+)*(commit|merge|mv|cherry-pick|revert|rebase)\b"
+    # `-C <path>` / `-c k=v` may repeat and may omit the space after the flag.
+    r"git\s+(?:-[Cc]\s*\S+\s+)*(commit|merge|add|mv|cherry-pick|revert|rebase)\b"
     r"|gh\s+pr\s+merge\b"
 )
+
+# Forms that match MUTATING but create no commit, so they carry no prep
+# obligation: undo paths, and the fast-forward that only moves a ref to content
+# which was already prepped on the branch it came from.
+NO_COMMIT_CREATED = re.compile(
+    r"--abort\b|--ff-only\b|--continue\b|--no-commit\b|merge-base\b"
+)
+
+# The hard rule is scoped by commit *content*: a commit whose paths are entirely
+# under `.plans/` takes the light path and owes no prep reference. Lane moves are
+# the overwhelming majority of git commands in these documents, and demanding a
+# prep reference beside each one would teach exactly the habit the light path
+# exists to prevent. Lane directory names count as `.plans/` context because the
+# skills routinely write the short form (`review-needed/` → `completed/`).
+# A *mention* of a command carries no obligation; an *instruction* does. The
+# difference is arguments: "you cannot run `git mv` yourself" and "human pastes /
+# runs `git mv`" name the command with nothing to act on, while every command an
+# agent actually copies out of these documents has a path or a flag after it.
+# This deliberately trades some prose coverage for a signal that is not noise —
+# the gap that motivated this test was in a fenced block, which still counts.
+MENTION_ONLY = re.compile(
+    r"(?:commit|merge|add|mv|cherry-pick|revert|rebase)\s*(?:`|$|[,.)]|\s*/\s*`)"
+)
+
+LANES = "drafts|bugs|features|in-progress|review-needed|completed|ambiguous|blocked"
+PLANS_ONLY = re.compile(rf"\.plans/|\.leases/|\b(?:{LANES})/")
+PLANS_CONTEXT = 2  # lines either side — these sentences wrap
 
 # Skills that legitimately name a mutating command without owing a prep reference.
 EXEMPT = {
@@ -75,18 +117,49 @@ def test_mutating_skill_names_commit_prep(path: Path):
     # mentions that are all exclusions. Require one within PROXIMITY lines of an
     # actual mutating command, so the reference sits where the obligation applies.
     lines = text.splitlines()
-    mutating_lines = [i for i, ln in enumerate(lines) if MUTATING.search(ln)]
+    def _is_mention(ln: str) -> bool:
+        """True when every mutating hit on the line is argument-less prose.
+
+        Looks just past the end of each match: a closing backtick, end of line,
+        or sentence punctuation means the command was named, not given.
+        """
+        return all(
+            MENTION_ONLY.search(ln[m.start():m.end() + 2])
+            for m in MUTATING.finditer(ln)
+        )
+
+    def _plans_only(i: int) -> bool:
+        lo, hi = max(0, i - PLANS_CONTEXT), min(len(lines), i + PLANS_CONTEXT + 1)
+        return any(PLANS_ONLY.search(ln) for ln in lines[lo:hi])
+
+    mutating_lines = [
+        i for i, ln in enumerate(lines)
+        if MUTATING.search(ln)
+        and not NO_COMMIT_CREATED.search(ln)
+        and not _is_mention(ln)
+        and not _plans_only(i)
+    ]
+    if not mutating_lines:
+        return
     prep_lines = [i for i, ln in enumerate(lines) if "commit-prep" in ln]
     assert prep_lines, (
         f"{path.relative_to(REPO)} runs {hits} but never references `/commit-prep`. "
         f"Either name the prep obligation (see CLAUDE.md's hard rule) or add the "
         f"skill to EXEMPT in this file with a reason."
     )
-    near = any(abs(m - pl) <= PROXIMITY for m in mutating_lines for pl in prep_lines)
-    assert near, (
-        f"{path.relative_to(REPO)} mentions `/commit-prep`, but never within "
-        f"{PROXIMITY} lines of {hits} — the reference does not sit where the "
-        f"obligation applies. State the obligation at the command, not elsewhere."
+    # Per command, not per file. A single reference next to the first commit used
+    # to satisfy the whole document, leaving every later commit-creating command
+    # unguarded — which is exactly how the merge path shipped ungated.
+    orphans = [
+        (m + 1, lines[m].strip())
+        for m in mutating_lines
+        if not any(abs(m - pl) <= PROXIMITY for pl in prep_lines)
+    ]
+    assert not orphans, (
+        f"{path.relative_to(REPO)}: {len(orphans)} commit-creating command(s) sit "
+        f"more than {PROXIMITY} lines from any `/commit-prep` reference — the "
+        f"obligation is not stated where it applies:\n"
+        + "\n".join(f"  line {n}: {t}" for n, t in orphans[:8])
     )
 
 

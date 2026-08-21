@@ -18,8 +18,10 @@ blog-if-warranted) **before any commit that touches a path outside `.plans/`, an
 before any merge commit**. `/commit-prep` is **prep only** — it does not commit.
 After a **green** prep, if plan work is complete, stage + commit on the **feature
 branch** (see `/work`); never on main/dev — **except** the plans-only lane-move
-commit below, which `/review` makes on the branch it just integrated into, because
-that is where the lane move exists.
+commit below, which **`/review`**, **`/work`** and **`/draft --promote`** make on
+whichever branch the lane move exists on, including an integration branch. All
+three rearrange `.plans/`, so licensing only `/review` left the other two with no
+legal way to commit their own bookkeeping.
 
 **Plans-only commits take the light path.** A commit whose paths are *entirely*
 under `.plans/` — a lane move, review notes, a `## Handoff` line — states what

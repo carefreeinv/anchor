@@ -51,6 +51,10 @@ EXIT_GIT = 2
 EXIT_SCOPE = 3
 EXIT_PRECONDITION = 4
 EXIT_CONFLICT = 5
+# A non-ff merge is staged, not committed: /commit-prep owes a pass over the merged
+# tree before it becomes a commit. Deliberately NOT 0 — a caller that treats this
+# as success reports a merge that did not happen.
+EXIT_STAGED = 6
 
 INTEGRATION_ORDER = ("dev", "develop")
 MAINLINE = ("main", "master")
@@ -407,10 +411,50 @@ def land(root: Path, branch: str, target: str, *, title: str = "") -> str:
             _git(root, "merge", "--abort", check=False)
             raise GitError(f"merge conflicted: {p.stdout.strip()} {p.stderr.strip()}")
         restore = False  # a staged merge must stay on the target branch
+        _write_staged_state(root, branch, target, original, title)
         return STAGED
     finally:
         if restore:
             _git(root, "checkout", original, check=False)
+
+
+STAGED_STATE = "merge-feature-staged.json"
+
+
+def _state_path(root: Path) -> Path:
+    return Path(root) / ".git" / STAGED_STATE
+
+
+def _write_staged_state(root: Path, branch: str, target: str, original: str,
+                        title: str) -> None:
+    """Record what a staged merge needs in order to be finished.
+
+    `land()` computes the restore point internally, so without this a second CLI
+    invocation could not know which branch to return to — and would silently leave
+    the tree parked on the integration branch.
+    """
+    import json
+
+    _state_path(root).write_text(json.dumps(
+        {"branch": branch, "target": target, "original": original, "title": title}
+    ), encoding="utf-8")
+
+
+def read_staged_state(root: Path) -> dict | None:
+    """The pending staged merge for this repo, or None."""
+    import json
+
+    path = _state_path(root)
+    if not path.is_file():
+        return None
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+
+
+def clear_staged_state(root: Path) -> None:
+    _state_path(root).unlink(missing_ok=True)
 
 
 def commit_staged(root: Path, branch: str, target: str, *, title: str = "",
@@ -426,7 +470,9 @@ def commit_staged(root: Path, branch: str, target: str, *, title: str = "",
         msg = f"Merge {branch}" + (f": {title}" if title else "")
         _git(root, "add", "-A")
         _git(root, "commit", "-m", msg)
-        return head_sha(root, "HEAD")
+        sha = head_sha(root, "HEAD")
+        clear_staged_state(root)
+        return sha
     finally:
         if original:
             _git(root, "checkout", original, check=False)
@@ -442,6 +488,7 @@ def abort_staged(root: Path, *, original: str = "") -> None:
     """
     if _git(root, "merge", "--abort", check=False).returncode != 0:
         _git(root, "reset", "--hard", "HEAD", check=False)
+    clear_staged_state(root)
     if original:
         _git(root, "checkout", original, check=False)
 
@@ -551,18 +598,56 @@ def main(argv: list[str] | None = None) -> int:
         description="Gate and land feature/<slug> on the integration branch (never mainline).",
     )
     ap.add_argument("--root", default=".", help="repo or worktree root (default: cwd)")
-    ap.add_argument("--slug", required=True, help="plan slug; branch is feature/<slug>")
+    ap.add_argument("--slug", help="plan slug; branch is feature/<slug> "
+                    "(not needed with --commit-staged/--abort-staged)")
     ap.add_argument("--branch", help="override the branch name (default: feature/<slug>)")
-    ap.add_argument("--touched", required=True,
+    ap.add_argument("--touched",
                     help="file with one touched path/glob per line, or '-' for stdin")
     ap.add_argument("--base", help="merge-base recorded at claim time (default: computed)")
-    ap.add_argument("--expect-head", required=True,
+    ap.add_argument("--expect-head",
                     help="SHA this run committed; refuses if the branch moved since")
     ap.add_argument("--target", help="integration branch (default: dev, else develop)")
     ap.add_argument("--title", default="", help="plan title for the merge commit message")
+    ap.add_argument("--commit-staged", action="store_true",
+                    help="finish a merge left STAGED by an earlier run, after "
+                         "/commit-prep came back GREEN on the merged tree")
+    ap.add_argument("--abort-staged", action="store_true",
+                    help="undo a merge left STAGED by an earlier run, after "
+                         "/commit-prep came back RED (prep's edits go with it)")
     ap.add_argument("--dry-run", action="store_true",
                     help="evaluate the gate and report; merge nothing")
     args = ap.parse_args(argv)
+    root = Path(args.root)
+
+    if args.commit_staged or args.abort_staged:
+        state = read_staged_state(root)
+        if state is None:
+            print("merge-feature: no staged merge recorded for this repo.",
+                  file=sys.stderr)
+            return EXIT_PRECONDITION
+        try:
+            if args.commit_staged:
+                sha = commit_staged(root, state["branch"], state["target"],
+                                    title=state.get("title", ""),
+                                    original=state.get("original", ""))
+                print(f"merged; {state['target']} is now {sha[:12]}.")
+            else:
+                abort_staged(root, original=state.get("original", ""))
+                print(f"aborted; {state['target']} unchanged, nothing committed. "
+                      f"/commit-prep's own edits were discarded with the merge.")
+        except GitError as exc:
+            print(f"merge-feature: {exc}", file=sys.stderr)
+            return EXIT_GIT
+        return EXIT_OK
+
+    missing = [n for n, v in (("--slug", args.slug), ("--touched", args.touched),
+                              ("--expect-head", args.expect_head)) if not v]
+    if missing:
+        # Required for a merge, meaningless for the two finishers above (which
+        # return before this). argparse cannot express that, so it lives here.
+        print(f"merge-feature: missing required argument(s): {', '.join(missing)}",
+              file=sys.stderr)
+        return EXIT_PRECONDITION
 
     try:
         verdict, new_head = run(
@@ -583,6 +668,16 @@ def main(argv: list[str] | None = None) -> int:
     print(verdict.report())
     if verdict.ok and args.dry_run:
         print("dry run: nothing merged.")
+    elif verdict.ok and new_head == STAGED:
+        # NOT "merged" and NOT exit 0. The merge is staged and uncommitted; a
+        # caller that reads this as success reports a merge that did not happen.
+        print(
+            f"STAGED: {landed_on} has the merge staged, NOT committed.\n"
+            f"  Run /commit-prep against the merged tree, then finish it:\n"
+            f"    green -> python scripts/merge_feature.py --root {args.root} --commit-staged\n"
+            f"    red   -> python scripts/merge_feature.py --root {args.root} --abort-staged"
+        )
+        return EXIT_STAGED
     elif verdict.ok:
         print(f"merged; {landed_on} is now {new_head[:12]}.")
     return verdict.code

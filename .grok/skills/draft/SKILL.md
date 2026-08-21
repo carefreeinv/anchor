@@ -131,7 +131,9 @@ from the plan body** (and optional user wording).
    is already tracked; else `mv`. Create the target dir if needed. A promote of a
    **tracked** plan is a tracked change — commit it via the **light path** — the
    `/commit-prep` exemption for plans-only commits (see the platform brief) —
-   state what moved and why, then `git add .plans/ && git commit`; no CHANGELOG, no blog,
+   state what moved and why, then `git add .plans/` and
+   `git commit -m "…" -- .plans/`; the pathspec matters — a bare `git commit`
+   commits the whole index. No CHANGELOG, no blog,
    no test run. Untracked (`.local.md`, or a project that ignores `.plans/`): say
    "promoted (untracked)" and commit nothing.
 6. Do **not** start `/work` unless the user immediately asks.

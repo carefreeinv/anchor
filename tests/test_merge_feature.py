@@ -12,9 +12,11 @@ from merge_feature import (
     EXIT_OK,
     EXIT_PRECONDITION,
     EXIT_SCOPE,
+    EXIT_STAGED,
     changed_files,
     evaluate_gate,
     main,
+    read_staged_state,
     read_touched,
     run,
 )
@@ -132,8 +134,9 @@ def test_non_ff_merge_is_staged_not_committed(repo):
     from merge_feature import STAGED
 
     _git(repo, "checkout", "dev")
-    dev_before = _git(repo, "rev-parse", "dev")
     _commit(repo, "app/other.py", "y = 2\n", "dev moved")
+    # Captured *after* dev moves: the divergence is what forces the non-ff path,
+    # and the assertion below is that a staged merge leaves dev where it is now.
     dev_before = _git(repo, "rev-parse", "dev")
     _git(repo, "checkout", "feature/my-plan")
 
@@ -418,8 +421,14 @@ def test_cli_requires_expect_head(repo, tmp_path):
     touched = tmp_path / "touched.txt"
     touched.write_text("app/\n", encoding="utf-8")
 
-    with pytest.raises(SystemExit):  # argparse: required argument
-        main(["--root", str(repo), "--slug", "my-plan", "--touched", str(touched)])
+    # --expect-head is only mandatory on the merge route (the --commit-staged /
+    # --abort-staged finishers resume a merge and have no use for it), so this is
+    # a checked refusal rather than an argparse SystemExit. What matters is that
+    # it still refuses and still merges nothing.
+    dev_before = _git(repo, "rev-parse", "dev")
+    assert main(["--root", str(repo), "--slug", "my-plan",
+                 "--touched", str(touched)]) == EXIT_PRECONDITION
+    assert _git(repo, "rev-parse", "dev") == dev_before
 
 
 # --- the target may only ever be integration -----------------------------------
@@ -564,3 +573,101 @@ def test_binary_touched_file_exits_four_not_one(repo, tmp_path):
                  "--expect-head", _head(repo)])
 
     assert code == EXIT_PRECONDITION
+
+
+# --- a staged merge is not a merge (B7) ---------------------------------------
+#
+# `land()` returns STAGED when the merge cannot fast-forward: the merge is in the
+# index, uncommitted, waiting for /commit-prep to run against the merged tree.
+# The CLI used to print "merged; dev is now STAGED." and exit 0 — reporting a
+# merge that had not happened, to a caller with no route to finish or undo it.
+
+
+def _diverge(root: Path) -> str:
+    """Put a commit on dev so the feature branch can no longer fast-forward."""
+    _git(root, "checkout", "dev")
+    _commit(root, "docs/note.md", "dev side\n", "dev-side work")
+    _git(root, "checkout", "feature/my-plan")
+    return _head(root, "dev")
+
+
+def _merge_argv(root: Path, touched: Path) -> list[str]:
+    return ["--root", str(root), "--slug", "my-plan", "--touched", str(touched),
+            "--expect-head", _head(root), "--target", "dev"]
+
+
+@pytest.fixture
+def staged(repo: Path, tmp_path: Path, capsys):
+    """A repo parked mid-merge, exactly as a non-ff `land()` leaves it.
+
+    The output is read here and handed back: a test body's own `capsys` starts
+    after fixture setup and would see nothing.
+    """
+    touched = tmp_path / "touched.txt"
+    touched.write_text("app/\n", encoding="utf-8")
+    dev_before = _diverge(repo)
+    code = main(_merge_argv(repo, touched))
+    return repo, code, dev_before, capsys.readouterr().out
+
+
+def test_staged_merge_does_not_report_success(staged):
+    _repo, code, _dev_before, out = staged
+    assert code == EXIT_STAGED, "a staged merge must not exit 0"
+    assert code != EXIT_OK
+    assert "STAGED:" in out and "NOT committed" in out
+    # The old message read "merged; dev is now STAGED." — the word must not
+    # appear as a claim that the merge landed.
+    assert "merged; dev is now" not in out
+
+
+def test_staged_merge_tells_the_caller_how_to_finish_it(staged):
+    *_rest, out = staged
+    assert "--commit-staged" in out
+    assert "--abort-staged" in out
+    assert "/commit-prep" in out
+
+
+def test_commit_staged_includes_preps_own_edits_in_the_merge_commit(staged):
+    repo, _code, _dev_before, _out = staged
+    # /commit-prep updates the CHANGELOG against the merged tree.
+    (repo / "CHANGELOG.md").write_text("- entry\n", encoding="utf-8")
+    assert main(["--root", str(repo), "--commit-staged"]) == EXIT_OK
+
+    assert _git(repo, "rev-parse", "--abbrev-ref", "HEAD") == "feature/my-plan"
+    files = _git(repo, "show", "dev", "--stat", "--format=")
+    assert "CHANGELOG.md" in files, "prep's edits were dropped by the merge commit"
+    assert _git(repo, "status", "--porcelain") == ""
+
+
+def test_abort_staged_restores_dev_even_after_prep_touched_a_merged_file(staged):
+    repo, _code, dev_before, _out = staged
+    # The B2 case: bare `git merge --abort` exits 128 once a merged file has
+    # unstaged modifications, so the abort path needs the reset fallback.
+    (repo / "app/x.py").write_text("x = 1\nprep edit\n", encoding="utf-8")
+    assert main(["--root", str(repo), "--abort-staged"]) == EXIT_OK
+
+    assert _git(repo, "rev-parse", "dev") == dev_before, "dev moved on a red prep"
+    assert _git(repo, "rev-parse", "--abbrev-ref", "HEAD") == "feature/my-plan"
+    assert _git(repo, "status", "--porcelain") == ""
+
+
+def test_finishers_clear_the_staged_state(staged):
+    repo, _code, _dev_before, _out = staged
+    assert read_staged_state(repo) is not None
+    main(["--root", str(repo), "--abort-staged"])
+    assert read_staged_state(repo) is None
+    # A second finisher call has nothing to finish and must say so, not crash.
+    assert main(["--root", str(repo), "--commit-staged"]) == EXIT_PRECONDITION
+
+
+def test_finishers_do_not_require_the_merge_arguments(repo):
+    # --slug/--touched/--expect-head describe a merge; the finishers resume one.
+    # argparse used to make them mandatory on every route.
+    assert main(["--root", str(repo), "--commit-staged"]) == EXIT_PRECONDITION
+
+
+def test_a_fast_forward_merge_still_reports_a_real_sha(repo, tmp_path):
+    touched = tmp_path / "touched.txt"
+    touched.write_text("app/\n", encoding="utf-8")
+    assert main(_merge_argv(repo, touched)) == EXIT_OK
+    assert read_staged_state(repo) is None

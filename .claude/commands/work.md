@@ -533,7 +533,7 @@ The merged form is what makes a skipped review **auditable** — `/review --list
 `git mv` the plan from `in-progress/` to `.plans/review-needed/` (create the dir if
 needed) and drop its lease. **Then commit that move** via the light path — the
 `/commit-prep` exemption for plans-only commits: state what moved and why, then
-`git add .plans/` and `git commit -- .plans/`; no CHANGELOG, no blog, no test run.
+`git add .plans/` and `git commit -m "…" -- .plans/`; no CHANGELOG, no blog, no test run.
 The pathspec matters — a bare `git commit` would sweep in anything else already
 staged. If this plan is untracked (`*.local.md`, or a project that ignores
 `.plans/`), say “lane move (untracked)” and commit nothing. That move means *agent asserts Done when* — it is not a

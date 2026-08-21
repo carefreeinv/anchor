@@ -493,7 +493,7 @@ handed to /review 2026-08-01
 and drop its lease — *agent asserts Done when*, not a final archive. **Then commit
 that move** via the light path — the `/commit-prep` exemption for plans-only commits
 (see the platform brief): state what moved and why, then `git add .plans/` and
-`git commit -- .plans/`; no CHANGELOG, no blog, no test run. The pathspec matters —
+`git commit -m "…" -- .plans/`; no CHANGELOG, no blog, no test run. The pathspec matters —
 a bare `git commit` would sweep in anything else already staged. If this plan is
 untracked (`*.local.md`, or a project that ignores `.plans/`), say “lane move
 (untracked)” and commit nothing. Tell the human
