@@ -10,6 +10,7 @@ from pathlib import Path
 import pytest
 from merge_feature import (
     EXIT_CONFLICT,
+    EXIT_GIT,
     EXIT_OK,
     EXIT_PRECONDITION,
     EXIT_SCOPE,
@@ -189,7 +190,7 @@ def test_abort_staged_recovers_even_when_merge_abort_refuses(repo):
     assert mf.land(repo, "feature/my-plan", "dev") == mf.STAGED
     (Path(repo) / "app" / "x.py").write_text("prep touched a merged file\n",
                                              encoding="utf-8")
-    mf.abort_staged(repo, original="feature/my-plan")
+    mf.abort_staged(repo, "dev", original="feature/my-plan")
 
     assert _git(repo, "rev-parse", "dev") == dev_before          # nothing committed
     assert not (Path(repo) / ".git" / "MERGE_HEAD").exists()     # merge state cleared
@@ -713,6 +714,56 @@ def test_commit_staged_refuses_when_the_state_file_names_the_wrong_branch(staged
     )
     main_log = _git(repo, "log", "--oneline", "main")
     assert "Merge" not in main_log, "must not have committed onto the named branch"
+
+
+def test_abort_staged_does_not_reset_a_tree_it_no_longer_describes(staged):
+    """The mirror of the commit_staged guard, and the more destructive half.
+
+    `git merge --abort` fails when there is no merge, and the fallback is
+    `git reset --hard` — which against a stale record destroys whatever unrelated
+    uncommitted work the operator has since put in the tree, then reports success.
+    """
+    repo, _code, dev_before, _out = staged
+    _git(repo, "merge", "--abort")           # operator aborts by hand
+    assert read_staged_state(repo) is not None, "the record is now stale"
+
+    (repo / "docs/note.md").write_text("dev side\nprecious uncommitted work\n",
+                                       encoding="utf-8")
+    assert main(["--root", str(repo), "--abort-staged"]) == EXIT_OK
+
+    assert "precious" in (repo / "docs/note.md").read_text(encoding="utf-8"), (
+        "abort_staged reset a tree its stale record did not describe, destroying "
+        "the operator's unrelated uncommitted work"
+    )
+    assert _git(repo, "rev-parse", "dev") == dev_before
+    # The record is gone, so this is also the escape hatch commit_staged's
+    # refusal points the operator at.
+    assert read_staged_state(repo) is None
+
+
+def test_abort_staged_refuses_a_merge_in_progress_on_another_branch(staged):
+    repo, _code, _dev_before, _out = staged
+    state_path = repo / ".git" / "merge-feature-staged.json"
+    state = json.loads(state_path.read_text(encoding="utf-8"))
+    state["target"] = "main"
+    state_path.write_text(json.dumps(state), encoding="utf-8")
+
+    assert main(["--root", str(repo), "--abort-staged"]) == EXIT_PRECONDITION
+    assert (repo / ".git" / "MERGE_HEAD").exists(), "the real merge must survive"
+    assert read_staged_state(repo) is not None
+
+
+def test_finishers_report_a_non_repo_root_within_the_documented_exit_codes(tmp_path):
+    """`--root` that is not a git repo must not surface as a traceback.
+
+    Resolving the state file shells out to git (it has to, to find a linked
+    worktree's real git dir), so this path can raise where pure path arithmetic
+    could not. Exit 1 from a traceback is outside the set every doc documents.
+    """
+    plain = tmp_path / "not-a-repo"
+    plain.mkdir()
+    for flag in ("--commit-staged", "--abort-staged"):
+        assert main(["--root", str(plain), flag]) == EXIT_GIT
 
 
 def test_state_path_works_inside_a_linked_worktree(repo, tmp_path):

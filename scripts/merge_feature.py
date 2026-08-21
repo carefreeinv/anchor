@@ -526,7 +526,11 @@ def commit_staged(root: Path, branch: str, target: str, *, title: str = "",
             _git(root, "checkout", original, check=False)
 
 
-def abort_staged(root: Path, *, original: str = "") -> None:
+ABORTED = "aborted"
+CLEARED = "cleared"
+
+
+def abort_staged(root: Path, target: str, *, original: str = "") -> str:
     """Undo a merge staged by :func:`land`, after ``/commit-prep`` came back red.
 
     ``git merge --abort`` **refuses** when a file involved in the merge has unstaged
@@ -535,12 +539,39 @@ def abort_staged(root: Path, *, original: str = "") -> None:
     edits are discarded along with the merge — but ``reset --hard`` does not remove
     **untracked** files, so a blog post or other new file prep created survives on
     disk (``?? path`` in ``git status``) even though the merge did not land.
+
+    That reset is destructive, so it only ever runs against a merge that is
+    genuinely in progress on the recorded target:
+
+    * **No ``MERGE_HEAD``** — the operator aborted by hand, or an earlier run already
+      finished. There is nothing to undo, so the stale record is cleared and **no
+      tree is touched**; resetting here would destroy whatever unrelated work the
+      operator has since put in the tree. Returns :data:`CLEARED`.
+    * **A merge in progress on a different branch than recorded** — refuse. Resetting
+      a tree this state file does not describe is the same data-loss path.
+    * Otherwise the real abort runs, and returns :data:`ABORTED`.
     """
+    merging = _git(root, "rev-parse", "-q", "--verify", "MERGE_HEAD",
+                   check=False).returncode == 0
+    if not merging:
+        # Clearing the record is safe and is the operator's escape hatch out of a
+        # stale state file — which is exactly what commit_staged's refusal tells
+        # them to run. A reset on this path would be destroying, not undoing.
+        clear_staged_state(root)
+        return CLEARED
+    branch = current_branch(root)
+    if branch != target:
+        raise StagedMergeInvalid(
+            f"a merge is in progress on {branch!r}, not the recorded target "
+            f"{target!r} — refusing to reset a tree this staged-merge record "
+            f"does not describe; resolve that merge where it is"
+        )
     if _git(root, "merge", "--abort", check=False).returncode != 0:
         _git(root, "reset", "--hard", "HEAD", check=False)
     clear_staged_state(root)
     if original:
         _git(root, "checkout", original, check=False)
+    return ABORTED
 
 
 def read_touched(source: str) -> tuple[str, ...]:
@@ -670,19 +701,27 @@ def main(argv: list[str] | None = None) -> int:
     root = Path(args.root)
 
     if args.commit_staged or args.abort_staged:
-        state = read_staged_state(root)
-        if state is None:
-            print("merge-feature: no staged merge recorded for this repo.",
-                  file=sys.stderr)
-            return EXIT_PRECONDITION
         try:
+            # Inside the try: reading the state resolves the repo's real git dir,
+            # so a --root that is not a git repo raises GitError here rather than
+            # reaching the caller as a traceback and exit 1, outside the
+            # documented exit-code set.
+            state = read_staged_state(root)
+            if state is None:
+                print("merge-feature: no staged merge recorded for this repo.",
+                      file=sys.stderr)
+                return EXIT_PRECONDITION
             if args.commit_staged:
                 sha = commit_staged(root, state["branch"], state["target"],
                                     title=state.get("title", ""),
                                     original=state.get("original", ""))
                 print(f"merged; {state['target']} is now {sha[:12]}.")
+            elif abort_staged(root, state["target"],
+                              original=state.get("original", "")) == CLEARED:
+                print(f"no merge in progress; cleared the stale staged-merge record "
+                      f"for {state['target']}. Nothing was reset and no tree was "
+                      f"touched.")
             else:
-                abort_staged(root, original=state.get("original", ""))
                 print(f"aborted; {state['target']} unchanged, nothing committed. "
                       f"/commit-prep's tracked edits were discarded with the merge "
                       f"(untracked files it created, e.g. a new blog post, survive "

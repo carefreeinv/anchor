@@ -113,6 +113,15 @@ under the repository's real git directory — resolved with `git rev-parse
 linked worktree, the topology `/work` itself recommends per agent. The
 fast-forward path is unchanged and still reports a real SHA.
 
+Both finishers refuse rather than guess when the record and reality have parted
+company, and that asymmetry is deliberate: a `reset --hard` is only an *undo* while
+the merge it describes is actually in front of you. Resolve the merge by hand in
+between and the same command becomes a destroy — so `--abort-staged` clears the
+stale record and touches nothing, rather than resetting a tree it no longer
+describes. It is the same lesson as `git add -A`: the dangerous version and the
+correct version of these commands look identical in a document, and only differ in
+the state you run them against.
+
 ## Tests that read the documents
 
 Every one of these defects recurred in a file no test read. So the anti-rot test now

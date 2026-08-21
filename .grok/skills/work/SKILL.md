@@ -451,6 +451,7 @@ move + what `/commit-prep` reported; add-then-delete still counts) · **mergeabl
 python scripts/merge_feature.py --root <checkout> --slug <slug> \
   --touched <file-with-one-path-per-line> --expect-head <sha> --dry-run
 # 0 would merge · 3 scope · 4 precondition · 5 conflict · 2 git error
+#      6 merge staged, NOT committed — finish it with the flags below
 ```
 
 `--expect-head` is **required** (provenance must hold). Point `--root` at a checkout
@@ -458,13 +459,25 @@ where the integration branch is **free** — git will not check out a branch liv
 another worktree, so from `var/worktrees/<agent>` run it against the main checkout;
 the gate detects the conflict up front and names the path to use.
 
-**A non-fast-forward merge comes back `STAGED`, not committed** — the merged tree is
-state neither branch was prepped in, so the helper stages it and hands control back:
-run `/commit-prep` against the merged tree, then `commit_staged(...)` on green or
-`abort_staged(...)` on red. `commit_staged` stages everything first (prep edits the
-working tree; a bare `git commit` during a merge drops its output), and
-`abort_staged` falls back to a hard reset because `git merge --abort` refuses once
-prep has touched a merged file. A fast-forward creates no commit and owes nothing.
+**A non-fast-forward merge exits `6` — staged, not committed** — the merged tree is
+state neither branch was prepped in, so the helper stages it and hands control back.
+Exit `6` is neither success nor failure: never report it as merged. Run
+`/commit-prep` against the merged tree, then finish it with **one** of:
+
+```bash
+python scripts/merge_feature.py --root <checkout> --commit-staged   # prep green
+python scripts/merge_feature.py --root <checkout> --abort-staged    # prep red
+```
+
+`--commit-staged` stages everything first (prep edits the working tree; a bare
+`git commit` during a merge drops its output). `--abort-staged` falls back to a hard
+reset because `git merge --abort` refuses once prep has touched a merged file; that
+discards prep's edits to **tracked** files, while anything prep *created* is
+untracked and survives on disk. Both refuse rather than guess if you resolved the
+merge by hand in between — `--abort-staged` then clears the stale record without
+resetting, because a reset against a tree the record no longer describes destroys
+unrelated work rather than undoing a merge. The checkout stays mid-merge until one
+runs. A fast-forward exits `0` with a real SHA and owes nothing.
 
 Drop `--dry-run` to land it. Never pass the operator's answer to the helper — check
 6 is yours to hold. **Rejected by design:** landing only the in-scope paths when the

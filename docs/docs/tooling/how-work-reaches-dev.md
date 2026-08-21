@@ -74,6 +74,14 @@ leaves the integration branch untouched. Leaving a run at exit `6` without doing
 either leaves the checkout mid-merge, so treat it as work in progress, not a
 result.
 
+Both finishers check that the merge they recorded is still the merge in front of
+them, and refuse rather than guess. If you resolved the merge by hand in between,
+`--commit-staged` refuses (exit `4`) instead of committing whatever is now in the
+tree, and `--abort-staged` clears the stale record **without** resetting anything
+— a `reset --hard` against a tree the record no longer describes would destroy
+unrelated uncommitted work rather than undo a merge. If a merge is in progress on
+a *different* branch than the one recorded, both refuse.
+
 `--expect-head` is **required**: without the SHA the run committed there is no way
 to tell the branch has not moved since, and provenance is a must-hold condition
 rather than an optional extra.

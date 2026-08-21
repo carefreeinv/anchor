@@ -469,6 +469,7 @@ Checks 1–5 are mechanical; run them with the helper rather than by eye:
 python scripts/merge_feature.py --root <checkout> --slug <slug> \
   --touched <file-with-one-path-per-line> --expect-head <sha you committed> --dry-run
 # exit 0 would merge · 3 scope violation · 4 precondition · 5 conflict · 2 git error
+#      6 merge staged, NOT committed — finish it with the flags below
 ```
 
 `--expect-head` is **required** — provenance is a must-hold condition, and without
@@ -480,22 +481,29 @@ live in another worktree, so with `/work` in `var/worktrees/<agent>` and your ma
 checkout on `dev`, run it against the main checkout. The gate detects that conflict
 up front and names the path to re-run against instead of failing mid-merge.
 
-Drop `--dry-run` to land it. **A non-fast-forward merge comes back `STAGED`, not
-committed** — the merged tree is state neither branch was prepped in, so the helper
-stages it and hands control back:
+Drop `--dry-run` to land it. **A non-fast-forward merge exits `6` — staged, not
+committed** — because the merged tree is state neither branch was prepped in, so
+the helper stages it and hands control back. Exit `6` is neither success nor
+failure: never report it as merged. Run `/commit-prep` against the merged tree,
+then finish it with **one** of:
 
-```text
-land(...) → a SHA      fast-forward; no commit created, nothing further owed
-land(...) → "STAGED"   run /commit-prep against the merged tree, then
-                       commit_staged(...)  on green
-                       abort_staged(...)   on red   (nothing was committed, but
-                                                     prep's edits go with the merge)
+```bash
+python scripts/merge_feature.py --root <checkout> --commit-staged   # prep green
+python scripts/merge_feature.py --root <checkout> --abort-staged    # prep red
 ```
 
-`commit_staged` stages everything before committing — prep edits the *working tree*,
-and a bare `git commit` during a merge would drop its output. `abort_staged` falls
-back to a hard reset because `git merge --abort` refuses once prep has touched a
-merged file.
+A fast-forward exits `0` with a real SHA and owes nothing further.
+
+`--commit-staged` stages everything before committing — prep edits the *working
+tree*, and a bare `git commit` during a merge would drop its output.
+`--abort-staged` falls back to a hard reset because `git merge --abort` refuses
+once prep has touched a merged file; that discards prep's edits to **tracked**
+files, while anything prep *created* is untracked and survives on disk. Both
+finishers refuse rather than guess if you resolved the merge by hand in between —
+`--abort-staged` then clears the stale record without resetting anything, because
+a reset against a tree the record no longer describes destroys unrelated work
+rather than undoing a merge. The checkout stays mid-merge until one of them runs,
+so never end a session on an exit `6` without saying so.
 
 The helper never pushes, never force-updates, never deletes a branch, and refuses
 mainline targets. **Do not** pass the operator's
