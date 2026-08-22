@@ -991,10 +991,38 @@ def test_fast_forward_is_unaffected_by_a_stray_file_in_root(repo, tmp_path):
     assert (repo / ".env.local").exists()
 
 
-def test_dry_run_is_unaffected_by_a_stray_file_in_root(repo, tmp_path):
+def test_dry_run_refuses_rather_than_reset_hard_over_uncommitted_work(repo, tmp_path):
+    """--dry-run "merges nothing", but a non-ff run still PROBES with a real
+    `git merge` that ends in `git reset --hard` — which cannot tell the operator's
+    uncommitted edits from merge residue. Keying the clean-tree arm on `dry_run`
+    let the preview destroy tracked work in the integration checkout.
+
+    An *untracked* file survives `reset --hard`, so a test that plants one passes
+    whether or not the hole is open. This plants a modified tracked file.
+    """
     touched = tmp_path / "touched.txt"
     touched.write_text("app/\n", encoding="utf-8")
     _diverge(repo)
+    head = _head(repo)
+    _split_topology(repo, tmp_path)
+    precious = repo / "README"
+    precious.write_text("hi\nPRECIOUS UNCOMMITTED WORK\n", encoding="utf-8")
+
+    code = main(["--root", str(repo), "--slug", "my-plan", "--touched", str(touched),
+                 "--expect-head", head, "--target", "dev", "--dry-run"])
+
+    assert code == EXIT_PRECONDITION
+    assert "PRECIOUS" in precious.read_text(encoding="utf-8"), (
+        "the conflict probe's reset --hard destroyed uncommitted work during a "
+        "run documented as merging nothing"
+    )
+
+
+def test_fast_forward_dry_run_still_previews_with_a_stray_file(repo, tmp_path):
+    """The ff path runs no probe and creates no commit, so it stays permissive —
+    this is what keeps /work's documented preview usable."""
+    touched = tmp_path / "touched.txt"
+    touched.write_text("app/\n", encoding="utf-8")
     head = _head(repo)
     _split_topology(repo, tmp_path)
     (repo / ".env.local").write_text("SECRET=hunter2\n", encoding="utf-8")
@@ -1004,6 +1032,20 @@ def test_dry_run_is_unaffected_by_a_stray_file_in_root(repo, tmp_path):
 
     assert code == EXIT_OK, "the documented preview step must still run"
     assert read_staged_state(repo) is None
+    assert (repo / ".env.local").exists()
+
+
+def test_unusable_record_with_a_live_merge_names_the_merge(staged, capsys):
+    """NEW-4 had no coverage: collapsing back to "no staged merge recorded" left
+    the operator mid-merge with no route out and no mention of it."""
+    repo, _code, _dev_before, _out = staged
+    state_path = repo / ".git" / "merge-feature-staged.json"
+    state_path.write_text(json.dumps({"branch": "feature/my-plan", "target": "dev"}),
+                          encoding="utf-8")   # merged_sha stripped
+
+    assert main(["--root", str(repo), "--commit-staged"]) == EXIT_PRECONDITION
+    err = capsys.readouterr().err
+    assert "in progress" in err and "git merge --abort" in err, err
 
 
 def test_root_mid_merge_is_refused_for_being_mid_merge_not_merely_dirty(repo, tmp_path):
@@ -1015,7 +1057,7 @@ def test_root_mid_merge_is_refused_for_being_mid_merge_not_merely_dirty(repo, tm
     _split_topology(repo, tmp_path)
     _stage_a_foreign_merge(repo)
 
-    verdict = mf.check_root_ready(repo, "dev", ff=False, dry_run=False)
+    verdict = mf.check_root_ready(repo, "dev", ff=False)
     assert verdict is not None and verdict.reason == "root-mid-merge"
 
 
@@ -1028,5 +1070,5 @@ def test_root_with_an_unfinished_record_is_refused(repo, tmp_path):
     assert mf.land(repo, "feature/my-plan", "dev") == mf.STAGED
     _git(repo, "merge", "--abort")          # record survives, tree is clean again
 
-    verdict = mf.check_root_ready(repo, "dev", ff=False, dry_run=False)
+    verdict = mf.check_root_ready(repo, "dev", ff=False)
     assert verdict is not None and verdict.reason == "root-has-staged-state"

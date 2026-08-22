@@ -487,10 +487,13 @@ resetting, because a reset against a tree the record no longer describes destroy
 unrelated work rather than undoing a merge. The checkout stays mid-merge until one
 runs. A fast-forward exits `0` with a real SHA and owes nothing.
 
-The helper also refuses to stage a merge when `--root` already has a merge in
-progress or an unfinished staged record, or when it holds uncommitted/untracked
-files — those would be swept into the merge commit by `--commit-staged`. Point
-`--root` at a *clean* integration checkout.
+The helper also refuses when `--root` already has a merge in progress or an
+unfinished staged record, or when it holds uncommitted/untracked files. That
+last one applies to **any non-fast-forward run, `--dry-run` included**: the
+gate probes for conflicts with a real `git merge` and ends the probe with
+`git reset --hard`, which cannot tell your uncommitted edits from merge
+residue — so "merge nothing" would still cost you them. Point `--root` at a
+*clean* integration checkout. A fast-forward probes nothing and is unaffected.
 
 Drop `--dry-run` to land it. Never pass the operator's answer to the helper — check
 6 is yours to hold. **Rejected by design:** landing only the in-scope paths when the

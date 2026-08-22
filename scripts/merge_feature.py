@@ -506,8 +506,7 @@ def clear_staged_state(root: Path) -> None:
     _state_path(root).unlink(missing_ok=True)
 
 
-def check_root_ready(root: Path, target: str, *, ff: bool,
-                     dry_run: bool) -> MergeVerdict | None:
+def check_root_ready(root: Path, target: str, *, ff: bool) -> MergeVerdict | None:
     """Refuse when ``--root`` is not a fit place to stage a merge. None means OK.
 
     Separate from :func:`evaluate_gate`'s ``dirty`` check, which follows the
@@ -537,13 +536,17 @@ def check_root_ready(root: Path, target: str, *, ff: bool,
     # `git add -A`, which exists to capture /commit-prep's own output and cannot
     # tell that apart from whatever was already lying around.
     #
-    # Only the staging path can do that. A fast-forward creates no commit and never
-    # reaches commit_staged, and --dry-run merges nothing at all — refusing either
-    # because the integration checkout has a scratch file would break /work's
-    # documented preview step and contradict "the fast-forward path is unchanged".
-    # The two arms above still apply everywhere: an in-progress merge or an
-    # unfinished record means this checkout is mid-operation however we got here.
-    if ff or dry_run:
+    # A fast-forward is the only path that touches nothing here: it creates no
+    # commit, never reaches commit_staged, and skips the conflict probe entirely,
+    # so refusing it over a scratch file would break "the fast-forward path is
+    # unchanged" for no gain.
+    #
+    # Everything else needs a clean tree, **including --dry-run**. A non-ff run
+    # probes with a real `git merge` and ends that probe with `git reset --hard`,
+    # which does not know it is discarding work the operator had here first — so
+    # "merge nothing" still costs them their uncommitted edits. Keying this on
+    # `dry_run` rather than on `ff` is precisely that bug.
+    if ff:
         return None
     stray = dirty_paths(root)
     if stray:
@@ -551,9 +554,10 @@ def check_root_ready(root: Path, target: str, *, ff: bool,
             ok=False, code=EXIT_PRECONDITION, reason="root-not-clean",
             message=(
                 f"refuse: {root} has {len(stray)} uncommitted path(s), and it is the "
-                f"checkout '{target}' is merged into. Anything here is swept into the "
-                f"merge commit when the staged merge is committed — commit, stash or "
-                f"remove them first."
+                f"checkout '{target}' is merged into. The conflict probe ends in a "
+                f"`git reset --hard` that would discard them (this applies to --dry-run "
+                f"too — it probes), and anything still here is swept into the merge "
+                f"commit by --commit-staged. Commit, stash or remove them first."
             ),
             offending=stray,
         )
@@ -789,7 +793,7 @@ def run(root: Path, slug: str, touched: tuple[str, ...], *, base: str | None = N
     # Runs after the gate above so the more specific refusals (provenance, scope,
     # the feature worktree being dirty) keep their reasons, and before the probe,
     # which is the thing that would do damage.
-    root_verdict = check_root_ready(root, resolved, ff=ff, dry_run=dry_run)
+    root_verdict = check_root_ready(root, resolved, ff=ff)
     if root_verdict is not None:
         return root_verdict, None
 

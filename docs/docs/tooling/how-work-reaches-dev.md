@@ -86,12 +86,15 @@ tree, and `--abort-staged` clears the stale record **without** resetting anythin
 unrelated uncommitted work rather than undo a merge. If a merge is in progress on
 a *different* branch than the one recorded, both refuse.
 
-Staging a merge also requires `--root` to be fit for one. It is refused when that
+A merge also requires `--root` itself to be fit for one. It is refused when that
 checkout already has a merge in progress or an unfinished staged record — the
 conflict probe would otherwise abort another agent's staged merge, and both skills
 point every agent at the same shared checkout — and when it holds uncommitted or
-untracked files, which `--commit-staged`'s `git add -A` would otherwise sweep into
-the merge commit. Note this is a *different* check from the clean-tree gate, which
+untracked files. The last check applies to **any non-fast-forward run, including
+`--dry-run`**, and for two reasons: the conflict probe ends in a `git reset --hard`
+that would discard uncommitted work it did not create, and anything still present
+later is swept into the merge commit by `--commit-staged`'s `git add -A`. A
+fast-forward creates no commit and runs no probe, so it is exempt. Note this is a *different* check from the clean-tree gate, which
 follows the feature branch's worktree: the tree that did the work and the tree the
 merge lands in are different directories on the topology `/work` recommends.
 

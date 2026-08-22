@@ -221,7 +221,16 @@ def test_no_skill_creates_a_merge_commit_without_gating_it(path: Path):
 # SKILL_GLOBS did not actually catch F4: those two pages contain no git commands
 # at all, so the proximity test returns early and asserts nothing about them. The
 # drift that shipped was *prose*, so it needs a prose check.
-ABSOLUTE_RULE = re.compile(r"before any `?git commit`?[.,]?\*?\*?(?!\s*outside)", re.I)
+# Matches the *statement* of the rule, with or without the word "git" — the
+# canonical pre-scoped phrasing on `main` is a bare "before any commit".
+RULE_STATEMENT = re.compile(r"before any\s+\*{0,2}`?(?:git\s+)?commit", re.I)
+
+# What makes a statement the *scoped* rule rather than the absolute one. A
+# negative lookahead on the same regex does not work here: the optional closing
+# backtick lets the engine backtrack so the lookahead never lines up, and a
+# correctly-scoped backticked sentence gets flagged as drift.
+SCOPED_MARKER = re.compile(r"outside\s+\*{0,2}`?\.plans/|merge commit", re.I)
+SCOPE_CONTEXT = 2  # lines either side — these sentences wrap
 
 # Where the rule is stated for readers acting on it now. Historical CHANGELOG and
 # blog entries are the record of what the rule said then and are deliberately out.
@@ -248,9 +257,15 @@ def test_no_live_document_states_the_pre_scoped_absolute_rule():
     offenders = []
     for pattern in LIVE_RULE_DOCS:
         for path in sorted(REPO.glob(pattern)):
-            for n, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
-                if ABSOLUTE_RULE.search(line):
-                    offenders.append(f"{path.relative_to(REPO)}:{n}")
+            lines = path.read_text(encoding="utf-8").splitlines()
+            for i, line in enumerate(lines):
+                if not RULE_STATEMENT.search(line):
+                    continue
+                lo = max(0, i - SCOPE_CONTEXT)
+                hi = min(len(lines), i + SCOPE_CONTEXT + 1)
+                if any(SCOPED_MARKER.search(ln) for ln in lines[lo:hi]):
+                    continue
+                offenders.append(f"{path.relative_to(REPO)}:{i + 1}")
     assert not offenders, (
         "these live documents state the pre-scoped rule ('before any git commit') "
         "rather than the content-scoped one ('before any commit outside `.plans/`, "

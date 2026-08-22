@@ -513,10 +513,13 @@ a reset against a tree the record no longer describes destroys unrelated work
 rather than undoing a merge. The checkout stays mid-merge until one of them runs,
 so never end a session on an exit `6` without saying so.
 
-The helper also refuses to stage a merge when `--root` already has a merge in
-progress or an unfinished staged record, or when it holds uncommitted/untracked
-files — those would be swept into the merge commit by `--commit-staged`. Point
-`--root` at a *clean* integration checkout.
+The helper also refuses when `--root` already has a merge in progress or an
+unfinished staged record, or when it holds uncommitted/untracked files. That
+last one applies to **any non-fast-forward run, `--dry-run` included**: the
+gate probes for conflicts with a real `git merge` and ends the probe with
+`git reset --hard`, which cannot tell your uncommitted edits from merge
+residue — so "merge nothing" would still cost you them. Point `--root` at a
+*clean* integration checkout. A fast-forward probes nothing and is unaffected.
 
 The helper never pushes, never force-updates, never deletes a branch, and refuses
 mainline targets. **Do not** pass the operator's
