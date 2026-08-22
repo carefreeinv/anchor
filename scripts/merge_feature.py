@@ -33,7 +33,8 @@ Usage:
   python merge_feature.py --root . --slug my-plan --touched - --base <sha> \\
       --expect-head <sha>
 
-Exit codes: 0 merged (or would merge under --dry-run), 2 git error, 3 scope
+Exit codes: 0 merged, would merge under --dry-run, or nothing to merge because the
+branch is already contained in the target, 2 git error, 3 scope
 violation, 4 precondition failed, 5 merge conflict, 6 merge staged (not committed;
 run --commit-staged or --abort-staged after /commit-prep).
 """
@@ -410,7 +411,8 @@ ALREADY_CONTAINED = "ALREADY_CONTAINED"
 
 
 def land(root: Path, branch: str, target: str, *, title: str = "") -> str:
-    """Merge ``branch`` into ``target``; return the target's new HEAD, or ``STAGED``.
+    """Merge ``branch`` into ``target``; return the target's new HEAD, ``STAGED``,
+    or ``ALREADY_CONTAINED``.
 
     Mirrors /review §11's semantics exactly so the two authorization paths cannot
     drift into different merge behavior — including the prep obligation:
@@ -569,10 +571,11 @@ def check_root_ready(root: Path, target: str, *, ff: bool) -> MergeVerdict | Non
     # `git add -A`, which exists to capture /commit-prep's own output and cannot
     # tell that apart from whatever was already lying around.
     #
-    # A fast-forward is the only path that touches nothing here: it creates no
-    # commit, never reaches commit_staged, and skips the conflict probe entirely,
-    # so refusing it over a scratch file would break "the fast-forward path is
-    # unchanged" for no gain.
+    # `ff` here means "this run touches nothing in --root" — true of a
+    # fast-forward and of an already-contained branch alike: neither creates a
+    # commit, reaches commit_staged, or runs the conflict probe. Refusing either
+    # over a scratch file would break "the fast-forward path is unchanged" and
+    # would block the no-op case for no gain.
     #
     # Everything else needs a clean tree, **including --dry-run**. A non-ff run
     # probes with a real `git merge` and ends that probe with `git reset --hard`,
@@ -745,7 +748,18 @@ def run(root: Path, slug: str, touched: tuple[str, ...], *, base: str | None = N
         title: str = "") -> tuple[MergeVerdict, str | None]:
     """Evaluate the gate and, unless ``dry_run``, land the branch.
 
-    Returns ``(verdict, new_head)``; ``new_head`` is None whenever nothing merged.
+    Returns ``(verdict, outcome)``. ``outcome`` is None when the gate refused or
+    ``dry_run`` was set; otherwise it is whatever :func:`land` returned, which is
+    **not** always a merge:
+
+    * a SHA — the target moved to it
+    * :data:`STAGED` — a merge is staged and uncommitted, awaiting ``/commit-prep``
+    * :data:`ALREADY_CONTAINED` — the branch was already in the target; nothing
+      moved, and the target's head is unchanged
+
+    A non-None outcome therefore does not mean "merged". Distinguishing the three
+    is the whole point of the sentinels: before they existed a caller could not
+    tell a real merge from a no-op, because both handed back the target's head.
     """
     branch = branch or f"feature/{slug}"
     resolved = resolve_target(root, target)
@@ -832,7 +846,11 @@ def run(root: Path, slug: str, touched: tuple[str, ...], *, base: str | None = N
     # Runs after the gate above so the more specific refusals (provenance, scope,
     # the feature worktree being dirty) keep their reasons, and before the probe,
     # which is the thing that would do damage.
-    root_verdict = check_root_ready(root, resolved, ff=ff)
+    # `ff or already`: both are paths that create no commit and run no probe, so
+    # neither can sweep or reset anything in --root. Gating on `ff` alone refused
+    # an already-contained run over an unrelated scratch file, with a message
+    # whose every clause was false for that path.
+    root_verdict = check_root_ready(root, resolved, ff=ff or already)
     if root_verdict is not None:
         return root_verdict, None
 
@@ -974,10 +992,15 @@ def main(argv: list[str] | None = None) -> int:
         # NOT "merged". Every commit on the branch is already on the target, so
         # the work is integrated — but this run moved nothing, and saying
         # "dev is now <sha>" would imply it did.
+        try:
+            at = f" at {head_sha(Path(args.root), landed_on)[:12]}"
+        except GitError:
+            # The only git call in this reporting section; a failure here must not
+            # become a traceback and exit 1, outside the documented set.
+            at = ""
         print(
             f"already contained: every commit on {args.branch or 'feature/' + str(args.slug)} "
-            f"is already on {landed_on}; nothing to merge and {landed_on} is unchanged "
-            f"at {head_sha(Path(args.root), landed_on)[:12]}."
+            f"is already on {landed_on}; nothing to merge and {landed_on} is unchanged{at}."
         )
     elif verdict.ok and new_head == STAGED:
         # NOT "merged" and NOT exit 0. The merge is staged and uncommitted; a

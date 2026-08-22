@@ -1133,11 +1133,17 @@ def test_already_contained_branch_does_not_report_a_merge(repo, tmp_path, capsys
 
     assert code == EXIT_OK
     assert _git(repo, "rev-parse", "dev") == dev_before, "dev moved"
-    assert "already contained" in out
     assert "merged; dev is now" not in out, (
         "reported a merge on a run that moved nothing — the defect EXIT_STAGED "
         "exists to prevent, in its other form"
     )
+    # Both lines, deliberately. main()'s line comes from land()'s own guard, so
+    # asserting only on it leaves run()'s `already` predicate untested — and a
+    # mutation making it a duplicate of `ff` restores the original lie on the
+    # gate line while keeping this test green.
+    assert "already contained; nothing to merge" in out, "gate line still claims a merge"
+    assert "no-ff" not in out
+    assert "already contained: every commit" in out
 
 
 def test_already_contained_returns_its_own_sentinel(repo):
@@ -1149,14 +1155,89 @@ def test_already_contained_returns_its_own_sentinel(repo):
     assert mf.land(repo, "feature/my-plan", "dev") == mf.ALREADY_CONTAINED
 
 
-def test_already_contained_leaves_the_tree_alone(repo, tmp_path):
-    """Nothing to do means nothing to disturb: no checkout, no probe, no state."""
-    _already_merged(repo)
-    before = _git(repo, "rev-parse", "--abbrev-ref", "HEAD")
+def test_already_contained_never_checks_out_the_target(repo, monkeypatch):
+    """Nothing to do means nothing to disturb — asserted by watching the calls.
 
+    End state cannot show this: without the short-circuit, `land` checks out the
+    target, gets "Already up to date", and its `finally` restores the original
+    branch, so HEAD, the state file and MERGE_HEAD all look identical either way.
+    This observes the checkout itself.
+    """
     import merge_feature as mf
-    mf.land(repo, "feature/my-plan", "dev")
 
-    assert _git(repo, "rev-parse", "--abbrev-ref", "HEAD") == before
+    _already_merged(repo)
+    calls: list[tuple[str, ...]] = []
+    real_git = mf._git
+
+    def spy(root, *args, **kw):
+        calls.append(args)
+        return real_git(root, *args, **kw)
+
+    monkeypatch.setattr(mf, "_git", spy)
+    assert mf.land(repo, "feature/my-plan", "dev") == mf.ALREADY_CONTAINED
+
+    assert not [a for a in calls if a and a[0] in ("checkout", "merge")], (
+        f"an already-contained run touched the tree: {calls}"
+    )
     assert read_staged_state(repo) is None
     assert not (repo / ".git" / "MERGE_HEAD").exists()
+
+
+def test_already_contained_dry_run_does_not_claim_a_merge_commit(repo, tmp_path, capsys):
+    """--dry-run returns before land(), so it rests ENTIRELY on run()'s `already`.
+    Without that predicate this path reverts completely to the pre-fix output."""
+    touched = tmp_path / "touched.txt"
+    touched.write_text("app/\n", encoding="utf-8")
+    feat = _already_merged(repo)
+
+    code = main(["--root", str(repo), "--slug", "my-plan", "--touched", str(touched),
+                 "--expect-head", feat, "--target", "dev", "--dry-run"])
+    out = capsys.readouterr().out
+
+    assert code == EXIT_OK
+    assert "already contained; nothing to merge" in out
+    assert "no-ff" not in out, "dry run still describes a merge commit that cannot happen"
+
+
+def test_already_contained_run_is_not_refused_over_a_stray_file_in_root(repo, tmp_path):
+    """It creates no commit and runs no probe, so nothing can sweep or reset —
+    gating it with the clean-root check refused a no-op with a message whose
+    every clause was false for this path."""
+    touched = tmp_path / "touched.txt"
+    touched.write_text("app/\n", encoding="utf-8")
+    feat = _already_merged(repo)
+    _split_topology(repo, tmp_path)
+    (repo / ".env.local").write_text("SECRET=hunter2\n", encoding="utf-8")
+
+    code = main(["--root", str(repo), "--slug", "my-plan", "--touched", str(touched),
+                 "--expect-head", feat, "--target", "dev"])
+
+    assert code == EXIT_OK, "a no-op run was refused over an unrelated scratch file"
+    assert (repo / ".env.local").exists()
+
+
+def test_already_contained_run_preserves_uncommitted_work_in_root(repo, tmp_path):
+    """Pins the interaction between two changes that are only safe together.
+
+    An already-contained run is exempted from the clean-`--root` check because it
+    creates no commit and runs no conflict probe. That exemption is safe *only*
+    while the probe really is suppressed: `probe_conflicts` ends in
+    `git reset --hard`, so if it ever runs on this path again it will destroy
+    uncommitted work in the integration checkout that the exemption just waved
+    through. Asserting the outcome, not the mechanism, catches the regression from
+    either side.
+    """
+    touched = tmp_path / "touched.txt"
+    touched.write_text("app/\n", encoding="utf-8")
+    feat = _already_merged(repo)
+    _split_topology(repo, tmp_path)
+    precious = repo / "README"
+    precious.write_text("hi\nPRECIOUS UNCOMMITTED WORK\n", encoding="utf-8")
+
+    code = main(["--root", str(repo), "--slug", "my-plan", "--touched", str(touched),
+                 "--expect-head", feat, "--target", "dev"])
+
+    assert code == EXIT_OK
+    assert "PRECIOUS" in precious.read_text(encoding="utf-8"), (
+        "uncommitted work in --root was destroyed on a run that had nothing to do"
+    )

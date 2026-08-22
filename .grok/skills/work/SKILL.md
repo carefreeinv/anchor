@@ -493,7 +493,6 @@ since been left behind). That exits `0` like a successful merge, because the
 work *is* integrated — but it says so explicitly rather than printing a SHA
 that implies this run moved something, and it touches nothing.
 
-
 The helper also refuses when `--root` already has a merge in progress or an
 unfinished staged record, or when it holds uncommitted/untracked files. That
 last one applies to **any non-fast-forward run, `--dry-run` included**: the
