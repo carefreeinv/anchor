@@ -75,12 +75,24 @@ either leaves the checkout mid-merge, so treat it as work in progress, not a
 result.
 
 Both finishers check that the merge they recorded is still the merge in front of
-them, and refuse rather than guess. If you resolved the merge by hand in between,
+them, and refuse rather than guess — `MERGE_HEAD` existing is not enough, so its
+commit is compared against the recorded branch and a *different* staged merge is
+refused rather than committed under this plan's name. If you resolved the merge by hand in between,
 `--commit-staged` refuses (exit `4`) instead of committing whatever is now in the
 tree, and `--abort-staged` clears the stale record **without** resetting anything
 — a `reset --hard` against a tree the record no longer describes would destroy
 unrelated uncommitted work rather than undo a merge. If a merge is in progress on
 a *different* branch than the one recorded, both refuse.
+
+Staging a merge also requires `--root` to be fit for one. It is refused when that
+checkout already has a merge in progress or an unfinished staged record — the
+conflict probe would otherwise abort another agent's staged merge, and both skills
+point every agent at the same shared checkout — and when it holds uncommitted or
+untracked files, which `--commit-staged`'s `git add -A` would otherwise sweep into
+the merge commit. Note this is a *different* check from the clean-tree gate, which
+follows the feature branch's worktree: the tree that did the work and the tree the
+merge lands in are different directories on the topology `/work` recommends.
+
 
 `--expect-head` is **required**: without the SHA the run committed there is no way
 to tell the branch has not moved since, and provenance is a must-hold condition

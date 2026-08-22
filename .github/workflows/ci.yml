@@ -61,7 +61,7 @@ jobs:
     # NOT continue-on-error. That made the *run* conclude success, so a real
     # failure sent no scheduled-workflow notification and showed green in the
     # Actions list — visible only to someone who opened the run and expanded a
-    # job reporting success. The `if:` above is what keeps this from ever
+    # job reporting success. The `if:` below is what keeps this from ever
     # blocking a push or a merge; it never runs on a PR. With the run allowed to
     # fail, a genuinely broken SDK range actually reaches the operator.
     # Note: GitHub disables `schedule` triggers after 60 days of repo inactivity.

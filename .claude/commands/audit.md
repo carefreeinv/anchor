@@ -37,7 +37,7 @@ Flags may combine (e.g. `/audit --dry-run --deps-only`).
 1. **Frontier / reasoner only by default.** Classify this session’s fit tier
    (`frontier` | `reasoner` | `mid` | `small`) using the same spirit as `/work`
    model-fit and `.anchor/model-fitness.md` (or project copy). Catalog names:
-   Fable/Opus-class → reasoner/frontier; Sonnet/Grok 4.5 → **mid**; Haiku/local
+   Fable/Opus-class → reasoner/frontier; Sonnet/Grok (4.5 or 4.6) → **mid**; Haiku/local
    small → **small**. If you are **mid or below** (or clearly not
    frontier/reasoner-class), **refuse**:
 

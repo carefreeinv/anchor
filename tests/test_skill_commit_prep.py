@@ -29,6 +29,10 @@ SKILL_GLOBS = (
     "platforms/*/GROK.md",
     "platforms/*/CHAT.md",
     "docs/docs/skills/*.md",
+    # The platform mirrors shipped the pre-scoped rule while every other copy
+    # had moved on, and nothing read them. The CHANGELOG already claimed this
+    # test covered "the platform briefs and the docs mirrors" — it did not.
+    "docs/docs/platforms/*.md",
 )
 
 # How close a `/commit-prep` reference must sit to a mutating command.

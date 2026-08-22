@@ -114,7 +114,11 @@ linked worktree, the topology `/work` itself recommends per agent. The
 fast-forward path is unchanged and still reports a real SHA.
 
 Both finishers refuse rather than guess when the record and reality have parted
-company, and that asymmetry is deliberate: a `reset --hard` is only an *undo* while
+company. `MERGE_HEAD` existing is not evidence the staged merge is *yours* — its
+commit is checked against the recorded branch, because a stale record plus
+somebody else's hand-staged merge would otherwise be committed under your plan's
+name, having passed none of the scope, provenance or `--expect-head` checks. The
+asymmetry between the two finishers is deliberate: a `reset --hard` is only an *undo* while
 the merge it describes is actually in front of you. Resolve the merge by hand in
 between and the same command becomes a destroy — so `--abort-staged` clears the
 stale record and touches nothing, rather than resetting a tree it no longer

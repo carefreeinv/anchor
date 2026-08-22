@@ -504,11 +504,20 @@ tree*, and a bare `git commit` during a merge would drop its output.
 `--abort-staged` falls back to a hard reset because `git merge --abort` refuses
 once prep has touched a merged file; that discards prep's edits to **tracked**
 files, while anything prep *created* is untracked and survives on disk. Both
-finishers refuse rather than guess if you resolved the merge by hand in between —
+finishers refuse rather than guess if you resolved the merge by hand in between
+(`MERGE_HEAD` existing is not enough — its commit is checked against the recorded
+branch, so a *different* staged merge is refused, not committed under this plan's
+name) —
 `--abort-staged` then clears the stale record without resetting anything, because
 a reset against a tree the record no longer describes destroys unrelated work
 rather than undoing a merge. The checkout stays mid-merge until one of them runs,
 so never end a session on an exit `6` without saying so.
+
+The helper also refuses to stage a merge when `--root` already has a merge in
+progress or an unfinished staged record, or when it holds uncommitted/untracked
+files — those would be swept into the merge commit by `--commit-staged`. Point
+`--root` at a *clean* integration checkout.
+
 
 The helper never pushes, never force-updates, never deletes a branch, and refuses
 mainline targets. **Do not** pass the operator's

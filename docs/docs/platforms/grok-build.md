@@ -28,7 +28,7 @@ flowchart LR
   s -->|"two fails"| stop["Stop + escalate"]
 ```
 
-The hard rules (restate → plan → one-step-per-turn → verify-don't-claim → mark `(unverified)` → two-fail stop → scope → footer → **docs describe current state, not plans** → **`/commit-prep` before any `git commit`** → **capacity limits are a scheduling problem**, not a failure: checkpoint, then reroute to the next model clearing the task's fitness floor, wait for a near reset, or stop and report — see [capacity routing](/capacity-routing) → **surface the best-fit skill**: before acting, offer an available `.grok/skills/` skill or command that fits the request in one line, then proceed — a suggestion, not a gate; only skills actually loaded, at most once per capability per session) plus three Grok-specific ones:
+The hard rules (restate → plan → one-step-per-turn → verify-don't-claim → mark `(unverified)` → two-fail stop → scope → footer → **docs describe current state, not plans** → **`/commit-prep` before any commit outside `.plans/`, and before any merge commit** → **capacity limits are a scheduling problem**, not a failure: checkpoint, then reroute to the next model clearing the task's fitness floor, wait for a near reset, or stop and report — see [capacity routing](/capacity-routing) → **surface the best-fit skill**: before acting, offer an available `.grok/skills/` skill or command that fits the request in one line, then proceed — a suggestion, not a gate; only skills actually loaded, at most once per capability per session) plus three Grok-specific ones:
 
 - Force risk enumeration before the plan ("list 3 ways this could go wrong") — surfaces the reasoning Grok skips.
 - **One task spec per session.** Restart instead of accumulating context; instruction decay makes long Grok sessions untrustworthy.
@@ -46,4 +46,4 @@ Scaffold installs [**`/draft`**](/skills/draft), [**`/work`**](/skills/work), [*
 
 ## /commit-prep
 
-**Required before any `git commit`.** Agents run `/commit-prep` (discover this project’s tests/CI; CHANGELOG; blog-if-warranted — no Docusaurus required). **Prep only** — does not commit. After a green prep, [**`/work`**](/skills/work) / standing rules cover feature-branch commit (worktree preferred; merge to `dev` only via `/work`'s culmination answer + scoped gate; never to `main`).
+**Required before any commit that touches a path outside `.plans/`, and before any merge commit.** A commit whose paths are *entirely* under `.plans/` — a lane move, review notes, a `## Handoff` line — takes the **light path**: state what moved and why, then commit; no CHANGELOG, no blog, no test run. Agents run `/commit-prep` (discover this project’s tests/CI; CHANGELOG; blog-if-warranted — no Docusaurus required). **Prep only** — does not commit. After a green prep, [**`/work`**](/skills/work) / standing rules cover feature-branch commit (worktree preferred; merge to `dev` only via `/work`'s culmination answer + scoped gate; never to `main`).

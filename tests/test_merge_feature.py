@@ -190,7 +190,7 @@ def test_abort_staged_recovers_even_when_merge_abort_refuses(repo):
     assert mf.land(repo, "feature/my-plan", "dev") == mf.STAGED
     (Path(repo) / "app" / "x.py").write_text("prep touched a merged file\n",
                                              encoding="utf-8")
-    mf.abort_staged(repo, "dev", original="feature/my-plan")
+    mf.abort_staged(repo, "feature/my-plan", "dev", original="feature/my-plan")
 
     assert _git(repo, "rev-parse", "dev") == dev_before          # nothing committed
     assert not (Path(repo) / ".git" / "MERGE_HEAD").exists()     # merge state cleared
@@ -792,3 +792,134 @@ def test_state_path_works_inside_a_linked_worktree(repo, tmp_path):
     subject = _git(worktree, "log", "-1", "--format=%s", "dev")
     assert subject.startswith("Merge feature/my-plan")
     assert _git(worktree, "status", "--porcelain") == ""
+
+
+# -- the record must describe the merge in front of us (F1/F2/F3) -------------
+#
+# MERGE_HEAD existing is not evidence the staged merge is OURS, and --root's own
+# state was never checked at all. Each test below reproduces a defect that a
+# fully green suite previously allowed.
+
+
+def _stage_a_foreign_merge(repo: Path) -> str:
+    """Stage a merge of feature/other onto dev by hand, as an operator would."""
+    _git(repo, "checkout", "-b", "feature/other", "dev")
+    _commit(repo, "other/y.py", "y = 2\n", "unrelated work")
+    other = _head(repo, "feature/other")
+    _git(repo, "checkout", "dev")
+    subprocess.run(["git", "-C", str(repo), "merge", "--no-ff", "--no-commit",
+                    "feature/other"], capture_output=True, text=True)
+    return other
+
+
+def test_commit_staged_refuses_a_merge_of_a_different_branch(staged):
+    # F1: stale record for feature/my-plan + a hand-staged merge of feature/other
+    # used to commit feature/other's content under my-plan's name, exit 0 --
+    # bypassing the scope gate, provenance and --expect-head entirely.
+    repo, _code, dev_before, _out = staged
+    _git(repo, "merge", "--abort")
+    assert read_staged_state(repo) is not None, "record is stale but still present"
+    foreign = _stage_a_foreign_merge(repo)
+    assert _head(repo, "MERGE_HEAD") == foreign
+
+    assert main(["--root", str(repo), "--commit-staged"]) == EXIT_PRECONDITION
+    assert _git(repo, "rev-parse", "dev") == dev_before, "committed a foreign merge"
+    assert _head(repo, "MERGE_HEAD") == foreign, "someone else's merge was disturbed"
+
+
+def test_abort_staged_refuses_to_throw_away_a_different_merge(staged):
+    # F1 mirror arm: --abort-staged is what the stale-state refusal tells the
+    # operator to run, so it must not abort a merge the record does not describe.
+    repo, _code, _dev_before, _out = staged
+    _git(repo, "merge", "--abort")
+    foreign = _stage_a_foreign_merge(repo)
+
+    assert main(["--root", str(repo), "--abort-staged"]) == EXIT_PRECONDITION
+    assert _head(repo, "MERGE_HEAD") == foreign, "aborted someone else's merge"
+    assert read_staged_state(repo) is not None
+
+
+def _split_topology(repo: Path, tmp_path: Path) -> Path:
+    """The topology `/work` prescribes, and the only one where F2/F3 bite.
+
+    `--root` is the integration checkout; the feature branch lives in its own
+    linked worktree. That split is the whole point: `evaluate_gate`'s dirty check
+    follows the *feature* worktree, so `--root`'s own state goes unexamined. In a
+    single checkout the two coincide and the pre-existing check already catches
+    everything — a test written that way passes with the fix reverted.
+    """
+    _git(repo, "checkout", "dev")
+    wt = tmp_path / "agent-worktree"
+    _git(repo, "worktree", "add", str(wt), "feature/my-plan")
+    return wt
+
+
+def test_merge_refuses_when_root_already_has_a_staged_merge(repo, tmp_path):
+    # F3: probe_conflicts runs `git merge` then `git merge --abort`, which would
+    # unwind a merge already staged in --root. Both skills point every agent at
+    # the same shared checkout, so this is the ordinary fleet case.
+    touched = tmp_path / "touched.txt"
+    touched.write_text("app/\n", encoding="utf-8")
+    _diverge(repo)
+    head = _head(repo)
+    _split_topology(repo, tmp_path)
+    _stage_a_foreign_merge(repo)
+    foreign_merge_head = _head(repo, "MERGE_HEAD")
+
+    code = main(["--root", str(repo), "--slug", "my-plan", "--touched", str(touched),
+                 "--expect-head", head, "--target", "dev"])
+
+    assert code == EXIT_PRECONDITION
+    assert _head(repo, "MERGE_HEAD") == foreign_merge_head, (
+        "the in-progress merge in --root was destroyed by the conflict probe"
+    )
+
+
+def test_merge_refuses_when_root_has_untracked_files(repo, tmp_path):
+    # F2: commit_staged's `git add -A` cannot tell /commit-prep's output from
+    # whatever was already lying around, so a stray .env.local or build artifact
+    # sitting in the integration checkout lands in the merge commit.
+    touched = tmp_path / "touched.txt"
+    touched.write_text("app/\n", encoding="utf-8")
+    _diverge(repo)
+    head = _head(repo)
+    _split_topology(repo, tmp_path)
+    (repo / ".env.local").write_text("SECRET=hunter2\n", encoding="utf-8")
+
+    code = main(["--root", str(repo), "--slug", "my-plan", "--touched", str(touched),
+                 "--expect-head", head, "--target", "dev"])
+
+    assert code == EXIT_PRECONDITION
+    assert read_staged_state(repo) is None, "staged a merge into an unclean root"
+    assert (repo / ".env.local").exists(), "must not have touched the stray file"
+
+
+def test_malformed_state_record_stays_inside_the_documented_exit_codes(staged):
+    # F8: a record that parses but lacks `branch`/`target` used to raise KeyError
+    # -> traceback, exit 1, outside the set every doc documents.
+    repo, _code, _dev_before, _out = staged
+    state_path = repo / ".git" / "merge-feature-staged.json"
+    state_path.write_text(json.dumps({"target": "dev"}), encoding="utf-8")  # no branch
+
+    assert main(["--root", str(repo), "--commit-staged"]) == EXIT_PRECONDITION
+    assert main(["--root", str(repo), "--abort-staged"]) == EXIT_PRECONDITION
+
+
+def test_both_finisher_flags_together_are_refused(staged):
+    # F9: this used to silently run the commit path -- the destructive-if-wrong
+    # one -- for an operator who plainly did not mean either specifically.
+    repo, _code, dev_before, _out = staged
+    assert main(["--root", str(repo), "--commit-staged", "--abort-staged"]) == \
+        EXIT_PRECONDITION
+    assert _git(repo, "rev-parse", "dev") == dev_before
+    assert read_staged_state(repo) is not None, "nothing should have been finished"
+
+
+def test_dry_run_is_refused_on_the_finishers_rather_than_ignored(staged):
+    # F9: silently ignoring --dry-run lets a caller believe it previewed a
+    # destructive step that in fact ran.
+    repo, _code, dev_before, _out = staged
+    assert main(["--root", str(repo), "--commit-staged", "--dry-run"]) == \
+        EXIT_PRECONDITION
+    assert _git(repo, "rev-parse", "dev") == dev_before
+    assert read_staged_state(repo) is not None
