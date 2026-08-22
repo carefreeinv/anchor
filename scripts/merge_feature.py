@@ -421,7 +421,13 @@ def land(root: Path, branch: str, target: str, *, title: str = "") -> str:
             _git(root, "merge", "--abort", check=False)
             raise GitError(f"merge conflicted: {p.stdout.strip()} {p.stderr.strip()}")
         restore = False  # a staged merge must stay on the target branch
-        _write_staged_state(root, branch, target, original, title)
+        # Record the SHA actually merged, not just the branch name. A name is a
+        # mutable pointer: the branch legitimately advances when a red prep is
+        # fixed with a commit on it, and comparing against the name then reads a
+        # moved branch as "a different merge" and refuses the operator's own
+        # escape hatch.
+        _write_staged_state(root, branch, target, original, title,
+                            merge_head(root))
         return STAGED
     finally:
         if restore:
@@ -449,17 +455,24 @@ def _state_path(root: Path) -> Path:
 
 
 def _write_staged_state(root: Path, branch: str, target: str, original: str,
-                        title: str) -> None:
+                        title: str, merged_sha: str) -> None:
     """Record what a staged merge needs in order to be finished.
 
     `land()` computes the restore point internally, so without this a second CLI
     invocation could not know which branch to return to — and would silently leave
     the tree parked on the integration branch.
+
+    ``merged_sha`` is the commit that was actually merged. The finishers compare
+    ``MERGE_HEAD`` against **it**, never against what ``branch`` resolves to now:
+    the branch is expected to move (fixing a red prep means committing on it), and
+    an identity check against a moving pointer refuses the very recovery path it
+    was added to protect.
     """
     import json
 
     _state_path(root).write_text(json.dumps(
-        {"branch": branch, "target": target, "original": original, "title": title}
+        {"branch": branch, "target": target, "original": original, "title": title,
+         "merged_sha": merged_sha}
     ), encoding="utf-8")
 
 
@@ -483,7 +496,8 @@ def read_staged_state(root: Path) -> dict | None:
     except (OSError, ValueError):
         return None
     if not isinstance(state, dict) or not all(
-            isinstance(state.get(k), str) and state.get(k) for k in ("branch", "target")):
+            isinstance(state.get(k), str) and state.get(k)
+            for k in ("branch", "target", "merged_sha")):
         return None
     return state
 
@@ -492,7 +506,8 @@ def clear_staged_state(root: Path) -> None:
     _state_path(root).unlink(missing_ok=True)
 
 
-def check_root_ready(root: Path, target: str) -> MergeVerdict | None:
+def check_root_ready(root: Path, target: str, *, ff: bool,
+                     dry_run: bool) -> MergeVerdict | None:
     """Refuse when ``--root`` is not a fit place to stage a merge. None means OK.
 
     Separate from :func:`evaluate_gate`'s ``dirty`` check, which follows the
@@ -521,6 +536,15 @@ def check_root_ready(root: Path, target: str) -> MergeVerdict | None:
     # Untracked files here would be swept into the merge commit by commit_staged's
     # `git add -A`, which exists to capture /commit-prep's own output and cannot
     # tell that apart from whatever was already lying around.
+    #
+    # Only the staging path can do that. A fast-forward creates no commit and never
+    # reaches commit_staged, and --dry-run merges nothing at all — refusing either
+    # because the integration checkout has a scratch file would break /work's
+    # documented preview step and contradict "the fast-forward path is unchanged".
+    # The two arms above still apply everywhere: an in-progress merge or an
+    # unfinished record means this checkout is mid-operation however we got here.
+    if ff or dry_run:
+        return None
     stray = dirty_paths(root)
     if stray:
         return MergeVerdict(
@@ -542,7 +566,8 @@ def merge_head(root: Path) -> str:
     return p.stdout.strip() if p.returncode == 0 else ""
 
 
-def _verify_staged_merge(root: Path, branch: str, target: str) -> None:
+def _verify_staged_merge(root: Path, branch: str, target: str,
+                         merged_sha: str) -> None:
     """Refuse to touch a merge that is not actually what the state file claims.
 
     Three distinct ways the record and reality part company, all reproduced:
@@ -574,24 +599,17 @@ def _verify_staged_merge(root: Path, branch: str, target: str) -> None:
             f"to commit onto the wrong branch; run --abort-staged to clear the stale "
             f"state, or checkout {target!r} first"
         )
-    expected = _git(root, "rev-parse", "-q", "--verify", f"{branch}^{{commit}}",
-                    check=False)
-    if expected.returncode != 0:
+    if staged != merged_sha:
         raise StagedMergeInvalid(
-            f"the recorded branch {branch!r} no longer resolves — refusing to commit "
-            f"a merge whose provenance cannot be confirmed"
-        )
-    if staged != expected.stdout.strip():
-        raise StagedMergeInvalid(
-            f"the staged merge is of {staged[:12]}, not the recorded branch {branch!r} "
-            f"({expected.stdout.strip()[:12]}) — this is a different merge than the one "
-            f"recorded, and it has passed none of this tool's checks. Resolve it "
-            f"yourself (git commit / git merge --abort), then re-run the merge."
+            f"the staged merge is of {staged[:12]}, not the recorded {merged_sha[:12]} "
+            f"from {branch!r} — this is a different merge than the one recorded, and it "
+            f"has passed none of this tool's checks. Resolve it yourself "
+            f"(git commit / git merge --abort), then re-run the merge."
         )
 
 
-def commit_staged(root: Path, branch: str, target: str, *, title: str = "",
-                  original: str = "") -> str:
+def commit_staged(root: Path, branch: str, target: str, merged_sha: str, *,
+                  title: str = "", original: str = "") -> str:
     """Commit a merge staged by :func:`land`, after ``/commit-prep`` came back green.
 
     Stages **everything** first: prep edits the *working tree* (CHANGELOG entry, test
@@ -599,7 +617,7 @@ def commit_staged(root: Path, branch: str, target: str, *, title: str = "",
     the index — silently dropping prep's own output from the merge commit and
     leaving it dirty in the tree.
     """
-    _verify_staged_merge(root, branch, target)
+    _verify_staged_merge(root, branch, target, merged_sha)
     try:
         msg = f"Merge {branch}" + (f": {title}" if title else "")
         _git(root, "add", "-A")
@@ -616,7 +634,8 @@ ABORTED = "aborted"
 CLEARED = "cleared"
 
 
-def abort_staged(root: Path, branch: str, target: str, *, original: str = "") -> str:
+def abort_staged(root: Path, branch: str, target: str, merged_sha: str, *,
+                 original: str = "") -> str:
     """Undo a merge staged by :func:`land`, after ``/commit-prep`` came back red.
 
     ``git merge --abort`` **refuses** when a file involved in the merge has unstaged
@@ -653,13 +672,11 @@ def abort_staged(root: Path, branch: str, target: str, *, original: str = "") ->
             f"{target!r} — refusing to reset a tree this staged-merge record "
             f"does not describe; resolve that merge where it is"
         )
-    expected = _git(root, "rev-parse", "-q", "--verify", f"{branch}^{{commit}}",
-                    check=False)
-    if expected.returncode == 0 and staged != expected.stdout.strip():
+    if staged != merged_sha:
         raise StagedMergeInvalid(
-            f"the staged merge is of {staged[:12]}, not the recorded branch {branch!r} "
-            f"({expected.stdout.strip()[:12]}) — aborting it would throw away a merge "
-            f"this record does not describe. Resolve that merge where it is."
+            f"the staged merge is of {staged[:12]}, not the recorded {merged_sha[:12]} "
+            f"from {branch!r} — aborting it would throw away a merge this record does "
+            f"not describe. Resolve that merge where it is."
         )
     if _git(root, "merge", "--abort", check=False).returncode != 0:
         _git(root, "reset", "--hard", "HEAD", check=False)
@@ -772,7 +789,7 @@ def run(root: Path, slug: str, touched: tuple[str, ...], *, base: str | None = N
     # Runs after the gate above so the more specific refusals (provenance, scope,
     # the feature worktree being dirty) keep their reasons, and before the probe,
     # which is the thing that would do damage.
-    root_verdict = check_root_ready(root, resolved)
+    root_verdict = check_root_ready(root, resolved, ff=ff, dry_run=dry_run)
     if root_verdict is not None:
         return root_verdict, None
 
@@ -836,15 +853,31 @@ def main(argv: list[str] | None = None) -> int:
             # documented exit-code set.
             state = read_staged_state(root)
             if state is None:
-                print("merge-feature: no staged merge recorded for this repo.",
-                      file=sys.stderr)
+                # An unusable record and a merge sitting in the tree is the one
+                # combination where "no staged merge recorded" is actively
+                # misleading: the operator is mid-merge with no route out of it
+                # through this tool, and must be told so rather than left to
+                # rediscover it from a later refusal.
+                staged = merge_head(root)
+                if staged:
+                    print(
+                        f"merge-feature: a merge of {staged[:12]} is in progress in "
+                        f"{root}, but its staged-merge record is missing or unusable, "
+                        f"so this tool cannot finish it. Resolve it directly — "
+                        f"`git commit` to keep it, or `git merge --abort` to drop it — "
+                        f"then re-run the merge.", file=sys.stderr)
+                else:
+                    print("merge-feature: no staged merge recorded for this repo.",
+                          file=sys.stderr)
                 return EXIT_PRECONDITION
             if args.commit_staged:
                 sha = commit_staged(root, state["branch"], state["target"],
+                                    state["merged_sha"],
                                     title=state.get("title", ""),
                                     original=state.get("original", ""))
                 print(f"merged; {state['target']} is now {sha[:12]}.")
             elif abort_staged(root, state["branch"], state["target"],
+                              state["merged_sha"],
                               original=state.get("original", "")) == CLEARED:
                 print(f"no merge in progress; cleared the stale staged-merge record "
                       f"for {state['target']}. Nothing was reset and no tree was "

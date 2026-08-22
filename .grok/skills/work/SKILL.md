@@ -478,8 +478,10 @@ python scripts/merge_feature.py --root <checkout> --abort-staged    # prep red
 `git commit` during a merge drops its output). `--abort-staged` falls back to a hard
 reset because `git merge --abort` refuses once prep has touched a merged file; that
 discards prep's edits to **tracked** files, while anything prep *created* is
-untracked and survives on disk. Both check the staged merge is of the *recorded
-branch*, not merely that some merge exists, and refuse rather than guess if you resolved the
+untracked and survives on disk. Both check the staged merge is of the exact
+*commit* that was merged — not merely that some merge exists, and not against the
+branch name, which legitimately advances when you commit a prep fix — and refuse
+rather than guess if you resolved the
 merge by hand in between — `--abort-staged` then clears the stale record without
 resetting, because a reset against a tree the record no longer describes destroys
 unrelated work rather than undoing a merge. The checkout stays mid-merge until one
@@ -489,7 +491,6 @@ The helper also refuses to stage a merge when `--root` already has a merge in
 progress or an unfinished staged record, or when it holds uncommitted/untracked
 files — those would be swept into the merge commit by `--commit-staged`. Point
 `--root` at a *clean* integration checkout.
-
 
 Drop `--dry-run` to land it. Never pass the operator's answer to the helper — check
 6 is yours to hold. **Rejected by design:** landing only the in-scope paths when the

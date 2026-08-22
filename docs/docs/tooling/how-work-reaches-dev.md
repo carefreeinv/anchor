@@ -75,9 +75,11 @@ either leaves the checkout mid-merge, so treat it as work in progress, not a
 result.
 
 Both finishers check that the merge they recorded is still the merge in front of
-them, and refuse rather than guess — `MERGE_HEAD` existing is not enough, so its
-commit is compared against the recorded branch and a *different* staged merge is
-refused rather than committed under this plan's name. If you resolved the merge by hand in between,
+them, and refuse rather than guess — `MERGE_HEAD` existing is not enough, so it is
+compared against the exact commit that was merged and a *different* staged merge is
+refused rather than committed under this plan's name. The comparison is against
+that commit, not the branch name: the branch is expected to move, since committing
+a fix is how a red prep gets resolved. If you resolved the merge by hand in between,
 `--commit-staged` refuses (exit `4`) instead of committing whatever is now in the
 tree, and `--abort-staged` clears the stale record **without** resetting anything
 — a `reset --hard` against a tree the record no longer describes would destroy
@@ -92,7 +94,6 @@ untracked files, which `--commit-staged`'s `git add -A` would otherwise sweep in
 the merge commit. Note this is a *different* check from the clean-tree gate, which
 follows the feature branch's worktree: the tree that did the work and the tree the
 merge lands in are different directories on the topology `/work` recommends.
-
 
 `--expect-head` is **required**: without the SHA the run committed there is no way
 to tell the branch has not moved since, and provenance is a must-hold condition

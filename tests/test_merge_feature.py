@@ -164,6 +164,7 @@ def test_commit_staged_includes_preps_working_tree_edits(repo):
     assert mf.land(repo, "feature/my-plan", "dev") == mf.STAGED
     (Path(repo) / "CHANGELOG.md").write_text("prep added this", encoding="utf-8")
     new_head = mf.commit_staged(repo, "feature/my-plan", "dev",
+                                read_staged_state(repo)["merged_sha"],
                                 original="feature/my-plan")
 
     assert _git(repo, "rev-parse", "dev") == new_head
@@ -190,7 +191,8 @@ def test_abort_staged_recovers_even_when_merge_abort_refuses(repo):
     assert mf.land(repo, "feature/my-plan", "dev") == mf.STAGED
     (Path(repo) / "app" / "x.py").write_text("prep touched a merged file\n",
                                              encoding="utf-8")
-    mf.abort_staged(repo, "feature/my-plan", "dev", original="feature/my-plan")
+    merged = read_staged_state(repo)["merged_sha"]
+    mf.abort_staged(repo, "feature/my-plan", "dev", merged, original="feature/my-plan")
 
     assert _git(repo, "rev-parse", "dev") == dev_before          # nothing committed
     assert not (Path(repo) / ".git" / "MERGE_HEAD").exists()     # merge state cleared
@@ -923,3 +925,108 @@ def test_dry_run_is_refused_on_the_finishers_rather_than_ignored(staged):
         EXIT_PRECONDITION
     assert _git(repo, "rev-parse", "dev") == dev_before
     assert read_staged_state(repo) is not None
+
+
+# -- the record names a COMMIT, not a moving branch pointer -------------------
+
+
+def test_abort_staged_still_works_after_the_branch_advances(staged):
+    """The red-prep recovery path: fixing the failure means committing on the
+    feature branch, so the branch legitimately moves while the merge sits staged.
+    Identity must be against the merged commit, not against whatever the branch
+    name resolves to now, or this refuses the operator's own escape hatch.
+    """
+    repo, _code, dev_before, _out = staged
+    wt = repo.parent / "advance-wt"
+    _git(repo, "worktree", "add", str(wt), "feature/my-plan")
+    _commit(wt, "app/fix.py", "fixed = True\n", "fix what prep caught")
+    assert _head(repo) != read_staged_state(repo)["merged_sha"], "branch moved"
+
+    assert main(["--root", str(repo), "--abort-staged"]) == EXIT_OK
+    assert _git(repo, "rev-parse", "dev") == dev_before
+    assert read_staged_state(repo) is None
+
+
+def test_commit_staged_still_works_after_the_branch_advances(staged):
+    repo, _code, _dev_before, _out = staged
+    wt = repo.parent / "advance-wt2"
+    _git(repo, "worktree", "add", str(wt), "feature/my-plan")
+    _commit(wt, "app/fix.py", "fixed = True\n", "fix what prep caught")
+
+    assert main(["--root", str(repo), "--commit-staged"]) == EXIT_OK
+    # The merge that landed is the one that was staged, not the branch's new tip.
+    assert len(_git(repo, "rev-list", "--parents", "-1", "dev").split()) == 3
+
+
+def test_abort_staged_refuses_a_foreign_merge_when_the_branch_is_gone(staged):
+    """NEW-3: skipping the identity check when the recorded branch no longer
+    resolves put the data-loss path back one branch-deletion away."""
+    repo, _code, _dev_before, _out = staged
+    _git(repo, "merge", "--abort")
+    foreign = _stage_a_foreign_merge(repo)
+    _git(repo, "branch", "-D", "feature/my-plan")
+
+    assert main(["--root", str(repo), "--abort-staged"]) == EXIT_PRECONDITION
+    assert _head(repo, "MERGE_HEAD") == foreign, "destroyed a foreign staged merge"
+
+
+# -- check_root_ready must not over-reach (NEW-1) or under-test (NEW-5) -------
+
+
+def test_fast_forward_is_unaffected_by_a_stray_file_in_root(repo, tmp_path):
+    """A fast-forward creates no commit and never reaches commit_staged, so there
+    is nothing for `git add -A` to sweep. Refusing here would break the documented
+    "the fast-forward path is unchanged" contract."""
+    touched = tmp_path / "touched.txt"
+    touched.write_text("app/\n", encoding="utf-8")
+    head = _head(repo)
+    _split_topology(repo, tmp_path)
+    (repo / ".env.local").write_text("SECRET=hunter2\n", encoding="utf-8")
+
+    code = main(["--root", str(repo), "--slug", "my-plan", "--touched", str(touched),
+                 "--expect-head", head, "--target", "dev"])
+
+    assert code == EXIT_OK
+    assert _git(repo, "rev-parse", "dev") == head
+    assert (repo / ".env.local").exists()
+
+
+def test_dry_run_is_unaffected_by_a_stray_file_in_root(repo, tmp_path):
+    touched = tmp_path / "touched.txt"
+    touched.write_text("app/\n", encoding="utf-8")
+    _diverge(repo)
+    head = _head(repo)
+    _split_topology(repo, tmp_path)
+    (repo / ".env.local").write_text("SECRET=hunter2\n", encoding="utf-8")
+
+    code = main(["--root", str(repo), "--slug", "my-plan", "--touched", str(touched),
+                 "--expect-head", head, "--target", "dev", "--dry-run"])
+
+    assert code == EXIT_OK, "the documented preview step must still run"
+    assert read_staged_state(repo) is None
+
+
+def test_root_mid_merge_is_refused_for_being_mid_merge_not_merely_dirty(repo, tmp_path):
+    """NEW-5: a staged merge also makes the root dirty, so asserting only on the
+    exit code let this guard pass for the wrong reason. Pin the reason."""
+    import merge_feature as mf
+
+    _diverge(repo)
+    _split_topology(repo, tmp_path)
+    _stage_a_foreign_merge(repo)
+
+    verdict = mf.check_root_ready(repo, "dev", ff=False, dry_run=False)
+    assert verdict is not None and verdict.reason == "root-mid-merge"
+
+
+def test_root_with_an_unfinished_record_is_refused(repo, tmp_path):
+    """NEW-5: the staged-record arm had no coverage at all."""
+    import merge_feature as mf
+
+    _diverge(repo)
+    _split_topology(repo, tmp_path)
+    assert mf.land(repo, "feature/my-plan", "dev") == mf.STAGED
+    _git(repo, "merge", "--abort")          # record survives, tree is clean again
+
+    verdict = mf.check_root_ready(repo, "dev", ff=False, dry_run=False)
+    assert verdict is not None and verdict.reason == "root-has-staged-state"

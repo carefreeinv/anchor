@@ -215,3 +215,44 @@ def test_no_skill_creates_a_merge_commit_without_gating_it(path: Path):
         f"within {NO_COMMIT_WINDOW} lines that lets /commit-prep gate it before "
         f"it exists:\n" + "\n".join(f"  line {n}: {t}" for n, t in offenders[:8])
     )
+
+
+# The pre-scoped wording of the rule. Adding docs/docs/platforms/*.md to
+# SKILL_GLOBS did not actually catch F4: those two pages contain no git commands
+# at all, so the proximity test returns early and asserts nothing about them. The
+# drift that shipped was *prose*, so it needs a prose check.
+ABSOLUTE_RULE = re.compile(r"before any `?git commit`?[.,]?\*?\*?(?!\s*outside)", re.I)
+
+# Where the rule is stated for readers acting on it now. Historical CHANGELOG and
+# blog entries are the record of what the rule said then and are deliberately out.
+LIVE_RULE_DOCS = (
+    "CLAUDE.md",
+    "platforms/*/CLAUDE.md",
+    "platforms/*/GROK.md",
+    "platforms/*/CHAT.md",
+    ".claude/commands/*.md",
+    ".grok/skills/*/SKILL.md",
+    "docs/docs/skills/*.md",
+    "docs/docs/platforms/*.md",
+    "docs/docs/tooling/*.md",
+    "anchor/scaffold/plans/README.md",
+    "mcp/*/README.md",
+)
+
+
+def test_no_live_document_states_the_pre_scoped_absolute_rule():
+    """Two docs mirrors shipped "before any `git commit`" while every other copy
+    had moved to the content-scoped rule, and their only change had been a
+    synced-from re-stamp asserting they were reviewed. Nothing read them.
+    """
+    offenders = []
+    for pattern in LIVE_RULE_DOCS:
+        for path in sorted(REPO.glob(pattern)):
+            for n, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
+                if ABSOLUTE_RULE.search(line):
+                    offenders.append(f"{path.relative_to(REPO)}:{n}")
+    assert not offenders, (
+        "these live documents state the pre-scoped rule ('before any git commit') "
+        "rather than the content-scoped one ('before any commit outside `.plans/`, "
+        "and before any merge commit'):\n  " + "\n  ".join(offenders)
+    )
