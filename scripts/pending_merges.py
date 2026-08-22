@@ -170,7 +170,7 @@ def registry_worktrees(root: Path) -> dict[str, str]:
 def worktree_dirty(path: str) -> bool:
     """True when that worktree has uncommitted changes (False if unreadable)."""
     try:
-        return bool(_git(Path(path), "status", "--porcelain").strip())
+        return bool(_git(Path(path), "status", "--porcelain", "--untracked-files=normal").strip())
     except GitError:
         return False
 

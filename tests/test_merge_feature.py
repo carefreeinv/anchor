@@ -1072,3 +1072,27 @@ def test_root_with_an_unfinished_record_is_refused(repo, tmp_path):
 
     verdict = mf.check_root_ready(repo, "dev", ff=False)
     assert verdict is not None and verdict.reason == "root-has-staged-state"
+
+
+def test_untracked_guard_survives_status_showUntrackedFiles_no(repo, tmp_path):
+    """`git status` honours `status.showUntrackedFiles`; `git add -A` does not.
+
+    With the config set to `no` — repo-local, or in a fleet host's ~/.gitconfig
+    where it silently covers every repo and every agent — the clean-root guard saw
+    an empty tree while commit_staged swept the untracked files into the merge
+    commit. No other test sets any git config, which is why this was invisible.
+    """
+    touched = tmp_path / "touched.txt"
+    touched.write_text("app/\n", encoding="utf-8")
+    _diverge(repo)
+    head = _head(repo)
+    _split_topology(repo, tmp_path)
+    _git(repo, "config", "status.showUntrackedFiles", "no")
+    (repo / ".env.local").write_text("SECRET=hunter2\n", encoding="utf-8")
+
+    code = main(["--root", str(repo), "--slug", "my-plan", "--touched", str(touched),
+                 "--expect-head", head, "--target", "dev"])
+
+    assert code == EXIT_PRECONDITION, "the guard was blinded by a git config"
+    assert read_staged_state(repo) is None
+    assert ".env.local" not in _git(repo, "ls-tree", "-r", "--name-only", "dev")

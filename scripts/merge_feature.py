@@ -262,7 +262,16 @@ def head_sha(root: Path, ref: str) -> str:
 
 
 def dirty_paths(root: Path) -> tuple[str, ...]:
-    out = _git(root, "status", "--porcelain").stdout
+    """Uncommitted paths in ``root``, including untracked ones.
+
+    ``--untracked-files=normal`` is explicit because ``git status`` honours
+    ``status.showUntrackedFiles`` while ``git add -A`` does not. With that config
+    set to ``no`` — repo-local, or in a fleet host's ``~/.gitconfig`` where it
+    silently covers every repo — this gate would see a clean tree while
+    :func:`commit_staged` swept the very files it exists to keep out of the merge
+    commit. The flag overrides both scopes and reproduces default output exactly.
+    """
+    out = _git(root, "status", "--porcelain", "--untracked-files=normal").stdout
     return tuple(line[3:].strip() for line in out.splitlines() if line.strip())
 
 
@@ -470,10 +479,20 @@ def _write_staged_state(root: Path, branch: str, target: str, original: str,
     """
     import json
 
-    _state_path(root).write_text(json.dumps(
-        {"branch": branch, "target": target, "original": original, "title": title,
-         "merged_sha": merged_sha}
-    ), encoding="utf-8")
+    try:
+        _state_path(root).write_text(json.dumps(
+            {"branch": branch, "target": target, "original": original, "title": title,
+             "merged_sha": merged_sha}
+        ), encoding="utf-8")
+    except OSError as exc:
+        # Not a GitError, so it would escape main()'s handler as a traceback and
+        # exit 1 — outside the documented set — while leaving a real staged merge
+        # with no record to finish it from.
+        raise GitError(
+            f"merge staged, but its record could not be written: {exc}. The merge is "
+            f"in progress in {root}; finish it by hand (git commit) or drop it "
+            f"(git merge --abort)."
+        ) from exc
 
 
 def read_staged_state(root: Path) -> dict | None:
