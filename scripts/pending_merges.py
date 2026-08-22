@@ -54,6 +54,15 @@ class PendingBranch:
     ahead: int
     plan_slug: str | None = None
     completed_plan: bool = False
+    # Where the work physically is, and what state it is in. Unmerged work most
+    # often stalls in a worktree nobody revisits, so "which branch is ahead" is
+    # only half the answer — the other half is where to go look.
+    worktree: str | None = None
+    dirty: bool = False
+    plan_lane: str | None = None
+    held: bool = False
+    stale_registry: bool = False
+    # Committer date of the branch tip, for the recency filter and the age column.
     last_commit_epoch: float | None = None
 
 
@@ -102,8 +111,14 @@ def ahead_count(root: Path, target: str, branch: str) -> int:
 
 def last_commit_epoch(root: Path, branch: str) -> float:
     """Committer-date (epoch seconds) of *branch*'s tip commit."""
-    out = _git(root, "log", "-1", "--format=%ct", branch)
-    return float(out.strip())
+    return float(_git(root, "log", "-1", "--format=%ct", branch).strip())
+
+
+def _relative_age(epoch: float | None) -> str:
+    if epoch is None:
+        return "?"
+    days = (time.time() - epoch) / 86400
+    return "<1d ago" if days < 1 else f"{int(days)}d ago"
 
 
 def _slug_from_branch(branch: str) -> str | None:
@@ -126,19 +141,109 @@ def completed_slugs(root: Path) -> set[str]:
     return slugs
 
 
-def find_pending(root: Path | str, *, since_days: float | None = None) -> list[PendingBranch]:
+PLAN_LANES = (
+    "bugs", "features", "in-progress", "review-needed",
+    "completed", "drafts", "ambiguous", "blocked",
+)
+
+
+def branch_worktrees(root: Path) -> dict[str, str]:
+    """``{branch: worktree path}`` from ``git worktree list --porcelain``."""
+    out: dict[str, str] = {}
+    try:
+        text = _git(root, "worktree", "list", "--porcelain")
+    except GitError:
+        return out
+    path = ""
+    for line in text.splitlines():
+        if line.startswith("worktree "):
+            path = line[len("worktree "):].strip()
+        elif line.startswith("branch ") and path:
+            out[line[len("branch "):].strip().removeprefix("refs/heads/")] = path
+    return out
+
+
+def registry_worktrees(root: Path) -> dict[str, str]:
+    """``{branch: path}`` recorded in ``var/worktrees/registry.json`` (may be stale)."""
+    reg = root / "var" / "worktrees" / "registry.json"
+    if not reg.is_file():
+        return {}
+    try:
+        data = json.loads(reg.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+    agents = data.get("agents") if isinstance(data, dict) else None
+    if not isinstance(agents, dict):
+        return {}
+    return {
+        str(rec["branch"]): str(rec["path"])
+        for rec in agents.values()
+        if isinstance(rec, dict) and rec.get("branch") and rec.get("path")
+    }
+
+
+def worktree_dirty(path: str) -> bool:
+    """True when that worktree has uncommitted changes (False if unreadable)."""
+    try:
+        return bool(_git(Path(path), "status", "--porcelain", "--untracked-files=normal").strip())
+    except GitError:
+        return False
+
+
+def plan_file(root: Path, slug: str) -> Path | None:
+    """The plan file for ``slug`` in whatever lane currently holds it."""
+    for lane in PLAN_LANES:
+        lane_dir = root / ".plans" / lane
+        if not lane_dir.is_dir():
+            continue
+        for path in lane_dir.glob("*.md"):
+            stem = path.name[:-9] if path.name.endswith(".local.md") else path.name[:-3]
+            if re.sub(r"^\d{4}-\d{2}-\d{2}-", "", stem) == slug:
+                return path
+    return None
+
+
+def is_held(path: Path | None) -> bool:
+    """True when the plan carries a ``## Handoff`` note recording a hold.
+
+    A held plan is finished work its operator deliberately parked for testing —
+    visibly different from work nobody has looked at, which is the whole point of
+    surfacing it here.
+    """
+    if path is None or not path.is_file():
+        return False
+    try:
+        text = path.read_text(encoding="utf-8")
+    except OSError:
+        return False
+    section = re.search(r"^##\s+Handoff\s*$(.*?)(?=^##\s|\Z)", text,
+                        re.MULTILINE | re.DOTALL)
+    # The documented note starts with the word itself ("hold — <reason> — <date>"),
+    # so anchor to the start of a line: a prose "hold off on the follow-up" is not
+    # a hold, and "held"/"holding" as an opener is.
+    return bool(section and re.search(
+        # `(?![a-z])` rather than `\b`: underscore is a word character, so `\b`
+        # never fires on the closing delimiter of `__held__`.
+        r"^\s*(?:[-*]\s*)?(?:\*\*|__)?\s*(hold|held|holding)(?![a-z])",
+        section.group(1), re.IGNORECASE | re.MULTILINE))
+
+
+def find_pending(root: Path | str, *, worktrees: bool = True,
+                 since_days: float | None = None) -> list[PendingBranch]:
     """Branches with unmerged commits, most-pending first.
 
-    ``since_days``, when set, drops branches whose tip commit is older than
-    that many days — **unless** the branch matches a completed plan, which is
-    always kept regardless of age (finished work should never age out of a
-    release). ``None`` (the default) applies no recency filter, preserving
-    prior behavior for existing callers.
+    ``since_days``, when set, drops branches whose tip commit is older than that
+    many days — **unless** the branch matches a completed plan, which is always
+    kept regardless of age: finished work should never age out of a release
+    inventory. ``None`` (the default) applies no recency filter, preserving
+    behavior for every existing caller.
     """
     root = Path(root)
     branches = local_branches(root)
     bset = set(branches)
     done = completed_slugs(root)
+    git_trees = branch_worktrees(root) if worktrees else {}
+    reg_trees = registry_worktrees(root) if worktrees else {}
     cutoff = time.time() - since_days * 86400 if since_days is not None else None
     pending: list[PendingBranch] = []
     for branch in branches:
@@ -153,6 +258,14 @@ def find_pending(root: Path | str, *, since_days: float | None = None) -> list[P
         commit_epoch = last_commit_epoch(root, branch)
         if cutoff is not None and commit_epoch < cutoff and not completed:
             continue
+        # Git is the authority on where a worktree actually is; the registry is a
+        # convenience index that outlives removals, so a registry-only hit is
+        # reported *and* labeled rather than silently trusted or dropped.
+        tree = git_trees.get(branch)
+        stale = False
+        if tree is None and branch in reg_trees:
+            tree, stale = reg_trees[branch], True
+        plan = plan_file(root, slug) if slug else None
         pending.append(
             PendingBranch(
                 branch=branch,
@@ -160,6 +273,11 @@ def find_pending(root: Path | str, *, since_days: float | None = None) -> list[P
                 ahead=ahead,
                 plan_slug=slug,
                 completed_plan=completed,
+                worktree=tree,
+                dirty=bool(tree) and not stale and worktree_dirty(tree),
+                plan_lane=plan.parent.name if plan else None,
+                held=is_held(plan),
+                stale_registry=stale,
                 last_commit_epoch=commit_epoch,
             )
         )
@@ -168,31 +286,56 @@ def find_pending(root: Path | str, *, since_days: float | None = None) -> list[P
     return pending
 
 
-def _relative_age(epoch: float | None) -> str:
-    if epoch is None:
-        return "?"
-    days = (time.time() - epoch) / 86400
-    if days < 1:
-        return "<1d ago"
-    return f"{int(days)}d ago"
+def _note(p: PendingBranch) -> str:
+    bits: list[str] = []
+    if p.held:
+        bits.append("held for testing")
+    if p.completed_plan:
+        bits.append(f"completed plan '{p.plan_slug}' awaiting merge")
+    elif p.plan_lane:
+        bits.append(f"plan '{p.plan_slug}' in {p.plan_lane}/")
+    elif p.plan_slug:
+        bits.append(f"plan '{p.plan_slug}' (no plan file found)")
+    if p.dirty:
+        bits.append("worktree dirty")
+    if p.stale_registry:
+        bits.append("stale registry")
+    return " · ".join(bits)
 
 
-def format_report(pending: list[PendingBranch]) -> str:
+def format_brief(pending: list[PendingBranch], target: str = "dev") -> str:
+    """One line, for the tail of another command's output."""
+    if not pending:
+        return "handoff: nothing unmerged — every local branch is on its target."
+    completed = sum(1 for p in pending if p.completed_plan)
+    held = sum(1 for p in pending if p.held)
+    targets = {p.target for p in pending} or {target}
+    where = "/".join(sorted(targets))
+    return (
+        f"handoff: {len(pending)} branch(es) ahead of {where} · "
+        f"{completed} completed awaiting merge · {held} held"
+    )
+
+
+def format_report(pending: list[PendingBranch], *, worktrees: bool = True) -> str:
     if not pending:
         return "All local branches are merged into their integration target — nothing pending."
     lines = [
         f"{len(pending)} branch(es) with unmerged commits:",
         "",
-        f"{'branch':<40} {'→ target':<12} {'ahead':>5}  {'last commit':<12}  note",
     ]
+    if worktrees:
+        lines.append(f"{'branch':<38} {'→ target':<11} {'ahead':>5}  {'age':<9} "
+                     f"{'worktree':<24} note")
+    else:
+        lines.append(f"{'branch':<38} {'→ target':<11} {'ahead':>5}  {'age':<9} note")
     for p in pending:
-        note = ""
-        if p.completed_plan:
-            note = f"completed plan '{p.plan_slug}' awaiting merge"
-        elif p.plan_slug:
-            note = f"plan '{p.plan_slug}' (no completed record)"
-        age = _relative_age(p.last_commit_epoch)
-        lines.append(f"{p.branch:<40} {'→ ' + p.target:<12} {p.ahead:>5}  {age:<12}  {note}")
+        row = (f"{p.branch:<38} {'→ ' + p.target:<11} {p.ahead:>5}  "
+               f"{_relative_age(p.last_commit_epoch):<9} ")
+        if worktrees:
+            tree = Path(p.worktree).name if p.worktree else "—"
+            row += f"{tree:<24} "
+        lines.append(row + _note(p))
     return "\n".join(lines)
 
 
@@ -216,19 +359,26 @@ def main(argv: list[str] | None = None) -> int:
         "--all-pending", action="store_true",
         help="ignore --since; include every branch ahead of its target",
     )
+    ap.add_argument("--brief", action="store_true",
+                    help="one summary line instead of the table")
+    ap.add_argument("--worktrees", action=argparse.BooleanOptionalAction, default=True,
+                    help="join worktree path/dirty state onto each row (default: on)")
     args = ap.parse_args(argv)
     since_days = None if args.all_pending else args.since
 
     try:
-        pending = find_pending(args.root, since_days=since_days)
+        pending = find_pending(args.root, worktrees=args.worktrees,
+                               since_days=since_days)
     except GitError as exc:
         print(f"pending-merges: {exc}", file=sys.stderr)
         return 2
 
     if args.json:
         print(json.dumps([asdict(p) for p in pending], indent=2))
+    elif args.brief:
+        print(format_brief(pending))
     else:
-        print(format_report(pending))
+        print(format_report(pending, worktrees=args.worktrees))
 
     return 1 if (pending and args.exit_code) else 0
 

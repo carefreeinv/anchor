@@ -8,6 +8,7 @@ from pathlib import Path
 from scope_gate import (
     ScopeError,
     check_scope,
+    clean_entry,
     enforce_scope,
     parse_scope,
     path_matches,
@@ -17,7 +18,40 @@ from scope_gate import (
 REPO = Path(__file__).resolve().parents[1]
 
 
-# --- pure path matching --------------------------------------------------
+# --- clean_entry ---------------------------------------------------------
+
+
+def test_clean_entry_unwraps_markdown_bold_without_making_globs():
+    assert clean_entry("**app/secret.py**") == "app/secret.py"
+    assert clean_entry("- **app/secret.py**") == "app/secret.py"
+    assert clean_entry("__app/x.py__") == "app/x.py"
+    # real gitignore globs must not be mangled
+    assert clean_entry("**/*.py") == "**/*.py"
+    assert clean_entry("**/tests/*.py") == "**/tests/*.py"
+
+
+def test_clean_entry_bold_path_does_not_match_sibling_prefix():
+    """Regression D3: bold-wrapped path must not over-pass myapp/ when scope is app/."""
+    entry = clean_entry("**app/secret.py**")
+    assert entry == "app/secret.py"
+    assert path_matches("app/secret.py", entry)
+    assert not path_matches("myapp/secret.py", entry)
+    # without unwrap, path_matches would treat **app/secret.py** as a glob
+    assert path_matches("myapp/secret.py", "**app/secret.py**")
+
+
+def test_clean_entry_preserves_internal_double_spaces():
+    """N11: double spaces inside a path are not a trailing-note delimiter."""
+    assert clean_entry("path with  double space.py") == "path with  double space.py"
+    assert clean_entry("- `path with  double space.py`") == "path with  double space.py"
+    assert clean_entry("**path with  double space.py**") == "path with  double space.py"
+
+
+def test_clean_entry_still_strips_explicit_trailing_notes():
+    assert clean_entry("app/x.py — why this is in scope") == "app/x.py"
+    assert clean_entry("app/x.py - why this is in scope") == "app/x.py"
+    assert clean_entry("app/x.py  (why this is in scope)") == "app/x.py"
+    assert clean_entry("app/x.py (note)") == "app/x.py"
 
 
 def test_path_matches_exact_and_dir_prefix():

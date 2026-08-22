@@ -40,11 +40,12 @@ The "which tier deserves this task" rule as code: regex heuristics first (free),
 
 **Which ready plans should I take?** — read-only triage for one worker, so fit is applied mechanically instead of judged from plan headers. Identify yourself with `--tier` / `--model` / `--endpoint`; add `--effort` for cost advice. Prints one `take:`/`skip:` line per plan with the reason, then a claim command for the top pick. It never claims, moves, or leases — pair with `plan_select.py --next --claim`. Exit `0` something eligible, `1` nothing eligible (useful in cron guards), `2` error.
 
-**Effort is a cost dial, not a tier promotion:** `--effort` only advises raising or lowering the dial; it never changes which plans are eligible. Plans with a human **Assignee** (a name/username/email, or `human`) are shown as skipped with reason `assigned to <who>` — agents never auto-claim them. `--json` for tooling, `--eligible-only` to quiet the skips, `--next` to print just the top path.
+**Grok family:** `--effort` sets **effective** Preferred eligibility (`low`→mid, `medium`/`high`→reasoner, `xhigh`→frontier on 4.6; 4.5 `xhigh` coerces to high/reasoner; omitted → mid). **Other products:** `--effort` is a cost dial only and does not change which plans are eligible. Optional `--profile <tag>` (`coding-agent`, `terminal-agent`, `critic`, `planner`, `general-chat`, `multimodal`, `swarm-local`) adds a soft JSON `specialty_hint` when Preferred lists known tags — mismatch is reported, not a skip. Plans with a human **Assignee** (a name/username/email, or `human`) are shown as skipped with reason `assigned to <who>` — agents never auto-claim them. `--json` for tooling, `--eligible-only` to quiet the skips, `--next` to print just the top path.
 
 ```bash
 python plan_fit.py --tier mid --effort high        # what can I take, and am I overpaying?
 python plan_fit.py --endpoint h100-nemotron --json
+python plan_fit.py --tier mid --profile coding-agent --json
 python plan_fit.py --tier small --next             # path only, for scripting
 ```
 
@@ -64,9 +65,13 @@ Shared selection: `plan_select.py` (fit + deps). Claims + moves: `plan_lease.cla
 
 Read-only, zero-dependency terminal kanban board for a project's `.plans/`: **Drafts | Ready | In Progress | Review Needed | Completed**, each column sorted by the same Priority → Value → mtime order as `/work`. Header shows rolling 7-day throughput (**Completed** / **Processed** into `review-needed/`), preferring `.plans/logs/*.csv` event files when present and falling back to git-commit-time/mtime otherwise. Each card shows a brief label for its most recent logged event, if any. Never writes to `.plans/`.
 
+**`--json`** dumps the same board as stable **schema_version 1** JSON (columns, per-plan slug/lane/title/priority/value/preferred/depends_on/assignee, throughput, optional `last_event` from the log) — for CI, dashboards, and other projects that should not import Anchor internals or talk MCP. Single frame (implies `--once`); `--include-parked` adds Ambiguous/Blocked the same way as the TUI. Lane is always the filesystem directory (`bugs`, not `Ready`); column name is separate. Exit `1` only when `.plans/` is missing.
+
 ```bash
 python scripts/plan_board.py               # live, redraws every 60s
 python scripts/plan_board.py --once         # single frame, for piping/CI
+python scripts/plan_board.py --json         # machine-readable board dump
+python scripts/plan_board.py --json --include-parked
 python scripts/plan_board.py --include-parked --no-color
 ```
 
@@ -93,7 +98,11 @@ python pending_merges.py --json --exit-code
 
 ## orchestrate.py
 
-The whole loop: plan (planner role or `--plan-file`) → split into tasks → execute each in a fresh context → verify with your `--verify` command → two-strike escalate or `--hold-on-fail` (detached mode) → fresh-context critic review → JSON run report. Format-gates every executor output (missing footer = failed attempt). Pass `--scope-spec <task-spec.md>` (with `--worktree <root>`) to run the **scope gate** before `--verify`: a change outside the spec's `## Files in scope` marks the task `failed-scope` and tests never run. Before every dispatch attempt it also runs a **budget gate**: if the prompt already exceeds the picked endpoint's `max_context`, the task is marked `failed-budget` and rejected outright — never truncated — because an oversized prompt means the task was decomposed wrong, not that it needs a retry. Roles are also harness-enforced per phase via the `roles.py` capability map: writes made during the planner phase outside `.plans/**`, executor writes into `.plans/**` (or its own spec), or any critic write are **role violations** — logged as events, marked `failed-role` on the task, and the run exits `4` after still emitting its outputs. Role transitions (plan approved → executors spawned → review) are explicit logged events. Often invoked by `work_once.py --run` after a claim.
+The whole loop: plan (planner role or `--plan-file`) → split into tasks → execute each in a fresh context → verify with your `--verify` command → two-strike escalate or `--hold-on-fail` (detached mode) → fresh-context critic review → JSON run report. Format-gates every executor output (missing footer = failed attempt). Pass `--scope-spec <task-spec.md>` (with `--worktree <root>`) to run the **scope gate** before `--verify`: a change outside the spec's `## Files in scope` marks the task `failed-scope` and tests never run. Before every dispatch attempt it also runs a **budget gate**: if the prompt already exceeds the picked endpoint's `max_context`, the task is marked `failed-budget` and rejected outright — never truncated — because an oversized prompt means the task was decomposed wrong, not that it needs a retry. Roles are also harness-enforced per phase via the `roles.py` capability map: writes made during the planner phase outside `.plans/**`, executor writes into `.plans/**` (or its own spec), or any critic write are **role violations** — logged as events, marked `failed-role` on the task, and the run exits `4` after still emitting its outputs. Role transitions (plan approved → executors spawned → review) are explicit logged events. A task that runs out of room does not fail: at `HANDOFF_THRESHOLD` (80%) of the picked endpoint's `max_context` the dispatch carries a **budget notice** telling the executor to emit a handoff instead of a partial answer, and a handoff reply is detected *before* the footer gate (a handoff has no `## Result` footer by design) and respawned as a **fresh** continuation — `--max-respawns` (default 2, `0` disables). Each continuation restates the original task, carries forward accumulated done items and decisions as off-limits, and dispatches only the remaining sub-specs. Past the cap the task is reported back to the planner as a decomposition error rather than respawned again. Often invoked by `work_once.py --run` after a claim.
+
+## handoff.py
+
+The machine side of `anchor/templates/handoff.md`. `looks_like_handoff(text)` is a cheap structural check (all five required headings) so the orchestrator can tell a handoff from a normal result; `parse_handoff(text)` is a strict parse into `Handoff` (done, remaining sub-specs, decisions, files touched, concerns) that **raises** on remaining work with no `Verify by:` line — an undispatchable "finish the rest" item is what makes continuations fail, so it earns one corrective retry rather than a shrug. `check_scope_shrinks(handoff, in_scope)` rejects remaining work naming paths the original spec never allowed (reusing `scope_gate.path_matches` — compaction is a convenient place for scope creep to hide, and widening stays the planner's call). `accumulate(previous, latest)` folds earlier windows' history into the newest handoff so window 3 still knows what window 1 finished; `build_continuation(task, handoff, window=…)` produces the next window's task text — original task, done work and decisions marked do-not-redo/do-not-reverse, remaining sub-specs only.
 
 ## roles.py
 

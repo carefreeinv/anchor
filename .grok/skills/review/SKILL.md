@@ -39,7 +39,7 @@ platform’s code-review tools.
 
 | Invocation | Behavior |
 |------------|----------|
-| `/review` | Plan mode if queue non-empty; else promotion mode if integration ahead of mainline; else stop |
+| `/review` | On `main`/`dev` with both a queue **and** integration ahead: ask which to review. Else plan mode if queue non-empty; else promotion mode if integration ahead of mainline; else stop |
 | `/review <slug>` | Plan session for that `review-needed/` plan |
 | `/review --list` | Inventory queue + one-line “integration ahead of mainline: N” if any; no merge |
 | `/review --skip-ai` | Evidence + survey only (still one decision) |
@@ -89,7 +89,13 @@ Flags may combine with a slug: `/review --no-launch my-slug`.
    `origin` only** with confirm after local success, or when `--push` was set
    (still confirm once). Default is **local merge only**.
 7. Preserve basenames (including `.local.md`) on every move.
-8. **`/work` and executors never merge.** Only this skill after survey may land
+8. **Executors never merge; `/work` may land only what its operator just watched.**
+   A `/work` session may merge `feature/<slug>` → **integration only**, and only
+   when the operator answers its end-of-run culmination question in-session *and*
+   the branch passes the scoped-merge gate (`scripts/merge_feature.py`). Unattended
+   and fleet runs never merge, and **this skill is the only route to `main`** —
+   a plan arriving in `review-needed/` was not merged by `/work`. Only this skill
+   after survey may land
    branches on integration/mainline.
 
 ## Integration / mainline resolution
@@ -127,13 +133,29 @@ the right command pointer. Plan mode.
 
 **Bare `/review`:**
 
-1. If any `review-needed` plans: pick **one** by Priority (P1→P3, default P2) →
-   Value (high→low, default medium) → oldest mtime → filename. State why it won.
-   Other queued plans: **one line** only. Plan mode.
-2. Else if `--no-promote`: report empty queue; stop.
-3. Else if integration is ahead of mainline: **promotion mode** (§ Promotion).
-4. Else: report empty queue + nothing to promote; optional `pending_merges.py`
+1. **Branch-aware ask.** If HEAD is on mainline or integration (`main`/`master`
+   or `dev`/`develop`) **and both review paths are live** — a non-empty
+   `review-needed/` queue **and** integration ahead of mainline — don't
+   silently pick a direction; **ask** (`ask_user_question` when available):
+
+   | Option | Meaning |
+   |--------|---------|
+   | **Review `dev` for promotion** | Promotion mode on `<mainline>..<integration>`; Promote merges integration → mainline |
+   | **Review a feature branch** | List each `review-needed/` plan (slug, Priority, Value, whether `feature/<slug>` has commits not in integration); the human picks **one** → plan mode for that pick |
+
+   One entry in a list of one is not a choice — a single queued plan is picked
+   without a sub-menu. Hard rule 1 stands: **one decision per invocation**;
+   reviewing more means re-running `/review`.
+2. If only the queue is live (or HEAD is on some other branch): pick **one** by
+   Priority (P1→P3, default P2) → Value (high→low, default medium) → oldest
+   mtime → filename. State why it won. Other queued plans: **one line** only.
+   Plan mode.
+3. Else if `--no-promote`: report empty queue; stop.
+4. Else if integration is ahead of mainline: **promotion mode** (§ Promotion).
+5. Else: report empty queue + nothing to promote; optional `pending_merges.py`
    one-liner; stop.
+
+A named slug or `--promote` is already an explicit direction — no ask.
 
 ## 3. Load plan (plan mode)
 
@@ -196,10 +218,13 @@ On spawn/empty failure: “AI pass skipped/failed: …” then continue.
 ## 8. Present package (plan mode)
 
 1. Plan identity (path, slug, Goal)
-2. Evidence (diff, Done when, PR/URLs, commits ahead of integration)
-3. AI verdict + top findings (or skip/fail)
-4. How to exercise the system
-5. Note: **Approve will merge `feature/<slug>` → integration, then archive**
+2. **`## Handoff` note, when the plan body has one** — a `hold — <reason> — <date>`
+   line means the operator parked this deliberately for testing; lead with it, since
+   the reason is usually what to check before approving
+3. Evidence (diff, Done when, PR/URLs, commits ahead of integration)
+4. AI verdict + top findings (or skip/fail)
+5. How to exercise the system
+6. Note: **Approve will merge `feature/<slug>` → integration, then archive**
 
 ## 9. Survey (plan mode)
 
@@ -238,14 +263,44 @@ Empty Needs Work feedback → refuse move; stay in `review-needed/`.
    merge”; proceed to lane move.
 4. If `git rev-list --count <integration>..feature/<slug>` is `0`: skip merge;
    note “already on integration”; proceed to lane move.
-5. Otherwise, with a clean tree:
+5. Otherwise, with a clean tree. **Fast-forward first — it creates no commit**,
+   so its content is byte-identical to what was already prepped on the branch and
+   needs no further gate:
 
    ```bash
    git checkout <integration>
    git merge --ff-only feature/<slug>
-   # if that fails (not FF-able):
-   git merge --no-ff feature/<slug> -m "Merge feature/<slug>: <plan title>"
    ```
+
+   If that fails (not FF-able), the merge **creates a commit**, and a commit needs
+   **`/commit-prep`** first (see the platform brief's hard rule). A clean textual merge
+   can still be semantically broken, and the merged tree is state neither branch
+   was prepped in — so stage the merge, prep *that*, and only then commit:
+
+   ```bash
+   git merge --no-ff --no-commit feature/<slug>   # stage it; do not commit yet
+   # run /commit-prep against the merged working tree
+   #   green → git add -A && git commit -m "Merge feature/<slug>: <plan title>"
+   #            (-A matters: prep EDITS the working tree; a bare `git commit`
+   #             commits only the index and drops prep's own output)
+   #   red   → git merge --abort || git reset --hard HEAD
+   ```
+
+   `git add -A` stages **every** untracked file in the tree, not only what prep
+   produced. Before running it, check `git status` and confirm the untracked set is
+   prep's output (a CHANGELOG edit, a new blog post) and not a stray scratch file,
+   a local config, or build output — a merge commit is the worst place to discover
+   one. Stage prep's reported paths explicitly if the tree is not clean.
+
+   **Red prep on the staged merge:** abort, leave the plan in `review-needed/`, and
+   report which gate failed. Note `git merge --abort` **refuses** when prep modified
+   a file involved in the merge (`error: Entry '<path>' not uptodate`) — which is
+   precisely what its fix-the-tests gate does — so fall back to
+   `git reset --hard HEAD`. Either way nothing was **committed**. Prep's edits to
+   *tracked* files go with the merge, but a file prep **created** — typically a new
+   blog post — is untracked and `reset --hard` leaves it in place. Check
+   `git status`, then say which of prep's output survived rather than "nothing to
+   undo" or "everything is gone".
 
 6. **On conflict:** `git merge --abort` if in progress; leave plan in
    `review-needed/`; report conflict paths; **do not** move to `completed/`.
@@ -259,13 +314,46 @@ another branch checked out in a second worktree that blocks checkout.
 
 ## 12. Lane moves (plan mode)
 
+**Lane moves are commits too — `/review` makes them, and does not leave them
+staged.** A scaffolded project **tracks** `.plans/` (only `*.local.md` and
+`.leases/` are ignored), so a lane move is a real tracked change; leaving it staged
+is how plan bookkeeping ends up in somebody's next unrelated commit.
+
+A commit whose paths are **entirely** under `.plans/` takes the **light path**:
+state what moved and why, then commit. No CHANGELOG, no blog, no test run. If
+`.plans/` is untracked here, say "lane move (untracked)" and commit nothing.
+
+```bash
+git add .plans/
+git commit -m "Plans: <slug> → <lane> (/review <choice>)" -- .plans/
+```
+
+The `-- .plans/` pathspec is load-bearing: a bare `git commit` commits **everything
+already in the index**, so an unrelated pre-staged file would land under the light
+path with no tests, no CHANGELOG and no blog decision. If `git diff --cached
+--name-only` lists anything outside `.plans/`, this is not a plans-only commit —
+stop and run the full gate.
+
+**Never take the light path while a merge is staged.** A pathspec commit is a
+*partial* commit, and git refuses one mid-merge:
+
+```text
+fatal: cannot do a partial commit during a merge.
+```
+
+The tempting repair — dropping `-- .plans/` so the command succeeds — is the worst
+available outcome: it commits the **entire staged merge** under a `Plans:` message,
+ungated. Finish or abort the merge first (§11 step 5), then move the lane and commit
+it separately. `git rev-parse -q --verify MERGE_HEAD` succeeding means a merge is
+still in progress; the merge commit and the lane move are always **two** commits.
+
 | Choice | Move |
 |--------|------|
-| **Approve** (merge OK or nothing to merge) | → `completed/` (optional `YYYY-MM-DD-` prefix); drop stale lease if any |
+| **Approve** (merge OK or nothing to merge) | → `completed/` (optional `YYYY-MM-DD-` prefix); drop stale lease if any; **then commit it** (light path) |
 | **Approve** (merge required and failed) | **No move** — stay in `review-needed/` |
-| **Needs Work** | → **`bugs/` or `features/`** (same basename); **never** `in-progress/` |
+| **Needs Work** | → **`bugs/` or `features/`** (same basename); **never** `in-progress/`; write the actionable notes first; **then commit it** (light path) |
 | **Skip** | No move |
-| **Defer** | → `blocked/` with note |
+| **Defer** | → `blocked/` with note; **then commit it** (light path) |
 
 ### Needs Work → bugs vs features
 
@@ -310,11 +398,24 @@ If not ahead: report and stop (with `--promote`, say why).
 ### Merge integration → mainline (Promote only)
 
 1. Clean tree required; else stop.
-2. ```bash
+2. Fast-forward first — it creates no commit and needs no further gate:
+
+   ```bash
    git checkout <mainline>
    git merge --ff-only <integration>
-   # if not FF-able:
-   git merge --no-ff <integration> -m "Merge <integration> into <mainline>"
+   ```
+
+   If not FF-able the merge **creates a commit on mainline**, the one branch no
+   other path can reach, so gate it **before it exists**:
+
+   ```bash
+   git merge --no-ff --no-commit <integration>
+   # run /commit-prep against the merged working tree
+   #   green → git add -A && git commit -m "Merge <integration> into <mainline>"
+   #   red   → git merge --abort || git reset --hard HEAD; report the failing
+   #            gate, promote nothing. Prep's *tracked* edits go with the merge;
+   #            a file it created (new blog post) is untracked and survives —
+   #            `git status`, then keep or remove it deliberately.
    ```
 3. Conflict → abort; no push; report files.
 4. Success → report SHAs. Push `origin <mainline>` only with confirm / `--push`.

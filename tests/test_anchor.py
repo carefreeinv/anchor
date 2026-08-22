@@ -74,9 +74,10 @@ def test_plan_copy_includes_plans_tree_and_work_commands(tmp_path):
     assert ".grok/skills/install-anchor/SKILL.md" in dests
     assert ".grok/skills/local-models/SKILL.md" in dests
     assert ".grok/skills/anchor/SKILL.md" in dests
-    # Scaffolded skills sourced from platforms/ (CWD-default /anchor, /local-models)
-    assert "platforms/grok-build/skills/local-models/SKILL.md" in srcs
-    assert "platforms/claude-code/commands/local-models.md" in srcs
+    # Dual-use /local-models scaffolds from Anchor base (like work/draft)
+    assert ".grok/skills/local-models/SKILL.md" in srcs
+    assert ".claude/commands/local-models.md" in srcs
+    # Scaffolded-only project /anchor still sourced from platforms/
     assert "platforms/grok-build/skills/anchor/SKILL.md" in srcs
     assert "platforms/claude-code/commands/anchor.md" in srcs
 
@@ -125,6 +126,36 @@ def test_plan_copy_never_scaffolds_config_for_either_platform(tmp_path):
     dests = {str(dest.relative_to(tmp_path)) for _, dest in plan}
     assert ".claude/commands/config.md" not in dests
     assert ".grok/skills/config/SKILL.md" not in dests
+
+
+def test_source_relocation_resolves_legacy_local_models_paths(tmp_path):
+    # Manifests recorded before dual-use promotion still point at platforms/…
+    # --check must resolve via _SOURCE_RELOCATIONS, not report source_missing.
+    dest_rel = ".grok/skills/local-models/SKILL.md"
+    old_src = "platforms/grok-build/skills/local-models/SKILL.md"
+    new_src = ".grok/skills/local-models/SKILL.md"
+    assert old_src in anchor._SOURCE_RELOCATIONS
+    assert anchor._SOURCE_RELOCATIONS[old_src] == new_src
+    upstream = (anchor.REPO_ROOT / new_src).read_text(encoding="utf-8")
+    dest = tmp_path / dest_rel
+    dest.parent.mkdir(parents=True)
+    dest.write_text(upstream, encoding="utf-8")
+    manifest = {
+        "platforms": ["grok"],
+        "fleet": False,
+        "files": {
+            dest_rel: {
+                "src": old_src,
+                "hash": anchor._sha256_text(upstream),
+            }
+        },
+    }
+    statuses = anchor.classify_project(tmp_path, manifest)
+    assert len(statuses) == 1
+    st = statuses[0]
+    assert st.state == "unchanged"
+    assert st.src_rel == new_src
+    assert st.upstream_text is not None
 
 
 def test_plan_copy_includes_capacity_routing_doctrine(tmp_path):
@@ -589,3 +620,41 @@ def test_load_orchestrator_from_defaults(tmp_path, monkeypatch):
     defaults_file.write_text("PLATFORMS=chat\nORCHESTRATOR=Claude:Fable\n")
     monkeypatch.setattr(anchor, "DEFAULTS_FILE", defaults_file)
     assert anchor.load_orchestrator() == "claude:fable"
+
+
+def test_every_script_a_scaffolded_skill_names_is_shipped_to_consumers():
+    """A skill that tells a consumer agent to run `scripts/x.py` must ship `x.py`.
+
+    `FLEET_FILES` is a hand-maintained allowlist, so a new script referenced from a
+    scaffolded skill reaches consumer projects only if someone remembers to add it.
+    Nothing errors when they forget — the file simply never appears in the scaffolded
+    tree and the skill fails at use time, in someone else's repo.
+    """
+    import re
+    from pathlib import Path
+
+    import anchor
+
+    repo = Path(anchor.__file__).resolve().parent.parent
+    shipped = {Path(f).name for f in anchor.FLEET_FILES}
+    on_disk = {p.name for p in (repo / "scripts").glob("*.py")}
+
+    # Scripts that deliberately live only in the Anchor checkout. A consumer runs
+    # these *from* Anchor (via the `anchor` CLI), never from its own tree, so a skill
+    # naming them is correct and shipping them would be wrong. Explicit so the
+    # exception is reviewable rather than silent.
+    anchor_only = {"anchor.py"}
+
+    missing: dict[str, set[str]] = {}
+    for skill_dir, pattern in ((".claude/commands", "*.md"), (".grok/skills", "*/SKILL.md")):
+        for skill in (repo / skill_dir).glob(pattern):
+            named = set(re.findall(r"scripts/([a-z_]+\.py)", skill.read_text(encoding="utf-8")))
+            gap = {n for n in named if n in on_disk and n not in shipped
+                   and n not in anchor_only}
+            if gap:
+                missing[skill.name] = gap
+
+    assert not missing, (
+        "scaffolded skills name scripts that FLEET_FILES does not ship to consumer "
+        f"projects: {missing}"
+    )

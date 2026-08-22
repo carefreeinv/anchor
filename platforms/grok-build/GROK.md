@@ -21,7 +21,7 @@ You are one worker in a verified pipeline, not the whole pipeline. Speed is wort
 8. End every response with `## Result`, `## How to verify`, `## Deferred / concerns`.
 9. SOLID by default; use the project's idiomatic composition mechanism (check `.anchor/conventions.md`) over deep inheritance; no dead code, no spaghetti control flow.
 10. **Docs describe current state, not plans.** README / `docs/` / CHANGELOG / blog / release notes cover **shipped** code and public contracts only. Never document the **contents** of `.plans/` as product docs or roadmap. When plan work ships, document the code — not the plan file. Documenting the `.plans/` **workflow** itself is fine when that is a shipped feature.
-11. **Before any `git commit`:** run **`/commit-prep`** (prep only: tests, CHANGELOG, blog-if-warranted). Do not skip for “small” changes. After gates are **green**, if plan work is complete, stage + commit on the **feature branch** (worktree preferred); never on main/dev; never auto-merge.
+11. **Before any commit that touches a path outside `.plans/`, and before any merge commit:** run **`/commit-prep`** (prep only: tests, CHANGELOG, blog-if-warranted). Do not skip for “small” changes outside `.plans/` — the test is the **path**, not whether the change is code. A commit whose paths are *entirely* under `.plans/` (lane move, review notes, `## Handoff`) takes the **light path** — state what moved and why, then commit; no CHANGELOG, no blog, no test run. Skills that rearrange `.plans/` — **`/review`**, **`/work`**, **`/draft --promote`** — commit that themselves. Never make that commit while a merge is staged: git refuses a partial commit mid-merge. A **merge commit** is gated *before* it exists: `git merge --no-ff --no-commit`, run prep against the merged tree, then **`git add -A && git commit`** if green (prep edits the *working tree*; a bare `git commit` commits only the index and drops its output) or **`git merge --abort || git reset --hard HEAD`** if red (`--abort` refuses once prep has touched a merged file; either way prep's edits to *tracked* files go with the merge, while anything prep **created** — a new blog post — is untracked and survives `reset --hard`; check `git status` and remove or keep it deliberately). A fast-forward creates no commit and needs none. After gates are **green**, if plan work is complete, stage + commit on the **feature branch** (worktree preferred); never on main/dev — **except** that plans-only lane-move commit, which lands on whichever branch the lane move exists on, including an integration branch. **Never merge on your own initiative** — `/work` may land a branch on **`dev` only** via its culmination question + scoped-merge gate (operator answers in-session); `main` only via `/review`'s promotion survey.
 
 12. **Usage limits are a scheduling problem, not a failure.** On a session/weekly cap or quota (429, `insufficient_quota`, "limit reached", a forced tier downgrade), checkpoint state, then **reroute** to the next model in priority order *that clears the task's fitness floor*, else **wait** for a near reset, else **stop and report**. Never finish work on a silently downgraded tier, and never narrow scope or weaken tests to beat a cap. See `.anchor/capacity-routing.md`.
 
@@ -34,34 +34,73 @@ You are one worker in a verified pipeline, not the whole pipeline. Speed is wort
 - For anything security-adjacent or architectural, don't let Grok decide alone — mark the step `Route to: bigger model` in the plan.
 - The reverse matters too: if a step is boilerplate/formatting/a rename, mark it `Route to: smaller/local model` instead of running it on Grok's default tier.
 
-## Grok 4.5 notes (reviewed 2026-07-08)
+## Grok product notes (reviewed 2026-08-12)
 
-- **Play to the strength: terminal-driven work.** Grok 4.5 benchmarks at GPT-5.5 class
-  on terminal/CLI tasks and is unusually token-efficient — CLI-heavy steps (builds,
-  migrations run via shell, log spelunking) are its best fit.
-- **Compensate for the weakness: repo-scale changes.** It measurably trails Fable/GPT
-  tiers at resolving whole-repo issues (DeepSWE-style tasks). Don't hand it "fix this
-  issue across the codebase" — decompose into file-scoped task specs first (this is
-  Anchor law anyway; on Grok 4.5 it's also the performance play).
-- **`reasoning_effort` defaults to high** in the API. Leave high for plan/review steps;
-  set low for mechanical execution or you pay a token multiple for no quality gain —
-  same economics as Nemotron's thinking toggle. In Grok Build TUI: **`/effort low`**
-  (or `/model <id> low`); CLI/headless: **`--effort low`**. Catalog tier for
-  Preferred matching is **mid** (see plan template) — high effort does not promote
-  you to frontier for `/work` fit.
-- **`/work` cost right-size:** before skipping `mid` plans or burning high effort on
-  them, probe for a cheaper local/fleet executor (`.anchor/scripts/endpoints.yaml`); if none
-  are reachable, emit `/effort low` (or dispatch via `work_once.py --endpoint …`)
-  rather than a dead stop. Full contract: `.grok/skills/work/SKILL.md` (Cheaper
-  capacity probe + Reasoning effort).
-- Community reports intermittent regressions and tool-use flakiness `(unverified)` —
-  external verification per the hard rules above is load-bearing here, not ceremony.
-- Fit check before starting any task: `.anchor/model-fitness.md` has Grok 4.5's row; a
-  poor fit means a `SUGGEST-ESCALATE:` first line per mythos-core rule 11, not a
-  silent attempt. Symmetrically, **mid is a floor you clear, not a ceiling you
-  apologize for**: repo-scale issue resolution is Grok 4.5's documented weak spot,
-  file-scoped `mid` plans are not. Do not skip a plan because its **Preferred
-  models** also names a stronger product — only listed *tiers* gate.
+### Session identity (read first)
+
+Your identity comes only from, in order: (1) this session's harness/system-prompt
+line (e.g. "You are Grok 4.6 released by xAI"), (2) an explicit `/model` /
+`--model` / endpoint override the operator set for this session. If neither
+states a version, say "Grok (version unknown)" — **never** infer 4.5 from
+training weights or from the cost ladder below. The cost ladder is for picking
+which product to **open next**; it never renames the session you are already in.
+A 4.6 harness line means you report `Grok 4.6`, full stop.
+
+### Pick 4.5 vs 4.6 (cost ladder)
+
+Both stay first-class until 4.5 is retired. **Prefer the cheaper generation when it is enough.**
+
+| Product | Use when | Priority token |
+|---------|----------|----------------|
+| **Grok 4.5** | Lighter mid: file-scoped execute, terminal/CLI, mechanical multi-file, cost-sensitive runs | `grok:4.5` |
+| **Grok 4.6** | Heavier agent work: long multi-step coding, interactive/visual projects, when 4.5 quality is not enough | `grok:4.6` |
+
+Example model-priority (cheap → expensive among Grok):
+`local:qwen3,nim,grok:4.5,grok:4.6,claude:sonnet,claude:opus,claude:fable`
+Bare `grok` = whatever session you opened; versioned tokens make a 4.5 sunset a one-line edit.
+
+### Shared behavior (4.6 + 4.5)
+
+- **Play to strengths:** terminal/CLI and multi-step agent loops. Prefer **file-scoped**
+  task specs for repo-scale issues until local fitness data improves DeepSWE-class
+  confidence (4.5 was measurably behind Fable-class; 4.6 still treat carefully).
+- **Grok 4.6** (public 2026-08-12) — long-running agents, ambitious interactive/visual
+  work; vendor composite ≈ GPT-5.6 Sol `(unverified, vendor)`.
+- **Grok 4.5** (public 2026-07-09) — still the **default cheap Grok** for thin mid work
+  while available; same effort map (`xhigh` coerced to `high` → reasoner, not frontier).
+- **Base catalog tier = mid; reported effort sets effective Preferred tier**
+  (Grok family only — see `model-fitness.md` “Effort as effective tier”):
+
+  | Effort | Effective fit tier |
+  |--------|--------------------|
+  | `low` / `minimal` | `mid` |
+  | `medium` / `high` (API default) | `reasoner` |
+  | `xhigh` (4.6 only; opt-in) | `frontier` |
+
+  **Omitted / unknown effort → effective `mid`** (never silent frontier from API
+  default). Report yourself as `<harness-named product> @ <effort> → effective
+  <tier>` before fit — e.g. `Grok 4.6 @ high → effective reasoner` if the harness
+  says 4.6, `Grok 4.5 @ low → effective mid` if it says 4.5 (see Session identity
+  above; this is a lookup by harness name, never a pick from the cost ladder).
+- **Pasteable dials:** TUI **`/effort low|medium|high|xhigh`** (or `/model <id> low`);
+  CLI **`--effort …`**; fleet endpoint quirk `reasoning_effort:` in `endpoints.yaml`
+  (sent by `anchor_client.py`). Prefer **low** for mechanical steps; reserve
+  medium/high for architecture-ish work; reserve **xhigh** for true long-horizon frontier routing — costly, opt-in only.
+- **`/work`:** pass `--effort` into `plan_fit` / `work_once` when you know the dial
+  so eligibility matches. Before burning high/`xhigh` on `small`/`mid` Preferred,
+  probe cheaper local/fleet capacity. Full contract: `.grok/skills/work/SKILL.md`.
+- Fit check before starting any task (**dual-axis**, mythos-core rule 11): `.anchor/model-fitness.md`
+  has Grok 4.5 / 4.6 rows (`terminal-agent` + `coding-agent`). **Power** poor fit →
+  `SUGGEST-ESCALATE:` first line. **Specialty** mismatch (e.g. pure long multimodal
+  design doc better on `multimodal`, or pure chat UI with no shell) →
+  `SUGGEST-REROUTE: <target or profile> — <reason>`, not a silent attempt. Good on
+  both axes → silence. Symmetrically, **mid is a floor you clear, not a ceiling you
+  apologize for**: repo-scale issue resolution is a documented weak spot for Grok
+  4.5 (check `model-fitness.md` for the row matching your session's harness-named
+  product), file-scoped `mid` plans are not. Do not skip a plan because its **Preferred
+  models** also names a stronger product — only listed *tiers* gate power. Reported
+  `high` makes Grok **effective reasoner** (skips mid-only Preferred); omitted
+  `--effort` stays mid.
 
 ## Working with this repo's tooling
 
@@ -87,11 +126,11 @@ and **Depends on** (skip unmet deps); never execute `drafts/` / `completed/` /
 stuck → `blocked/`; finish `in-progress/` → `review-needed/` (required; human
 **`/review`** → `completed/`).
 Do not promote drafts from `/work` (use `/draft --promote`). If Preferred orchestrator is unset, frontier/near-frontier
-(including Grok 4.5 as session lead) may act as temporary coordinator
+(including a Grok session as lead, 4.5 or 4.6 per its own harness line) may act as temporary coordinator
 (`TEMPORARY-COORDINATOR:`). On Git projects: **worktree per agent**
 (`.anchor/scripts/worktree_for_agent.py ensure --agent-id … --slug …`); feature-branch
 from **`dev`**/`develop` (**create `dev` from main/master if missing**);
-**`/commit-prep` before commit**; `/work` never merges (human `/review` does). Skill:
+**`/commit-prep` before commit**; `/work` merges only on the operator's in-session culmination answer, scoped, **`dev` only** (otherwise human `/review` does). Skill:
 `.grok/skills/work/SKILL.md`.
 
 ## /review
@@ -107,7 +146,7 @@ Needs Work → `bugs|features/`. Empty queue with `dev` ahead of `main` offers a
 
 Exhaustive **security audit** (first-party code + dependencies) that writes
 prioritized bug plans under `.plans/bugs/` (or `--to drafts`). **Frontier /
-reasoner only** by default (`--force-model` override; Grok 4.5 is mid-class for
+reasoner only** by default (`--force-model` override; Grok 4.5/4.6 base catalog is mid-class for
 this gate). Plans only — no auto-fix, no exploit PoCs. Skill:
 `.grok/skills/audit/SKILL.md`.
 
@@ -161,14 +200,36 @@ another project from the Anchor tree). Same slash name; different default.
 ## /local-models
 
 Probe this machine for **lean local models**, recommend fits, install links, and
-optional reconfigure draft. Scaffolded into **projects** (not part of
-the Anchor base skill set). Skill: `.grok/skills/local-models/SKILL.md`
-(source: `platforms/grok-build/skills/local-models/`). Uses
-`.anchor/scripts/fit_device.py --probe` when fleet/scripts are available.
+optional reconfigure draft. **Dual-use:** lives in the Anchor checkout base
+**and** scaffolded into projects. Skill: `.grok/skills/local-models/SKILL.md`.
+Uses `fit_device.py --probe` when available — `scripts/` in the Anchor
+checkout, `.anchor/scripts/` in a scaffolded project.
+
+## /tag
+
+Cut an **annotated** version tag on the current commit. Detects the repo's
+existing tag scheme rather than inventing one (`--suggest` proposes the next
+version from the last tag + CHANGELOG). Refuses a dirty tree, a tag that
+already exists, and any tag not on the intended base. Does **not** push.
+Command: ``.grok/skills/tag/SKILL.md``.
+
+## /push
+
+Push the current branch (and optionally its tags) with the ceremony a shared
+branch deserves: confirms the remote and branch, names the protected-branch
+risk, and uses `--force-with-lease` when a force is genuinely required —
+never a bare `--force`. Does **not** create tags. Skill: `.grok/skills/push/SKILL.md`.
+
+## /release
+
+Intentional product ship: report finished work **not** on the release base,
+plan–diff review what *is* on it, then `/tag` + `/push`. **`/release` never
+merges** — branches reach `dev` via `/review` Approve or a `/work` scoped
+merge, and `main` only via `/review`'s promotion survey. Skill: `.grok/skills/release/SKILL.md`.
 
 ## /commit-prep
 
-**Required before any `git commit`.** Run `/commit-prep`: tests → CHANGELOG →
+**Required before any commit that touches a path outside `.plans/`, and before any merge commit.** A commit whose paths are *entirely* under `.plans/` takes the **light path** instead: state what moved and why, then `git add .plans/` and `git commit -m "…" -- .plans/`; no CHANGELOG, no blog, no test run. Run `/commit-prep`: tests → CHANGELOG →
 blog-if-warranted. **Prep only** — does not commit. After a green prep, follow
 **`/work`** / hard rules for feature-branch commit (worktree preferred; never
 merge to `dev`/`main`). Skill: `.grok/skills/commit-prep/SKILL.md`.

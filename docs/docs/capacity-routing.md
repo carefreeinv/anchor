@@ -3,7 +3,7 @@ sidebar_position: 5
 sidebar_label: Capacity Routing
 ---
 
-<!-- synced-from: anchor/capacity-routing.md @ bedddfbcecb88b54c94ab5a8512df7a80878d462 -->
+<!-- synced-from: anchor/capacity-routing.md @ a58ae6db3c35329da30a5219600937686af36508 -->
 
 # Capacity routing
 
@@ -31,6 +31,10 @@ Work the order and take the first that applies.
 The fitness floor is the whole point. [Model priority](/skills/overview) is an escalation ladder, not a menu of equals. Rerouting a rename or a formatting pass down a tier costs nothing; rerouting architecture work, a security review, or a subtle debugging session down a tier produces confident, wrong output — the exact failure Anchor exists to prevent. Consult [model fitness](/model-fitness): if the task lands in the fallback model's weak column, **waiting is correct**, and so is stopping. Never let a quota reset decide the quality bar.
 
 ## Reroute correctly
+
+### Grok 4.5 vs 4.6 under capacity pressure
+
+When model-priority lists both, **prefer `grok:4.5` for light mid work** (usually cheaper) and reserve **`grok:4.6`** for sustained multi-step agent tasks. Do not jump to 4.6 (or raise effort to xhigh) just because 4.5 is rate-limited if a local swarm or Sonnet-class alternative clears the fitness floor. If 4.5 is retired later, drop `grok:4.5` from priority and keep `grok:4.6`.
 
 A different model is a different session with no memory of this one. Re-sending the last prompt loses the plan, the constraints, and every decision already made.
 

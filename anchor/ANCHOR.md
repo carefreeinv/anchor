@@ -20,6 +20,7 @@ Small models drift: they forget constraints mid-task, conflate planning with doi
 - **Forced structure** — require fixed output formats (the templates in `templates/`). A model that must fill in an `## Acceptance criteria` section cannot skip thinking about acceptance criteria.
 - **One task per context** — never give a small model the whole project. Give it one task spec with exactly the context it needs. Fresh context per task; context rot is real and hits small models hardest.
 - **Declared budget + a fixed pre-flight gate** — every task spec carries an explicit `## Budget` (context window, output ceiling, computed by tooling, never guessed) so "does this fit" is a number, not a vibe. Mythos-core rule 13 makes every executor print a fixed 6-item pass/fail block before doing any work — goal, acceptance criteria, files-in-scope, budget, tier fit, task size — so a model that would otherwise plow ahead on a poorly-specified or oversized task has to notice and stop first.
+- **Planned continuation instead of context rot** — a task that outgrows its window does not have to fail. Approaching its declared ceiling, the executor emits a **structured handoff** (`templates/handoff.md`: what is done and how it was checked, what remains as ready-to-dispatch sub-specs, decisions made, files touched, open concerns) and the orchestrator respawns a **fresh** context seeded with that handoff — not a longer conversation, which is the thing that rots in the first place. Mythos-core rule 15 makes the handoff mandatory near budget; `scripts/orchestrate.py` decides when one is needed from its own token accounting rather than trusting the model's sense of how much room it has left, rejects remaining work that carries no verify command, and refuses a continuation whose scope grew. The cap is **2 continuations per task** — a task that still does not fit goes back to the planner, because needing a fourth window is a decomposition error, not a large task.
 - **External verification** — tooling (not the model) runs tests, linters, and diffs. The model's claim of success is an input to verification, never a substitute. Fleet runs record that pairing in `var/fleet-metrics/outcomes.jsonl` (`scripts/fleet_metrics.py`); aggregate with `python scripts/fitness_report.py` and prefer those rates over vendor claims when updating `model-fitness.md`.
 - **Role separation** — the same small model performs better as three sequential roles (planner → executor → critic) than as one conversational blob, because each role gets a clean context and a narrow job. In the orchestrated path the split is harness-enforced, not just prompted: `scripts/roles.py` is the single role→capability map (planner writes only `.plans/**`; executor never writes `.plans/**` or its own spec; critic writes nothing), applied per phase by `scripts/orchestrate.py` and by the project-orchestrator MCP server's role-scoped toolsets (a `--role planner` session never even sees lifecycle tools). Role transitions are explicit, logged orchestrator events — no self-promotion. Single-model sessions with no orchestrator keep the discipline by prompt alone.
 - **Escalation paths** — define upfront what gets escalated to a bigger model: ambiguous requirements, architectural decisions, twice-failed tasks, final review.
@@ -85,6 +86,7 @@ Every tier defaults to these regardless of task size — they're cheap to apply 
 
 - `templates/plan.md` — planner output format (header: Value / Slug / Preferred models when using `./.plans`; **path** is lane/status — no in-file Lane/Status)
 - `templates/task-spec.md` — the unit of work handed to an executor; its `## Budget` section (context window / output ceiling) is what mythos-core rule 13's pre-flight check reads before work starts
+- `templates/handoff.md` — what an executor emits instead of truncating when it approaches its `## Budget`: done (with verification status) / remaining as ready-to-dispatch sub-specs / decisions made / files touched / open concerns. Parsed by `scripts/handoff.py` into the next window's spec (mythos-core rule 15)
 - `templates/review.md` — critic pass format
 - `templates/verification.md` — machine-checkable done-ness checklist
 
@@ -112,7 +114,10 @@ authoritative:** `bugs/` and `features/` are ready; agents move claimed work to
 `in-progress/` (only the claimer continues — others **ignore**); may park to
 `ambiguous/` (half-baked) or `blocked/` (cannot fix), or return in-progress to
 ready; agents finish claimed work to `review-needed/` (human sign-off via
-**`/review`** → `completed/`); never execute `drafts/` / `ambiguous/` /
+**`/review`** → `completed/`) — or, when the operator answers `/work`'s end-of-run
+culmination question with **merge to `dev` now** and the branch passes the
+scoped-merge gate, straight to `completed/` with a `## Handoff` note recording the
+skipped review; never execute `drafts/` / `ambiguous/` /
 `blocked/` / `review-needed/`. Do not put `Lane:` or `Status:` inside plan files.
 **Promotion** from `drafts/` → ready is via explicit **`/draft --promote <slug>`**
 (user-authorized; agent infers `bugs/` vs `features/` from the plan; **keeps**

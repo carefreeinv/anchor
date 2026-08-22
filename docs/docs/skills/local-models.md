@@ -5,9 +5,9 @@ sidebar_label: /local-models · machine fit
 
 # `/local-models`
 
-**Best used:** **inside a project** when choosing or wiring a **lean
-local** model executor for this host (not a Anchor-only base skill). See
-[Skills overview](/skills/overview).
+**Best used:** on **any host** (Anchor checkout or a scaffolded project) when
+choosing or wiring a **lean local** model executor for **this** machine.
+Re-run per clone — multi-machine safe. See [Skills overview](/skills/overview).
 
 Evaluate **this machine** for cutting-edge **lean** local models (Qwen3, Gemma 3, Mistral Small, R1 distills, …), recommend what fits, and show **clickable install links** plus a short procedure for the detected OS (including **WSL2**).
 
@@ -43,13 +43,13 @@ python scripts/fit_device.py --list
 
 ## Install paths
 
-Scaffolded into **projects** with `--platform claude` and/or `grok` (not
-part of the Anchor base skill set; source under `platforms/`):
+**Dual-use:** Anchor checkout **and** scaffolded into projects with
+`--platform claude` and/or `grok` (same base paths as `/work`):
 
-| Platform | Scaffolded to | Source in Anchor repo |
-|----------|---------------|------------------------|
-| Grok Build | `.grok/skills/local-models/SKILL.md` | `platforms/grok-build/skills/local-models/SKILL.md` |
-| Claude Code | `.claude/commands/local-models.md` | `platforms/claude-code/commands/local-models.md` |
+| Platform | Path |
+|----------|------|
+| Grok Build | `.grok/skills/local-models/SKILL.md` |
+| Claude Code | `.claude/commands/local-models.md` |
 
 ## Related
 

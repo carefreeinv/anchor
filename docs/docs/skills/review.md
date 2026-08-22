@@ -35,7 +35,7 @@ the empty-queue **dev → main** gate.
 
 | Invocation | Behavior |
 |------------|----------|
-| `/review` | Plan mode if queue non-empty; else promotion mode if `dev` ahead of `main` |
+| `/review` | On `main`/`dev` with both a queue **and** `dev` ahead of `main`: asks which to review. Else plan mode if queue non-empty; else promotion mode if `dev` ahead of `main` |
 | `/review <slug>` | Session for that plan only (must be under `review-needed/`) |
 | `/review --list` | Inventory queue + ahead-of-mainline advisory; no merge |
 | `/review --skip-ai` | Evidence + survey only (still one decision) |
@@ -59,7 +59,10 @@ select → checkout (if safe) → evidence + optional launch
        → lane move to completed/ (after merge success or nothing to merge)
 ```
 
-1. **Select** — bare pick uses Priority → Value → oldest mtime → filename.
+1. **Select** — run from `main`/`dev` while a review queue coexists with an
+   unpromoted `dev`, the skill first asks whether to review `dev` for promotion
+   or pick a feature branch from the queue. Otherwise the bare pick uses
+   Priority → Value → oldest mtime → filename.
 2. **Checkout** — `feature/<slug>` only when the tree is clean (or after confirm);
    dirty trees get a worktree offer, not a silent switch.
 3. **Launch** — low-risk local servers only; confirm Docker/migrations/deploy.
@@ -103,11 +106,31 @@ human runs `/review --promote`):
 | **Claude Code** | Scaffold installs `.claude/commands/review.md` |
 | **Grok Build** | Scaffold installs `.grok/skills/review/SKILL.md` |
 
+## What `/review` commits
+
+Every `/review` outcome that changes a tracked file commits it — it does not leave
+the change staged for an unrelated commit to swallow. Which gate applies depends on
+what the commit contains, per the [`/commit-prep` hard rule](/platforms/claude-code):
+
+| `/review` does | Gate |
+|---|---|
+| Fast-forward merge into integration | none — creates no commit; the content was already prepped on the branch, and a fast-forward cannot conflict |
+| `--no-ff` merge (feature → integration, or integration → mainline) | **full `/commit-prep`**, run against the *staged* merge before it becomes a commit: `git merge --no-ff --no-commit`, prep, then `git add -A && git commit` if green (prep edits the working tree; a bare commit drops its output) or `git merge --abort \|\| git reset --hard HEAD` if red |
+| Lane move + review notes (Approve / Needs Work / Defer) | **light path** — state what moved and why, then commit. No CHANGELOG, no blog, no test run; a lane move cannot break a test |
+
+A project that leaves `.plans/` untracked (as the Anchor repo itself does) has
+nothing to commit for the third row, and `/review` says so rather than pretending.
+
+
 Scaffold always creates the empty `.plans/` tree (including `review-needed/`).
 Process contract also lives in `.plans/README.md` once scaffolded.
 
 ## Related
 
-- [**`/work`**](/skills/work) — agents finish to `review-needed/`; **never** merge
+- [**`/work`**](/skills/work) — default finish is `review-needed/`; interactive
+  sessions may also land `feature/<slug>` on **`dev` only** when the operator
+  answers the culmination question and the scoped-merge gate passes. Unattended
+  runs never merge. `/review` remains the only route to `main`.
 - [`pending_merges.py`](/tooling/scripts) — advisory table of unmerged branches
+- [How work reaches `dev`](/tooling/how-work-reaches-dev) — the two routes onto integration
 - [Doctrine — tracked plans](/doctrine)

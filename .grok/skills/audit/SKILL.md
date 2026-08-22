@@ -44,7 +44,7 @@ Flags may combine (e.g. `/audit --dry-run --deps-only`).
 
 1. **Frontier / reasoner only by default.** Classify this session’s fit tier
    (`frontier` | `reasoner` | `mid` | `small`) using the same spirit as `/work`
-   model-fit and `.anchor/model-fitness.md` (or project copy). **Grok 4.5 is
+   model-fit and `.anchor/model-fitness.md` (or project copy). **Grok (4.5 or 4.6) is
    mid-class** for this gate — high effort is a cost dial, not a promotion to
    reasoner/frontier. Fable/Opus-class → reasoner/frontier; Sonnet-class → mid;
    Haiku/local small → small. If you are **mid or below** (or clearly not

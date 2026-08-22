@@ -26,7 +26,7 @@ Before dispatching any frontier-model run, rewrite the task on a cheap model int
 
 ## Standing rules (apply to every model tier)
 
-- Fit check first: if the pending task lands in the current model's weak column (see `.anchor/model-fitness.md` and the model-routing section of `.anchor/conventions.md`, both scaffolded into the project), open with `SUGGEST-ESCALATE: <model> — <reason>` and stop; proceed only if the user insists. The gate is the **weak column and orchestration-class work only** — do not escalate because a stronger model exists, because a plan's **Preferred models** names one (only listed *tiers* set the floor), or because one step looks hard. Declining work that fits you stalls the backlog just as badly as overreaching.
+- Fit check first (**dual-axis**): (1) **Power** — if the pending task lands in the current model's weak column or is orchestration-class work you should not own (see `.anchor/model-fitness.md` and the model-routing section of `.anchor/conventions.md`), open with `SUGGEST-ESCALATE: <model> — <reason>` and stop. (2) **Specialty** — if power is OK but you are the wrong *kind* of model (e.g. pure chat for multi-file software, critic for bulk implement), open with `SUGGEST-REROUTE: <model or profile> — <reason>` (profiles: `coding-agent`, `terminal-agent`, `critic`, `planner`, `general-chat`, `multimodal`, `swarm-local`) and stop. Proceed only if the user insists. Good fit on both axes → silence. Do not escalate/re-route because a stronger model exists, because a plan's **Preferred models** names one (only listed *tiers* set the power floor), or because one step looks hard. Declining work that fits you stalls the backlog just as badly as overreaching.
 - **Surface the best-fit skill:** before acting, judge whether a skill or slash-command **available in this session** (harness skill roster, `.claude/commands/`) would do the request faster or more correctly than working by hand. If one clearly fits, prepend a **single line** naming it and offering to use it, then proceed the same turn — a suggestion, not a gate (never make the user run it first and come back). Only suggest commands actually loaded (never invent one); at most once per capability per session; only when you can name the concrete win. This surfaces cutting-edge features the user may not know exist — it is not a pre-flight item and never a per-prompt nag.
 - Restate goal + acceptance criteria before acting; ask one clarifying question if ambiguous, then stop.
 - One step at a time; unrelated findings go in a `## Deferred` note, never fixed opportunistically.
@@ -37,7 +37,7 @@ Before dispatching any frontier-model run, rewrite the task on a cheap model int
 - End every task with: `## Result`, `## How to verify`, `## Deferred / concerns`.
 - SOLID by default; use the project's idiomatic composition mechanism (check `.anchor/conventions.md`) over deep inheritance; no dead code, no spaghetti control flow.
 - **Docs describe current state, not plans:** README / `docs/` / CHANGELOG / blog / release notes cover **shipped** code and public contracts only. Never document the **contents** of `.plans/` (drafts, backlog, unfinished acceptance) as product docs or roadmap. When plan work ships, document the code — not the plan file. Documenting the `.plans/` **workflow** itself is fine when that is a shipped feature.
-- **Before any `git commit`:** run **`/commit-prep`** (prep only: tests, CHANGELOG, blog-if-warranted). Do not skip prep for “small” changes. After gates are **green**, if plan work is complete (or the user asked to land the work), **stage + commit on the feature branch** (worktree preferred); optional feature-branch push; never commit on main/dev; never auto-merge.
+- **Before any commit that touches a path outside `.plans/`, and before any merge commit:** run **`/commit-prep`** (prep only: tests, CHANGELOG, blog-if-warranted). Do not skip prep for “small” changes outside `.plans/` — the test is the **path**, not whether the change is code; a one-line docs or config edit outside `.plans/` is gated exactly the same. A commit whose paths are *entirely* under `.plans/` (lane move, review notes, `## Handoff`) takes the **light path** — state what moved and why, then commit; no CHANGELOG, no blog, no test run. Skills that rearrange `.plans/` commit that themselves rather than leaving it staged. A **merge commit** is gated *before* it exists: `git merge --no-ff --no-commit`, run prep against the merged tree, then **`git add -A && git commit`** if green (prep edits the *working tree*; a bare `git commit` commits only the index and drops its output) or **`git merge --abort || git reset --hard HEAD`** if red (`--abort` refuses once prep has touched a merged file; either way prep's edits to *tracked* files go with the merge, while anything prep **created** — a new blog post — is untracked and survives `reset --hard`; check `git status` and remove or keep it deliberately). A fast-forward creates no commit and needs none. After gates are **green**, if plan work is complete (or the user asked to land the work), **stage + commit on the feature branch** (worktree preferred); optional feature-branch push; never commit on main/dev — **except** the plans-only lane-move commit above, which **`/review`**, **`/work`** and **`/draft --promote`** make on whichever branch the lane move exists on, including an integration branch. **Never merge on your own initiative** — `/work` may land a branch on **`dev` only** via its culmination question + scoped-merge gate (operator answers in-session); `main` only via `/review`'s promotion survey.
 
 ## Hooks & automation suggestions
 
@@ -71,7 +71,7 @@ Do not promote drafts from `/work` (use `/draft --promote`). If Preferred orches
 may act as temporary coordinator (`TEMPORARY-COORDINATOR:`). On Git projects: **worktree per agent**
 (`.anchor/scripts/worktree_for_agent.py ensure --agent-id … --slug …`); feature-branch
 from **`dev`**/`develop` (**create `dev` from main/master if missing**);
-**`/commit-prep` before commit**; `/work` never merges (human `/review` does). Command:
+**`/commit-prep` before commit**; `/work` merges only on the operator's in-session culmination answer, scoped, **`dev` only** (otherwise human `/review` does). Command:
 `.claude/commands/work.md`.
 
 ## /review
@@ -137,17 +137,42 @@ Anchor base skill (which requires a foreign project path). Command:
 ## /local-models
 
 Probe this machine for **lean local models**, recommend fits, install links, and
-optional reconfigure draft. Scaffolded into **projects** (not part of
-the Anchor base skill set). Command: `.claude/commands/local-models.md`
-(source: `platforms/claude-code/commands/`). Uses `.anchor/scripts/fit_device.py --probe`
-when available.
+optional reconfigure draft. **Dual-use:** lives in the Anchor checkout base
+**and** scaffolded into projects. Command: `.claude/commands/local-models.md`
+(full procedure: `.grok/skills/local-models/SKILL.md`).
+Uses `fit_device.py --probe` when available — `scripts/` in the Anchor
+checkout, `.anchor/scripts/` in a scaffolded project.
+
+## /tag
+
+Cut an **annotated** version tag on the current commit. Detects the repo's
+existing tag scheme rather than inventing one (`--suggest` proposes the next
+version from the last tag + CHANGELOG). Refuses a dirty tree, a tag that
+already exists, and any tag not on the intended base. Does **not** push.
+Command: `.claude/commands/tag.md`.
+
+## /push
+
+Push the current branch (and optionally its tags) with the ceremony a shared
+branch deserves: confirms the remote and branch, names the protected-branch
+risk, and uses `--force-with-lease` when a force is genuinely required —
+never a bare `--force`. Does **not** create tags. Command:
+`.claude/commands/push.md`.
+
+## /release
+
+Intentional product ship: report finished work **not** on the release base,
+plan–diff review what *is* on it, then `/tag` + `/push`. **`/release` never
+merges** — branches reach `dev` via `/review` Approve or a `/work` scoped
+merge, and `main` only via `/review`'s promotion survey. Command:
+`.claude/commands/release.md`.
 
 ## /commit-prep
 
-**Required before any `git commit`.** Run `/commit-prep` (command:
+**Required before any commit that touches a path outside `.plans/`, and before any merge commit.** A commit whose paths are *entirely* under `.plans/` takes the **light path** instead: state what moved and why, then `git add .plans/` and `git commit -m "…" -- .plans/`; no CHANGELOG, no blog, no test run. Run `/commit-prep` (command:
 `.claude/commands/commit-prep.md`): tests → CHANGELOG → blog-if-warranted.
 **Prep only** — does not commit. After a green prep, commit policy is under
-**`/work`** / standing rules (feature branch + worktree; never merge to `dev`/`main`).
+**`/work`** / standing rules (feature branch + worktree; merge to `dev` only via `/work`'s culmination answer + scoped gate; never to `main`).
 
 ## /config
 

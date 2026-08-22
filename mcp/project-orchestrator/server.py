@@ -17,7 +17,7 @@ Claude Code:
   claude mcp add myapp-orch -- python /path/to/mcp/project-orchestrator/server.py \\
     --project /path/to/myapp --agent-id cursor-mid-1 --tier mid
 
-Requires: pip install "mcp[cli]" PyYAML
+Requires: pip install "mcp[cli]>=1.2.0,<3" PyYAML
 Scripts import via Anchor ``scripts/`` on sys.path (do not copy plan_select).
 """
 from __future__ import annotations
@@ -206,7 +206,7 @@ _TOOL_FUNCS = {
 def register_tools(server, role: str | None = None) -> list[str]:
     """Register only the tools the role may see (roles.mcp_toolset_for).
 
-    ``server`` needs a FastMCP-style ``tool()`` decorator factory. Returns the
+    ``server`` needs an MCP-server-style ``tool()`` decorator factory. Returns the
     registered tool names, in registration order.
     """
     names = [n for n in roles.mcp_toolset_for(role) if n in _TOOL_FUNCS]
@@ -216,11 +216,14 @@ def register_tools(server, role: str | None = None) -> list[str]:
 
 
 def build_server(role: str | None = None):
-    """FastMCP server exposing the role's toolset (import deferred so the
+    """MCP server exposing the role's toolset (import deferred so the
     registration logic stays testable without the mcp package installed)."""
-    from mcp.server.fastmcp import FastMCP
+    try:  # SDK 2.x — see the note in mcp/model-fleet/server.py
+        from mcp.server import MCPServer
+    except ImportError:  # SDK 1.x
+        from mcp.server.fastmcp import FastMCP as MCPServer
 
-    server = FastMCP("project-orchestrator")
+    server = MCPServer("project-orchestrator")
     register_tools(server, role)
     return server
 

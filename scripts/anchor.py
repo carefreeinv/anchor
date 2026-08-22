@@ -85,6 +85,7 @@ CORE_FILES: list[str] = [
     "anchor/system-prompts/mythos-core.md",
     "anchor/templates/plan.md",
     "anchor/templates/task-spec.md",
+    "anchor/templates/handoff.md",
     "anchor/templates/review.md",
     "anchor/templates/verification.md",
 ]
@@ -133,10 +134,16 @@ def conventions_path(project_dir: Path, *, for_write: bool = False) -> Path:
 FLEET_FILES: list[str] = [
     "scripts/anchor_client.py",
     "scripts/orchestrate.py",
+    "scripts/handoff.py",
     "scripts/work_once.py",
     "scripts/plan_select.py",
     "scripts/plan_lease.py",
     "scripts/plan_board.py",
+    "scripts/plan_fit.py",
+    "scripts/pending_merges.py",
+    "scripts/merge_feature.py",
+    "scripts/scope_gate.py",
+    "scripts/roles.py",
     "scripts/worktree_for_agent.py",
     "scripts/fleet_watch.py",
     "scripts/prompt_tuner.py",
@@ -208,8 +215,9 @@ PLATFORMS: dict[str, dict] = {
             (".claude/commands/release.md", ".claude/commands/release.md"),
             (".claude/commands/fleet-watch.md", ".claude/commands/fleet-watch.md"),
             (".claude/commands/install-anchor.md", ".claude/commands/install-anchor.md"),
-            # Scaffolded skills (source under platforms/; Anchor /anchor is path-required base)
-            ("platforms/claude-code/commands/local-models.md", ".claude/commands/local-models.md"),
+            # Dual-use: same base paths as Anchor checkout (like work/draft/install-anchor)
+            (".claude/commands/local-models.md", ".claude/commands/local-models.md"),
+            # Scaffolded-only: CWD-default /anchor (Anchor base /anchor is path-required)
             ("platforms/claude-code/commands/anchor.md", ".claude/commands/anchor.md"),
         ],
     },
@@ -229,8 +237,9 @@ PLATFORMS: dict[str, dict] = {
             (".grok/skills/release/SKILL.md", ".grok/skills/release/SKILL.md"),
             (".grok/skills/fleet-watch/SKILL.md", ".grok/skills/fleet-watch/SKILL.md"),
             (".grok/skills/install-anchor/SKILL.md", ".grok/skills/install-anchor/SKILL.md"),
-            # Scaffolded skills (source under platforms/; Anchor /anchor is path-required base)
-            ("platforms/grok-build/skills/local-models/SKILL.md", ".grok/skills/local-models/SKILL.md"),
+            # Dual-use: same base paths as Anchor checkout (like work/draft/install-anchor)
+            (".grok/skills/local-models/SKILL.md", ".grok/skills/local-models/SKILL.md"),
+            # Scaffolded-only: CWD-default /anchor (Anchor base /anchor is path-required)
             ("platforms/grok-build/skills/anchor/SKILL.md", ".grok/skills/anchor/SKILL.md"),
         ],
     },
@@ -639,7 +648,7 @@ Detected/declared language or framework: **{framework}**
         "If the Preferred orchestrator line is **unset** / empty and **no** project "
         "MCP coordinator is registered for this tree:\n\n"
         "1. If **you** are a **frontier or near-frontier** model (e.g. Fable-class, "
-        "Opus-class, GPT-5.x Sol/Terra-class, Grok 4.5 when used as a strong "
+        "Opus-class, GPT-5.x Sol/Terra-class, a Grok session used as a strong "
         "session lead — see `.anchor/model-fitness.md`), you **may take a temporary "
         "coordinator role** for this session only.\n"
         "2. While temporary coordinator: inventory `.plans/**`, propose/fill "
@@ -957,6 +966,15 @@ MANIFEST_CANDIDATES = (MANIFEST_NAME, ".anchor/manifest.json")
 # still begin with anchor/; doctrine_dest maps them for *new* scaffolds).
 _LEGACY_DOCTRINE_PREFIX = "anchor/"
 
+# When a managed file's recorded ``src`` was moved inside the Anchor tree,
+# resolve the new path so --check/--upgrade do not report source_missing forever.
+# Keys are historical manifest ``src`` values; values are current REPO_ROOT-relative paths.
+_SOURCE_RELOCATIONS: dict[str, str] = {
+    # /local-models promoted to dual-use base skills (was platforms-only)
+    "platforms/grok-build/skills/local-models/SKILL.md": ".grok/skills/local-models/SKILL.md",
+    "platforms/claude-code/commands/local-models.md": ".claude/commands/local-models.md",
+}
+
 
 @dataclass
 class FileStatus:
@@ -1122,11 +1140,17 @@ def classify_project(project_dir: Path, manifest: dict) -> list[FileStatus]:
             upstream_label = f"(generated {CONVENTIONS_REL})"
             upstream_hash = _sha256_text(upstream_text) if upstream_text is not None else None
         else:
+            resolved_src_rel = src_rel
             src = REPO_ROOT / src_rel
+            if not src.is_file() and src_rel in _SOURCE_RELOCATIONS:
+                resolved_src_rel = _SOURCE_RELOCATIONS[src_rel]
+                src = REPO_ROOT / resolved_src_rel
             if src.is_file():
                 upstream_text = _read_text_or_none(src)
-                upstream_label = src_rel
+                upstream_label = resolved_src_rel
                 upstream_hash = _sha256(src)
+                # Rewrite src so upgrade writes track the new path.
+                src_rel = resolved_src_rel
             else:
                 upstream_text = None
                 upstream_label = src_rel

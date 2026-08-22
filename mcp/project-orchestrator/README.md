@@ -48,7 +48,7 @@ Never auto-promotes, force-claims, or rewrites Preferred models.
 ## Install / run
 
 ```bash
-pip install "mcp[cli]" PyYAML
+pip install "mcp[cli]>=1.2.0,<3" PyYAML
 # From Anchor repo (scripts/ must be importable):
 python mcp/project-orchestrator/server.py \
   --project /path/to/myapp \
@@ -103,8 +103,8 @@ Imports `plan_select` and `plan_lease` from Anchor `scripts/` via `sys.path` (sa
 
 If the project uses Git: use **`dev`**, else **`develop`**. If neither exists,
 **create `dev` from `main` (else `master`)** and push `origin dev` when allowed.
-Then `feature/<slug>` from that line; **`/commit-prep` before any `git commit`**;
-**push the feature branch to origin only**; never auto-merge to dev/main.
+Then `feature/<slug>` from that line; **`/commit-prep` before any commit outside `.plans/`**;
+**push the feature branch to origin only**; never merge to dev/main. The coordinator is a non-interactive surface: `/work`'s operator-answered culmination merge does not exist here, and no tool may stand in for that answer.
 
 ## Non-goals (v1)
 

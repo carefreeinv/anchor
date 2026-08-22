@@ -61,10 +61,12 @@ merges, no force, unless explicitly asked. Shipping a version is `/tag` +
 
 ## Safety
 
-- **Never force-pushes** by default. `--force` / `--force-with-lease` is
-  accepted **only** when the user has explicitly asked for a force push in
-  this conversation — never inferred, never a default even for the user's
-  own feature branch. Warn about a force push to any branch other agents or
+- **Never force-pushes** by default, and **never a bare `--force` at all** —
+  only `--force-with-lease`, and only when the user has explicitly asked for a
+  force push in this conversation; never inferred, never a default even for the
+  user's own feature branch. The lease is the point: it refuses when the remote
+  moved since you last fetched, which is exactly the case a bare `--force`
+  overwrites silently. Warn about a force push to any branch other agents or
   humans might have already pulled.
 - **Never pushes to `main`/`master`/`dev`/`develop` silently** — a risk line
   and explicit confirmation are required every time, even for an operator who

@@ -9,6 +9,13 @@ work is an explicit --slug/--path claim you own; a stalled foreign lease is take
 over only with --recover. Live workers extend their lease with --heartbeat. Other
 agents ignore foreign in-progress plans. Not a daemon; not a central assigner.
 
+**Never merges, never asks.** Interactive `/work` may land a finished branch on the
+integration branch when the operator answers its end-of-run culmination question
+(see `.claude/commands/work.md` §6). That path requires a human answer in-session,
+so it does not exist here: a headless worker finishes to `.plans/review-needed/` and
+leaves integration to `/review`. Do not add a flag that stands in for the answer —
+an unattended merge is exactly what the gate is designed to prevent.
+
 Usage:
   python work_once.py --list
   python work_once.py --once --tier mid --agent-id worker-1
@@ -104,6 +111,9 @@ def _parse_endpoints_crude(text: str) -> list[dict]:
 
 
 def resolve_worker(args: argparse.Namespace) -> Worker:
+    from plan_select import worker_with_effort
+
+    effort = getattr(args, "effort", None)
     if args.endpoint:
         model, tier = _load_endpoint(
             Path(args.registry) if args.registry else None, args.endpoint
@@ -111,10 +121,12 @@ def resolve_worker(args: argparse.Namespace) -> Worker:
         name = args.model or model
         if args.tier:
             tier = normalize_fit_tier(args.tier)
-        return Worker(name=name, tier=tier)
-    name = args.model or args.agent_id or "work-once"
+        return worker_with_effort(name, tier, effort)
+    # Lease / worktree ids are not product names — never feed --agent-id into
+    # effective_fit_tier (``grok-effort-*`` would look like the Grok family).
+    name = args.model or "work-once"
     tier = normalize_fit_tier(args.tier or "mid")
-    return Worker(name=name, tier=tier)
+    return worker_with_effort(name, tier, effort)
 
 
 def run_orchestrate(plan_path: Path, extra: list[str]) -> int:
@@ -341,6 +353,11 @@ def main(argv: list[str] | None = None) -> int:
         help="worker fit tier: small|mid|reasoner|frontier (or registry tier name)",
     )
     ap.add_argument("--model", help="worker model name for Preferred-models name match")
+    ap.add_argument(
+        "--effort",
+        help="reasoning effort; for Grok family sets effective fit tier "
+             "(low→mid, medium/high→reasoner, xhigh→frontier; omit→mid)",
+    )
     ap.add_argument(
         "--endpoint",
         help="resolve model+tier from endpoints.yaml by endpoint name",

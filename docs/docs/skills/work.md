@@ -50,7 +50,8 @@ stateDiagram-v2
   [*] --> drafts: write plan
   drafts --> ready: human promote only
   ready --> in_progress: start work + lease
-  in_progress --> review_needed: Done when holds (required)
+  in_progress --> review_needed: Done when holds (default)
+  in_progress --> completed: operator merge answer + scoped gate
   review_needed --> completed: human /review Approve
   review_needed --> in_progress: human requested changes
   review_needed --> ready: Needs Work or release/return
@@ -66,9 +67,13 @@ stateDiagram-v2
   note right of ready
     bugs/ or features/
   end note
+  note right of completed
+    in-progress → completed only after
+    operator-authorized /work merge
+  end note
 ```
 
-Agents must **never** promote drafts except via [**`/draft --promote`**](/skills/draft), move work into `drafts/`, move **`in-progress/` → `completed/`** (always finish to `review-needed/`), move `review-needed/` → `completed/` except under human-confirmed [**`/review` Approve**](/skills/review), or touch another agent’s `in-progress/` plan. **Preserve basename** on every lane move (including `.local.md`); only a human may rename for privacy/tracking.
+Agents must **never** promote drafts except via [**`/draft --promote`**](/skills/draft), move work into `drafts/`, move `review-needed/` → `completed/` except under human-confirmed [**`/review` Approve**](/skills/review), self-certify `in-progress/` → `completed/` without the operator's in-session merge answer and a passing scoped-merge gate, or touch another agent’s `in-progress/` plan. **Preserve basename** on every lane move (including `.local.md`); only a human may rename for privacy/tracking.
 
 ## Priority (bare `/work`)
 
@@ -84,17 +89,19 @@ Ready lanes only — bare `/work` never scans `in-progress/` (resume is an expli
 
 Plan headers SHOULD include **Preferred models** (tiers `small | mid | reasoner | frontier` and/or concrete names). Bare `/work` skips plans that are a poor fit for the current model (overqualified or underqualified). Named slug/path or `--no-fit-check` overrides the skip; still state fit in one line when mismatched. See [model fitness](/model-fitness) and the [plan template](https://github.com/carefreeinv/anchor/blob/main/anchor/templates/plan.md).
 
-**Know yourself:** model name + catalog tier (name/table win — e.g. Grok 4.5 is **mid**), cost posture (reasoning effort / thinking toggle), and cheaper capacity on this host.
+**Know yourself:** model name + catalog tier — identity comes from the **harness/system-prompt** name (or an explicit `/model`/`--model` override), never a guess from training weights; e.g. if the harness says "You are Grok 4.6", you are **mid** and report Grok 4.6. Cost posture (reasoning effort / thinking toggle) and cheaper capacity on this host round out the check.
 
 **Cheaper capacity probe:** before hard-skipping overqualified work or burning a high-cost session on `small`/`mid` Preferred, check `scripts/endpoints.yaml` (and product-local / conventions models) for a lesser **reachable** executor. Registry map: `swarm`→`small`, `executor`|`executor-heavy`|`detached`→`mid`. If one fits, leave the plan unclaimed and print a dispatch line (`work_once.py --once --endpoint …`). If none are up, you are the available executor — do not permanent-refuse mid work.
 
-**Same-model effort right-size:** when no cheaper worker exists, emit a pasteable command for the plan’s Preferred tier (`small`/`mid` → low/medium effort; `reasoner`+ → high). Examples: Grok Build **`/effort low`** or CLI **`--effort low`**; Nemotron/Qwen3 thinking off for bulk execute. High effort on a mid-class model is a **cost dial**, not a tier promotion — good-fit mid plans stay eligible. True overqualified + no cheaper worker → suggest `/work --no-fit-check` and the effort command; underqualified still skips.
+**Same-model effort right-size:** when no cheaper worker exists, emit a pasteable command for the plan’s Preferred tier (`small`/`mid` → low/medium effort; `reasoner`+ → high). Examples: Grok Build **`/effort low`** or CLI **`--effort low`**; Nemotron/Qwen3 thinking off for bulk execute. **Grok family:** a reported dial sets **effective** Preferred tier (`low`→mid, `medium`/`high`→reasoner, `xhigh`→frontier on 4.6; 4.5 `xhigh` coerces to reasoner; unknown → mid). Mid-only Preferred needs **`low` or omitted** effort — **`medium` already promotes to reasoner**. Grok @ high is **overqualified for mid-only**; Grok @ xhigh is overqualified for mid **and** reasoner. **Non-Grok:** high effort stays a cost dial — good-fit mid plans stay eligible. True overqualified + no cheaper worker → suggest `/work --no-fit-check` and the effort command; underqualified still skips.
 
 **Let the script decide fit:** `python scripts/plan_fit.py --tier <yours> [--effort <current>]` prints one `take:`/`skip:` line per ready plan with the reason, plus an effort note when the dial is wrong for that plan's tier (`--endpoint` for fleet workers, `--json` for tooling). Read-only — claim with `plan_select.py --next --claim`. Its verdicts are the fit rules; a session that disagrees with it is wrong. See [scripts](/tooling/scripts).
 
 **Refusals are terse.** A poor-fit skip is a one-line verdict (`skip: features/<slug> — underqualified (Preferred: reasoner; you: Sonnet 5/mid)`) plus at most two `→` lines — the dispatch command or model to escalate to, and `/work --no-fit-check <slug>`. The capacity probe shows up only as the target in that `→` line; narrating what was checked and what was unreachable is noise. No restated Goal, no re-derived fit rules, and no `## Result` footer on a turn that did no work.
 
 **Do not under-rate yourself:** only the **tiers** a plan lists set the floor. Stronger product *names* alongside a tier you match are extra good-fit hits, not a raised bar; a names-only list you miss — or no **Preferred models** line at all — is **unknown** fit, which is eligible after a one-line fit note. Difficulty found *after* claiming is a per-step **Route to** / escalation-trigger decision, not grounds to refuse the claim. An unnecessary skip stalls the backlog exactly the way a wasteful frontier pickup burns credits.
+
+**Specialty axis (dual-axis fit):** after power/tier fit is OK, judge whether you are the right *kind* of model (profiles in [model fitness](/model-fitness): `coding-agent`, `terminal-agent`, `critic`, `planner`, `general-chat`, `multimodal`, `swarm-local`). Material specialty mismatch → entire first line `SUGGEST-REROUTE: <target or profile> — <reason>` and stop unless the operator insists (same insist contract as escalate). Example: swarm-local / general-chat leaving multi-file software for `coding-agent`. Good fit on **both** power and specialty → silence. Preferred models may list profile tags next to tiers; mechanical `plan_fit` / pickers still use tiers + names only — profile tags guide self-assessment. Optional `plan_fit.py --profile` adds a soft JSON `specialty_hint` and does not change eligibility.
 
 **Depends on:** comma-separated other plan slugs (or `none`). A dependency is **met** when that slug is under `completed/` (or git history shows it was under `completed/`) and is **not** still open in another lane. Coordinators/planners should inventory existing plans when drafting and fill this field. Executors must not start work with unmet dependencies.
 
@@ -110,13 +117,15 @@ flowchart LR
   exec["Execute<br/>/work steps"]
   park["Park<br/>ambiguous/ or blocked/"]
   release["Release<br/>back to bugs|features"]
-  review["Finish agent work<br/>review-needed/"]
-  finish["Archive<br/>completed/ (human /review Approve)"]
+  review["Finish agent work<br/>review-needed/ (default)"]
+  finish["Archive<br/>completed/ (/review Approve)"]
+  mergeDone["Archive<br/>completed/ (operator merge answer)"]
 
   write --> promote
   promote --> claim
   claim --> exec
   exec --> review
+  exec --> mergeDone
   exec --> park
   exec --> release
   review --> finish
@@ -125,7 +134,7 @@ flowchart LR
   release -.->|"another agent"| claim
 ```
 
-Mid-session stop: leave the file in **`in-progress/`** with a short `## Progress` note. Other agents must ignore it. Half-baked → `ambiguous/`; stuck → `blocked/` or return to ready. When Done when holds → **always** `review-needed/`; the human then runs [**`/review`**](/skills/review) (AI critic + survey) to **Approve** (merges `feature/<slug>` → dev, then → `completed/`), Needs Work → `bugs|features/`, or Skip. Agents never archive to `completed/` or merge from `/work`.
+Mid-session stop: leave the file in **`in-progress/`** with a short `## Progress` note. Other agents must ignore it. Half-baked → `ambiguous/`; stuck → `blocked/` or return to ready. When Done when holds → `review-needed/` by default; the human then runs [**`/review`**](/skills/review) (AI critic + survey) to **Approve** (merges `feature/<slug>` → dev, then → `completed/`), Needs Work → `bugs|features/`, or Skip. The one exception is the culmination question above: if the operator answers **merge to `dev` now** and the scoped gate passes, the plan goes straight to `completed/` with a `## Handoff` note. Agents never archive to `completed/` on their own judgment, and never merge unasked.
 
 **`## Progress` checklist (optional, template-recommended):** a `- [ ] Step N: <label>` bullet per Steps-table row plus a trailing `- [ ] Done when holds` bullet, populated by `/draft` after Steps/Done when exist. `/work` checks off a Step bullet once its Verify by passes and `Done when holds` at finish; "resume from the first incomplete step" means the first unchecked bullet. Advisory only, never enforced — most valuable for a human-assigned plan spanning multiple sessions.
 
@@ -144,7 +153,7 @@ Scaffold always creates the empty `.plans/` tree + README. Process contract also
 
 ### Chat / no shell
 
-When the user types `/work` without tool access: ask them to `ls .plans/bugs .plans/features .plans/in-progress` and paste output; pick by the same priority and model-fit rules; dictate `git mv` into `in-progress/` when starting and into **`review-needed/`** when Done when holds. Never dictate a promote move, an `in-progress/` → `completed/` move, or a `review-needed/` → `completed/` move (use [**`/review`**](/skills/review)). Never work a foreign in-progress path.
+When the user types `/work` without tool access: ask them to `ls .plans/bugs .plans/features .plans/in-progress` and paste output; pick by the same priority and model-fit rules; dictate `git mv` into `in-progress/` when starting and into **`review-needed/`** when Done when holds (default). After a green prep and feature-branch commit you may ask the culmination question; on **merge to `dev` now**, dictate the scoped-merge check and merge (see [How work reaches `dev`](/tooling/how-work-reaches-dev) and `platforms/chat/CHAT.md`) and only then dictate `in-progress/` → `completed/` with a `## Handoff` note. Never dictate a promote move, a self-certified `in-progress/` → `completed/` without that operator answer + gate, a merge to `main`/`master`, or a `review-needed/` → `completed/` move (use [**`/review`**](/skills/review)). Never work a foreign in-progress path.
 
 ### Headless / fleet
 
@@ -169,12 +178,43 @@ When the project uses Git and work needs a branch:
    ```
    Edit only under the printed `WORKTREE=` path.
 2. Integration branch: **`dev`**, else **`develop`**. **If neither exists, create `dev` from `main` (else `master`)** (the ensure helper does this).
-3. Feature branch `feature/<slug>` inside that worktree; **`/work` never merges**
-   to dev/main (human [**`/review` Approve**](/skills/review) merges feature → dev;
-   empty-queue **Promote** merges dev → main).
+3. Feature branch `feature/<slug>` inside that worktree. `/work` may land it on
+   **integration only**, and only through the culmination question below; it
+   **never** merges to `main`/`master` and never merges unasked (human
+   [**`/review` Approve**](/skills/review) also merges feature → dev; empty-queue
+   **Promote** merges dev → main).
 4. When plan work is complete: run **`/commit-prep`** (prep only). If gates are
    **green**, stage + commit on the feature branch; optional push of that branch
-   only — never merge from `/work`.
+   only. Record the commit SHA — the merge gate checks it.
+
+### The culmination question
+
+After a green prep and a successful feature-branch commit, an **interactive** `/work`
+asks once what should happen to the finished plan:
+
+| Answer | Outcome |
+|---|---|
+| **Review it now** (default) | Plan → `review-needed/`; run [`/review`](/skills/review) |
+| **Merge to `dev` now** | Scoped-merge gate runs; on pass the branch lands on `dev` and the plan goes to `completed/` with a `## Handoff` note recording the skipped review |
+| **Hold for testing** | Plan → `review-needed/` with a `## Handoff` hold note; branch and worktree left intact |
+
+The merge answer trades the AI critic for a narrower mandate — the operator watched
+the work happen — so a mechanical gate proves nothing else rode along:
+**provenance** (branch HEAD is the commit this run made), **clean tree**, **file
+scope** (every path named in range history `base..head`, not only the net
+two-dot diff), **mergeable**
+(fast-forward preferred), **target is integration only**, and the **human answer**
+itself. Any failure falls back to `/review` and says which check refused.
+
+```bash
+python scripts/merge_feature.py --root <worktree> --slug <slug> \
+  --touched touched.txt --expect-head <sha> --dry-run
+# 0 would merge · 3 scope violation · 4 precondition · 5 conflict · 2 git error
+```
+
+Unattended runs — `work_once.py`, fleet workers, the coordinator MCP — never ask and
+never merge; they finish to `review-needed/` exactly as before. `main` is reached
+only through `/review`'s promotion survey.
 
 See [Fleet workers — isolation](/tooling/fleet-workers#4-isolation-git-multi-writer).
 

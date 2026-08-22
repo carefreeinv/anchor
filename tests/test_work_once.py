@@ -244,6 +244,31 @@ def test_cli_subprocess_list(tmp_path):
     assert "bugs/b.md" in proc.stdout
 
 
+def test_resolve_worker_ignores_grok_shaped_agent_id():
+    """Lease ids like grok-effort-tier-46 must not promote via --effort."""
+    import argparse
+
+    args = argparse.Namespace(
+        endpoint=None,
+        model=None,
+        agent_id="grok-effort-tier-46",
+        tier="mid",
+        effort="high",
+        registry=None,
+    )
+    w = work_once.resolve_worker(args)
+    assert w.name == "work-once"
+    assert w.tier == "mid"
+
+    args.effort = "xhigh"
+    assert work_once.resolve_worker(args).tier == "mid"
+
+    args.model = "Grok 4.6"
+    args.effort = "high"
+    w = work_once.resolve_worker(args)
+    assert w.tier == "reasoner"
+
+
 def test_registry_tier_mapping():
     w = Worker("Qwen", "executor-heavy")
     assert w.tier == "mid"

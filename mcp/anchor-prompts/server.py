@@ -3,7 +3,7 @@
 agents) the Anchor scaffolding as callable tools, so lesser models don't have to remember
 the discipline: they can fetch it.
 
-Run: uv run server.py   (or: pip install "mcp[cli]" pyyaml requests && python server.py)
+Run: uv run server.py   (or: pip install "mcp[cli]>=1.2.0,<3" pyyaml requests && python server.py)
 Claude Code: claude mcp add anchor-prompts -- python /path/to/mcp/anchor-prompts/server.py
 """
 from __future__ import annotations
@@ -11,7 +11,15 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-from mcp.server.fastmcp import FastMCP
+# MCP SDK 2.0 renamed FastMCP to MCPServer and moved it out of
+# `mcp.server.fastmcp`, which no longer exists. The decorator surface this server
+# uses (tool/prompt/resource) and `run()` are identical across both majors, so a
+# two-name shim keeps one implementation working on either — rather than pinning
+# operators to a line that is already end-of-life, or breaking everyone still on v1.
+try:  # SDK 2.x
+    from mcp.server import MCPServer
+except ImportError:  # SDK 1.x
+    from mcp.server.fastmcp import FastMCP as MCPServer
 
 
 def _bootstrap_root() -> Path:
@@ -36,7 +44,7 @@ from anchor_client import project_root_from  # noqa: E402
 
 REPO = project_root_from(Path(__file__))
 
-mcp = FastMCP("anchor-prompts")
+mcp = MCPServer("anchor-prompts")
 
 
 def _read(rel: str) -> str:

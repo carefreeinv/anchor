@@ -18,6 +18,9 @@ model-agnostic. Supported quirk keys (set per endpoint in endpoints.yaml):
                                 request (top_p, top_k, ...); temperature wins
   max_context: <n>              serving context ceiling; completion tokens are
                                 capped to it
+  reasoning_effort: low|medium|high|xhigh
+                                Grok-family dial; sent as reasoning_effort on
+                                the OpenAI-compatible request body
 """
 from __future__ import annotations
 
@@ -167,6 +170,10 @@ class Endpoint:
         extra = self.quirks.get("sampling_thinking" if thinking else "sampling")
         if extra:
             payload = {**extra, **payload}
+        # Grok-family reasoning dial (4.5/4.6). xhigh is 4.6-only at the API.
+        reff = self.quirks.get("reasoning_effort")
+        if reff:
+            payload["reasoning_effort"] = str(reff).strip().lower()
 
         resp = _post_with_retry(
             f"{self.base_url.rstrip('/')}/chat/completions",

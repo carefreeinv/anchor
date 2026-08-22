@@ -1,8 +1,9 @@
-<!-- synced-from: platforms/local-models/README.md @ 1707d698a5887d70e283cd2a12c7b3990ac3a775 -->
 ---
 sidebar_position: 4
 sidebar_label: Local Models
 ---
+
+<!-- synced-from: platforms/local-models/README.md @ 2195a215e8fab0f1c986df3a0de9fc506c40f14d -->
 
 # Local Models
 
@@ -11,7 +12,7 @@ Per-model adaptations live in `platforms/local-models/`. General laws first — 
 1. One task spec per fresh context (small models degrade fastest with context length)
 2. Force the output format; reject-and-retry outputs missing the footer
 3. External verification always — smaller model = more confident fabrication
-4. Right-size the role: small models are good executors and decent critics, poor planners
+4. Right-size the role (**dual-axis fit**): small models are good executors and decent critics, poor planners. **Specialty:** R1 distills are `critic` — bulk multi-file implement → `SUGGEST-REROUTE: coding-agent — …`. Qwen3 ≤8B / host-local swarm is `swarm-local` thin glue — large multi-service software → `SUGGEST-REROUTE: coding-agent — leave for a software-dev optimized model`. Escalate on planning/architecture and the model file's weak list; re-route on the wrong *kind* of work; not on nerves. See [model fitness](/model-fitness).
 5. More parameters at Q4 beats fewer at Q8; a wrong chat template costs more than quantization
 6. Tracked plans follow the same `/work` contract when the harness has shell
 7. **Docs describe current state, not plans** — never write product docs from `.plans/` contents
@@ -28,7 +29,7 @@ Each model name links to its **official quick start** (download / serve / chat t
 | [**DeepSeek-R1 distills**](https://huggingface.co/collections/deepseek-ai/deepseek-r1) | NO system prompt; temp ~0.6 (greedy breaks it); no few-shot; strip `<think>` downstream | critic + hard single problems; never an executor | [DeepSeek-R1 collection](https://huggingface.co/collections/deepseek-ai/deepseek-r1) |
 | [**Llama 3.3 70B**](https://huggingface.co/meta-llama/Llama-3.3-70B-Instruct) | none — the boring reliable one | generalist executor+critic if you have ~40GB VRAM | [HF model card](https://huggingface.co/meta-llama/Llama-3.3-70B-Instruct) |
 
-The quirks are encoded in `.anchor/scripts/endpoints.yaml` (`quirks:` block) and applied automatically by `anchor_client.py`, so orchestration code never special-cases models. Hardware-specific serve helpers: [personal devices](/hardware/personal-devices/mac-mini), [H100](/hardware/h100).
+The quirks are encoded in `scripts/endpoints.yaml` (`quirks:` block) and applied automatically by `anchor_client.py`, so orchestration code never special-cases models. Hardware-specific serve helpers: [personal devices](/hardware/personal-devices/mac-mini), [H100](/hardware/h100).
 
 ## Tracked plans and coordination
 

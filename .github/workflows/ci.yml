@@ -4,6 +4,10 @@ on:
   push:
     branches: [main]
   pull_request:
+  schedule:
+    # Weekly, for the sdk-unpinned job below. Nothing else depends on this.
+    - cron: '17 6 * * 1'
+  workflow_dispatch:
 
 jobs:
   python:
@@ -48,3 +52,30 @@ jobs:
       - uses: actions/checkout@v4
       - name: Check docs pages are reviewed after their source changes
         run: python3 scripts/check_docs_sync.py
+
+  # The blocking `python` job installs a PINNED SDK so a new release cannot turn a
+  # push red with no commit of ours. That would also silence the detection this
+  # test exists for — so resolve the real supported range here instead, on a
+  # schedule, where a failure is a signal to go look rather than a blocked merge.
+  sdk-unpinned:
+    # NOT continue-on-error. That made the *run* conclude success, so a real
+    # failure sent no scheduled-workflow notification and showed green in the
+    # Actions list — visible only to someone who opened the run and expanded a
+    # job reporting success. The `if:` below is what keeps this from ever
+    # blocking a push or a merge; it never runs on a PR. With the run allowed to
+    # fail, a genuinely broken SDK range actually reaches the operator.
+    # Note: GitHub disables `schedule` triggers after 60 days of repo inactivity.
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install with the SDK range the servers actually declare
+        run: |
+          pip install -r requirements-dev.txt
+          pip install -U "mcp[cli]>=1.2.0,<3"
+          python -c "import mcp; print('resolved mcp', mcp.__version__ if hasattr(mcp,'__version__') else '(unknown)')"
+      - name: Import every server against that SDK
+        run: pytest -q tests/test_mcp_servers_import.py

@@ -77,15 +77,15 @@ def test_every_tier_has_an_effort_band():
 
 # --- the invariant that makes effort safe -----------------------------------
 
-def test_effort_never_changes_eligibility(tmp_path):
-    """A cost dial is not a tier promotion (mythos-core rule 11).
+def test_effort_never_changes_eligibility_for_non_grok(tmp_path):
+    """Non-Grok products: effort is a cost dial, not a tier promotion.
 
-    Cranking a mid worker to xhigh must not make reasoner-only plans eligible,
-    and dropping a reasoner to none must not disqualify it from its own work.
+    Cranking a mid worker named Claude to xhigh must not make reasoner-only
+    plans eligible; dropping a reasoner to none must not disqualify it.
     """
     plans = _tree(tmp_path)
     _plan(plans / "features" / "hard.md", preferred="reasoner")
-    mid, reasoner = Worker("m", "mid"), Worker("r", "reasoner")
+    mid, reasoner = Worker("Claude Sonnet 5", "mid"), Worker("Claude Opus", "reasoner")
 
     for effort in (None, "none", "low", "high", "xhigh"):
         take, skip = plan_fit.triage(inventory_ready(plans, mid), mid, effort)
@@ -93,6 +93,48 @@ def test_effort_never_changes_eligibility(tmp_path):
 
         take, _ = plan_fit.triage(inventory_ready(plans, reasoner), reasoner, effort)
         assert len(take) == 1, f"reasoner refused its own work at {effort}"
+
+
+def test_grok_effort_sets_effective_tier_eligibility(tmp_path):
+    """Grok family: reported effort changes Preferred eligibility."""
+    from plan_select import worker_with_effort
+
+    plans = _tree(tmp_path)
+    _plan(plans / "features" / "hard.md", preferred="reasoner")
+    _plan(plans / "features" / "mid.md", preferred="mid")
+    _plan(plans / "features" / "front.md", preferred="frontier")
+
+    low = worker_with_effort("Grok 4.6", "mid", "low")
+    take, skip = plan_fit.triage(inventory_ready(plans, low), low, "low")
+    assert {r.slug for r, _ in take} == {"mid"}
+    assert {r.slug for r in skip} == {"hard", "front"}
+
+    # medium/high → effective reasoner: good for reasoner Preferred; overqualified for mid-only
+    for eff in ("medium", "high"):
+        w = worker_with_effort("Grok 4.6", "mid", eff)
+        assert w.tier == "reasoner"
+        take, skip = plan_fit.triage(inventory_ready(plans, w), w, eff)
+        assert {r.slug for r, _ in take} == {"hard"}, eff
+        assert "mid" in {r.slug for r in skip}, eff
+
+    # xhigh → effective frontier: only frontier Preferred
+    xh = worker_with_effort("Grok 4.6", "mid", "xhigh")
+    assert xh.tier == "frontier"
+    take, skip = plan_fit.triage(inventory_ready(plans, xh), xh, "xhigh")
+    assert {r.slug for r, _ in take} == {"front"}
+    assert {r.slug for r in skip} == {"hard", "mid"}
+
+    unknown = worker_with_effort("Grok 4.6", "mid", None)
+    take, skip = plan_fit.triage(inventory_ready(plans, unknown), unknown, None)
+    assert {r.slug for r, _ in take} == {"mid"}
+    assert "hard" in {r.slug for r in skip}
+
+    # 4.5 xhigh ≡ high → reasoner (not frontier)
+    g45 = worker_with_effort("Grok 4.5", "mid", "xhigh")
+    assert g45.tier == "reasoner"
+    take, skip = plan_fit.triage(inventory_ready(plans, g45), g45, "xhigh")
+    assert {r.slug for r, _ in take} == {"hard"}
+    assert "front" in {r.slug for r in skip}
 
 
 # --- triage / CLI -----------------------------------------------------------
@@ -163,6 +205,36 @@ def test_cli_exit_codes_and_json(tmp_path, capsys):
     assert payload["next"] == "features/hard.md"
     assert payload["eligible"][0]["effort"]["verdict"] == "underpowered"
     assert payload["worker"]["tier"] == "reasoner"
+
+
+def test_profile_hint_does_not_change_eligibility(tmp_path, capsys):
+    """--profile is a soft JSON hint; power fit still decides take/skip."""
+    plans = _tree(tmp_path)
+    _plan(plans / "features" / "tagged.md", preferred="mid, coding-agent")
+    root = str(tmp_path)
+
+    assert plan_fit.main(
+        ["--root", root, "--tier", "mid", "--profile", "critic", "--json"]
+    ) == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["worker"]["profile"] == "critic"
+    hint = payload["eligible"][0]["specialty_hint"]
+    assert hint["match"] is False
+    assert hint["worker_profile"] == "critic"
+    assert "coding-agent" in hint["plan_profiles"]
+
+    assert plan_fit.main(
+        ["--root", root, "--tier", "mid", "--profile", "coding-agent", "--json"]
+    ) == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["eligible"][0]["specialty_hint"]["match"] is True
+
+    assert plan_fit.main(
+        ["--root", root, "--tier", "mid", "--profile", "wizard", "--json"]
+    ) == 0
+    payload = json.loads(capsys.readouterr().out)
+    note = payload["eligible"][0]["specialty_hint"]["note"]
+    assert "unknown" in note
 
 
 def test_cli_requires_an_identity_and_rejects_bad_effort(tmp_path, capsys):

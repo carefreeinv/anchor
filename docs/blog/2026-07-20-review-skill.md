@@ -50,6 +50,6 @@ complete from `review-needed/` outside a confirmed Approve.
 - Docs: [Skills → `/review`](/skills/review)
 - Scaffolded into projects with the other dual-use skills
 
-Pair with the earlier [review-needed lane](/blog/2026-07-12-review-needed-lane)
+Pair with the earlier [review-needed lane](/blog/2026/07/12/review-needed-lane/)
 post: lane first, skill second — “done” is no longer the same event as
 “completed.”
