@@ -1096,3 +1096,67 @@ def test_untracked_guard_survives_status_showUntrackedFiles_no(repo, tmp_path):
     assert code == EXIT_PRECONDITION, "the guard was blinded by a git config"
     assert read_staged_state(repo) is None
     assert ".env.local" not in _git(repo, "ls-tree", "-r", "--name-only", "dev")
+
+
+# -- "Already up to date" is not a merge (F-D) --------------------------------
+#
+# `ff` asks whether the TARGET can be moved up to the branch. A branch merged
+# earlier, with the target since advanced, answers no — so the run took the
+# non-ff path, `merge --ff-only` replied "Already up to date" and exited 0, and
+# `land` handed back the target's unchanged head. Indistinguishable from a merge.
+
+
+def test_gate_reports_already_contained_rather_than_a_merge_commit():
+    assert "already contained" in _gate(already_contained=True, ff_possible=False).message
+    assert "no-ff" not in _gate(already_contained=True, ff_possible=False).message
+
+
+def _already_merged(repo: Path) -> str:
+    """Merge the branch into dev, then advance dev past it."""
+    feat = _head(repo)
+    _git(repo, "checkout", "dev")
+    _git(repo, "merge", "--no-ff", "feature/my-plan", "-m", "earlier merge")
+    _commit(repo, "docs/later.md", "later\n", "dev advances")
+    _git(repo, "checkout", "feature/my-plan")
+    return feat
+
+
+def test_already_contained_branch_does_not_report_a_merge(repo, tmp_path, capsys):
+    touched = tmp_path / "touched.txt"
+    touched.write_text("app/\n", encoding="utf-8")
+    feat = _already_merged(repo)
+    dev_before = _git(repo, "rev-parse", "dev")
+
+    code = main(["--root", str(repo), "--slug", "my-plan", "--touched", str(touched),
+                 "--expect-head", feat, "--target", "dev"])
+    out = capsys.readouterr().out
+
+    assert code == EXIT_OK
+    assert _git(repo, "rev-parse", "dev") == dev_before, "dev moved"
+    assert "already contained" in out
+    assert "merged; dev is now" not in out, (
+        "reported a merge on a run that moved nothing — the defect EXIT_STAGED "
+        "exists to prevent, in its other form"
+    )
+
+
+def test_already_contained_returns_its_own_sentinel(repo):
+    """A programmatic caller must be able to tell this from a real merge; both
+    otherwise hand back the target's head."""
+    import merge_feature as mf
+
+    _already_merged(repo)
+    assert mf.land(repo, "feature/my-plan", "dev") == mf.ALREADY_CONTAINED
+
+
+def test_already_contained_leaves_the_tree_alone(repo, tmp_path):
+    """Nothing to do means nothing to disturb: no checkout, no probe, no state."""
+    _already_merged(repo)
+    before = _git(repo, "rev-parse", "--abbrev-ref", "HEAD")
+
+    import merge_feature as mf
+    mf.land(repo, "feature/my-plan", "dev")
+
+    assert _git(repo, "rev-parse", "--abbrev-ref", "HEAD") == before
+    assert read_staged_state(repo) is None
+    assert not (repo / ".git" / "MERGE_HEAD").exists()

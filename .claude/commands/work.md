@@ -513,6 +513,13 @@ a reset against a tree the record no longer describes destroys unrelated work
 rather than undoing a merge. The checkout stays mid-merge until one of them runs,
 so never end a session on an exit `6` without saying so.
 
+A run can also report **already contained**: every commit on the branch is
+already on the integration branch (it was merged earlier and the branch has
+since been left behind). That exits `0` like a successful merge, because the
+work *is* integrated — but it says so explicitly rather than printing a SHA
+that implies this run moved something, and it touches nothing.
+
+
 The helper also refuses when `--root` already has a merge in progress or an
 unfinished staged record, or when it holds uncommitted/untracked files. That
 last one applies to **any non-fast-forward run, `--dry-run` included**: the

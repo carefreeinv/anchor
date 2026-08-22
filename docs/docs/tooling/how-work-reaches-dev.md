@@ -74,6 +74,13 @@ leaves the integration branch untouched. Leaving a run at exit `6` without doing
 either leaves the checkout mid-merge, so treat it as work in progress, not a
 result.
 
+A run can also report **already contained**: every commit on the branch is
+already on the integration branch (it was merged earlier and the branch has
+since been left behind). That exits `0` like a successful merge, because the
+work *is* integrated — but it says so explicitly rather than printing a SHA
+that implies this run moved something, and it touches nothing.
+
+
 Both finishers check that the merge they recorded is still the merge in front of
 them, and refuse rather than guess — `MERGE_HEAD` existing is not enough, so it is
 compared against the exact commit that was merged and a *different* staged merge is

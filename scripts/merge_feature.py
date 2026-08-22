@@ -104,6 +104,7 @@ def evaluate_gate(
     touched: tuple[str, ...],
     conflicts: tuple[str, ...] = (),
     ff_possible: bool = True,
+    already_contained: bool = False,
     target_worktree: str | None = None,
 ) -> MergeVerdict:
     """Pure gate: given the facts, may this branch land on ``target``?
@@ -203,7 +204,10 @@ def evaluate_gate(
             message=f"refuse: merging {branch} into {target} conflicts.",
             offending=conflicts,
         )
-    how = "fast-forward" if ff_possible else "merge commit (no-ff)"
+    if already_contained:
+        how = "already contained; nothing to merge"
+    else:
+        how = "fast-forward" if ff_possible else "merge commit (no-ff)"
     return MergeVerdict(
         ok=True, code=EXIT_OK, reason="ok",
         message=f"gate passed: {branch} → {target} ({how}), plan '{slug}'.",
@@ -399,6 +403,10 @@ def probe_conflicts(root: Path, target: str, branch: str) -> tuple[str, ...]:
 
 
 STAGED = "STAGED"
+# The branch is already contained in the target: git's "Already up to date".
+# Distinct from a real merge, because `land` returns the target's head either way
+# and a caller cannot otherwise tell that this run moved nothing.
+ALREADY_CONTAINED = "ALREADY_CONTAINED"
 
 
 def land(root: Path, branch: str, target: str, *, title: str = "") -> str:
@@ -419,6 +427,12 @@ def land(root: Path, branch: str, target: str, *, title: str = "") -> str:
     The target branch is left checked out when a merge is staged, because an
     unfinished merge cannot survive a checkout. Never pushes.
     """
+    if is_ancestor(root, branch, target):
+        # `merge --ff-only` would answer "Already up to date" and exit 0, and
+        # `land` would hand back the target's unchanged head — indistinguishable
+        # from a merge that moved it. Checked before the checkout: there is
+        # nothing to do, so there is no reason to disturb the tree.
+        return ALREADY_CONTAINED
     original = _restore_point(root)
     restore = True
     try:
@@ -781,6 +795,11 @@ def run(root: Path, slug: str, touched: tuple[str, ...], *, base: str | None = N
             ), None
     merge_from = base or natural_base
     ff = is_ancestor(root, resolved, branch)
+    # Distinct from `ff`: that asks whether the target can be moved up to the
+    # branch, this asks whether the branch is already in the target. A branch
+    # merged earlier, with the target since advanced, is neither ff-able nor
+    # in need of merging.
+    already = is_ancestor(root, branch, resolved)
     # Clean-tree means the tree that did the work, which on the topology this tool
     # recommends (--root = the integration checkout) is a different directory.
     work_root = worktree_for_branch(root, branch) or str(toplevel(root))
@@ -804,6 +823,7 @@ def run(root: Path, slug: str, touched: tuple[str, ...], *, base: str | None = N
     verdict = evaluate_gate(
         slug=slug, branch=branch, target=resolved, head=head, expect_head=expect_head,
         dirty=dirty, changed=changed, touched=touched, ff_possible=ff,
+        already_contained=already,
         target_worktree=blocking_worktree, work_root=work_root,
     )
     if not verdict.ok:
@@ -816,10 +836,11 @@ def run(root: Path, slug: str, touched: tuple[str, ...], *, base: str | None = N
     if root_verdict is not None:
         return root_verdict, None
 
-    conflicts = () if ff else probe_conflicts(root, resolved, branch)
+    conflicts = () if (ff or already) else probe_conflicts(root, resolved, branch)
     verdict = evaluate_gate(
         slug=slug, branch=branch, target=resolved, head=head, expect_head=expect_head,
         dirty=dirty, changed=changed, touched=touched, conflicts=conflicts, ff_possible=ff,
+        already_contained=already,
         target_worktree=blocking_worktree, work_root=work_root,
     )
     if not verdict.ok or dry_run:
@@ -949,6 +970,15 @@ def main(argv: list[str] | None = None) -> int:
     print(verdict.report())
     if verdict.ok and args.dry_run:
         print("dry run: nothing merged.")
+    elif verdict.ok and new_head == ALREADY_CONTAINED:
+        # NOT "merged". Every commit on the branch is already on the target, so
+        # the work is integrated — but this run moved nothing, and saying
+        # "dev is now <sha>" would imply it did.
+        print(
+            f"already contained: every commit on {args.branch or 'feature/' + str(args.slug)} "
+            f"is already on {landed_on}; nothing to merge and {landed_on} is unchanged "
+            f"at {head_sha(Path(args.root), landed_on)[:12]}."
+        )
     elif verdict.ok and new_head == STAGED:
         # NOT "merged" and NOT exit 0. The merge is staged and uncommitted; a
         # caller that reads this as success reports a merge that did not happen.
