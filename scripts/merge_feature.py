@@ -541,7 +541,8 @@ def clear_staged_state(root: Path) -> None:
     _state_path(root).unlink(missing_ok=True)
 
 
-def check_root_ready(root: Path, target: str, *, ff: bool) -> MergeVerdict | None:
+def check_root_ready(root: Path, target: str, *,
+                     touches_nothing: bool) -> MergeVerdict | None:
     """Refuse when ``--root`` is not a fit place to stage a merge. None means OK.
 
     Separate from :func:`evaluate_gate`'s ``dirty`` check, which follows the
@@ -571,18 +572,21 @@ def check_root_ready(root: Path, target: str, *, ff: bool) -> MergeVerdict | Non
     # `git add -A`, which exists to capture /commit-prep's own output and cannot
     # tell that apart from whatever was already lying around.
     #
-    # `ff` here means "this run touches nothing in --root" — true of a
-    # fast-forward and of an already-contained branch alike: neither creates a
-    # commit, reaches commit_staged, or runs the conflict probe. Refusing either
-    # over a scratch file would break "the fast-forward path is unchanged" and
-    # would block the no-op case for no gain.
+    # ``touches_nothing`` is true of a fast-forward and of an already-contained
+    # branch alike: neither creates a commit, reaches commit_staged, or runs the
+    # conflict probe. Refusing either over a scratch file would break "the
+    # fast-forward path is unchanged" and would block the no-op case for no gain.
     #
-    # Everything else needs a clean tree, **including --dry-run**. A non-ff run
+    # It is named for the predicate rather than for `ff`, which is only one of the
+    # two conditions satisfying it — a parameter whose name has drifted from its
+    # meaning is how several defects in this file started.
+    #
+    # Everything else needs a clean tree, **including --dry-run**. Such a run
     # probes with a real `git merge` and ends that probe with `git reset --hard`,
     # which does not know it is discarding work the operator had here first — so
     # "merge nothing" still costs them their uncommitted edits. Keying this on
-    # `dry_run` rather than on `ff` is precisely that bug.
-    if ff:
+    # `dry_run` rather than on what the run actually touches is precisely that bug.
+    if touches_nothing:
         return None
     stray = dirty_paths(root)
     if stray:
@@ -846,11 +850,11 @@ def run(root: Path, slug: str, touched: tuple[str, ...], *, base: str | None = N
     # Runs after the gate above so the more specific refusals (provenance, scope,
     # the feature worktree being dirty) keep their reasons, and before the probe,
     # which is the thing that would do damage.
-    # `ff or already`: both are paths that create no commit and run no probe, so
-    # neither can sweep or reset anything in --root. Gating on `ff` alone refused
-    # an already-contained run over an unrelated scratch file, with a message
-    # whose every clause was false for that path.
-    root_verdict = check_root_ready(root, resolved, ff=ff or already)
+    # Both are paths that create no commit and run no probe, so neither can sweep
+    # or reset anything in --root. Gating on `ff` alone refused an
+    # already-contained run over an unrelated scratch file, with a message whose
+    # every clause was false for that path.
+    root_verdict = check_root_ready(root, resolved, touches_nothing=ff or already)
     if root_verdict is not None:
         return root_verdict, None
 

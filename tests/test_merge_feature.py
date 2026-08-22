@@ -1057,7 +1057,7 @@ def test_root_mid_merge_is_refused_for_being_mid_merge_not_merely_dirty(repo, tm
     _split_topology(repo, tmp_path)
     _stage_a_foreign_merge(repo)
 
-    verdict = mf.check_root_ready(repo, "dev", ff=False)
+    verdict = mf.check_root_ready(repo, "dev", touches_nothing=False)
     assert verdict is not None and verdict.reason == "root-mid-merge"
 
 
@@ -1070,7 +1070,7 @@ def test_root_with_an_unfinished_record_is_refused(repo, tmp_path):
     assert mf.land(repo, "feature/my-plan", "dev") == mf.STAGED
     _git(repo, "merge", "--abort")          # record survives, tree is clean again
 
-    verdict = mf.check_root_ready(repo, "dev", ff=False)
+    verdict = mf.check_root_ready(repo, "dev", touches_nothing=False)
     assert verdict is not None and verdict.reason == "root-has-staged-state"
 
 

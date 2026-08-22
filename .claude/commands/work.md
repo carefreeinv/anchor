@@ -521,11 +521,12 @@ that implies this run moved something, and it touches nothing.
 
 The helper also refuses when `--root` already has a merge in progress or an
 unfinished staged record, or when it holds uncommitted/untracked files. That
-last one applies to **any non-fast-forward run, `--dry-run` included**: the
+last one applies to **any run that actually merges, `--dry-run` included**: the
 gate probes for conflicts with a real `git merge` and ends the probe with
 `git reset --hard`, which cannot tell your uncommitted edits from merge
 residue — so "merge nothing" would still cost you them. Point `--root` at a
-*clean* integration checkout. A fast-forward probes nothing and is unaffected.
+*clean* integration checkout. The two runs that touch nothing are exempt: a
+fast-forward, and an already-contained branch — neither probes nor commits.
 
 The helper never pushes, never force-updates, never deletes a branch, and refuses
 mainline targets. **Do not** pass the operator's
