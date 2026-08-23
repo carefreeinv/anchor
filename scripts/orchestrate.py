@@ -421,16 +421,25 @@ def execute_task(task: str, plan: str, fleet: Fleet, verify_cmd: str | None,
         # a persistent ledger check, not an in-memory attempt count, so a resumed
         # invocation still refuses a third dispatch to a model that already failed
         # this task twice — the model's own attempt-counting is a backstop, not this.
+        #
+        # This re-checks should_stop after EVERY hop, not just once against the base
+        # tier: fleet.pick("executor") always returns the same base-tier endpoint, so
+        # checking only that endpoint would forget an escalated tier's own failures on
+        # the next invocation and re-escalate the same one hop forever, never reaching
+        # a tier that is itself exhausted. The ladder is strictly monotone
+        # (target_tier is always one rung higher), so this always terminates.
         if metrics_ledger is not None:
             ledger_rows = load_outcomes(metrics_ledger)
-            decision = should_stop(tid, endpoint_model_name(ep), ledger_rows,
-                                   tier=endpoint_fit_tier(ep), tier_ladder=fit_tiers)
-            if decision.action == "human-report":
-                report = render_human_report(task, decision.evidence)
-                print(f"[stop] human-report: {decision.reason}", file=sys.stderr)
-                return {"task": task, "status": "human-report", "attempts": attempt,
-                        "message": decision.reason, "report": report}
-            if decision.action == "escalate-tier":
+            while True:
+                decision = should_stop(tid, endpoint_model_name(ep), ledger_rows,
+                                       tier=endpoint_fit_tier(ep), tier_ladder=fit_tiers)
+                if decision.action == "continue":
+                    break
+                if decision.action == "human-report":
+                    report = render_human_report(task, decision.evidence)
+                    print(f"[stop] human-report: {decision.reason}", file=sys.stderr)
+                    return {"task": task, "status": "human-report", "attempts": attempt,
+                            "message": decision.reason, "report": report}
                 escalated = pick_escalation_endpoint(fleet, decision.target_tier)
                 if escalated is None:
                     print(f"[stop] escalate-tier to '{decision.target_tier}' requested but no "

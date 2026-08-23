@@ -179,3 +179,28 @@ def test_two_failures_at_top_available_tier_produces_a_human_report(tmp_path: Pa
     assert "## Tried" in result["report"]
     assert "## Observed" in result["report"]
     assert "hard task" in result["report"]
+
+
+def test_an_already_exhausted_escalated_tier_reaches_human_report_not_a_third_hop(
+    tmp_path: Path,
+):
+    """Regression: fleet.pick("executor") always returns the *base* (mid) endpoint,
+    so should_stop must be re-checked against each hop, not just the base tier —
+    otherwise a reasoner tier that is itself exhausted would be re-escalated to
+    forever from a base tier permanently stuck at 2 failures, never reaching
+    human-report and never refusing a further dispatch to reasoner."""
+    ledger = tmp_path / "outcomes.jsonl"
+    mid_ep = RecordingTieredEndpoint("mid-ep", "fake-model-mid", "mid", [])
+    reasoner_ep = RecordingTieredEndpoint("reasoner-ep", "fake-model-reasoner", "reasoner", [])
+    fleet = TieredFleet([mid_ep, reasoner_ep], mid_ep)  # pick("executor") always → mid_ep
+
+    task = "chronically hard task"
+    _seed_two_failures(ledger, task=task, model="fake-model-mid", tier="mid")
+    _seed_two_failures(ledger, task=task, model="fake-model-reasoner", tier="reasoner")
+
+    result = execute_task(task, "plan", fleet, verify_cmd=None, hold_on_fail=False,
+                          metrics_ledger=ledger)
+
+    assert mid_ep.calls == 0
+    assert reasoner_ep.calls == 0  # already exhausted too — never re-dispatched
+    assert result["status"] == "human-report"
