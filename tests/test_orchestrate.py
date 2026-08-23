@@ -775,8 +775,8 @@ def test_human_report_is_written_to_disk_for_top_tier_exhaustion(git_repo, monke
     import json
     from pathlib import Path
 
-    from fleet_metrics import record_task_outcome
     import orchestrate
+    from fleet_metrics import record_task_outcome
 
     task_text = split_tasks(PLAN_TEXT)[0]
     ledger = git_repo / "var" / "fleet-metrics" / "outcomes.jsonl"

@@ -37,7 +37,10 @@ from pathlib import Path
 
 from anchor_client import Endpoint, Fleet, has_required_footer, load_prompt
 from fleet_metrics import (
+    DEFAULT_FOOTER_MAX_LINES,
     FIT_TIER_LADDER,
+    FOOTER_TRUNCATION_MARKER,
+    extract_footer,
     load_outcomes,
     normalize_fit_tier,
     record_task_outcome,
@@ -271,6 +274,49 @@ def escalation_directive(decision) -> str:
     )
 
 
+# --- executor -> orchestrator footer contract (mythos-core rule 8) -----------
+# Only the structured footer crosses back to the coordinator's context; the
+# full raw transcript is archived to disk for post-mortem instead of being
+# discarded or (worse) relayed whole into the next context.
+
+TRANSCRIPT_DIR_REL = Path("var") / "task-transcripts"
+
+
+def archive_transcript(root: Path, *, task_id: str, attempt: int, ep_name: str,
+                       out: str) -> Path:
+    """Append this attempt's raw output to the task's transcript log.
+
+    One file per task (by hash), appended across attempts/respawns so a
+    post-mortem sees the full history rather than only the last try.
+    """
+    out_dir = Path(root) / TRANSCRIPT_DIR_REL
+    out_dir.mkdir(parents=True, exist_ok=True)
+    path = out_dir / f"{task_id.split(':')[-1]}.log"
+    header = (
+        f"--- attempt {attempt} | endpoint={ep_name} | "
+        f"{time.strftime('%Y-%m-%dT%H:%M:%S')} ---\n"
+    )
+    with path.open("a", encoding="utf-8") as fh:
+        fh.write(header)
+        fh.write(out or "")
+        fh.write("\n\n")
+    return path
+
+
+def relay_text(out: str, *, max_lines: int = DEFAULT_FOOTER_MAX_LINES) -> str:
+    """What the coordinator is allowed to see: the extracted footer when the
+    output has all three required sections, else the raw output capped at the
+    same line budget — never the unbounded rambling either way.
+    """
+    extraction = extract_footer(out, max_lines=max_lines)
+    if extraction.ok:
+        return extraction.footer_text
+    lines = (out or "").splitlines()
+    if len(lines) > max_lines:
+        return "\n".join(lines[:max_lines]) + f"\n{FOOTER_TRUNCATION_MARKER}\n"
+    return out or ""
+
+
 def log_event(events: list[dict], event: str, **details) -> dict:
     """Role transitions and violations are explicit, logged orchestrator events."""
     rec = {"time": time.strftime("%Y-%m-%dT%H:%M:%S"), "event": event, **details}
@@ -404,7 +450,8 @@ def execute_task(task: str, plan: str, fleet: Fleet, verify_cmd: str | None,
                  scope: ScopeConfig | None = None,
                  metrics_ledger: Path | None = None,
                  task_slug: str | None = None,
-                 outcome_sink: dict | None = None) -> dict:
+                 outcome_sink: dict | None = None,
+                 transcript_root: Path | None = None) -> dict:
     system = load_prompt("anchor/system-prompts/mythos-core.md")
     history: list[str] = []
     last_ep = None
@@ -484,6 +531,13 @@ def execute_task(task: str, plan: str, fleet: Fleet, verify_cmd: str | None,
                        {"role": "user", "content": prompt}], max_tokens=8192)
         last_out = out
 
+        # Full raw transcript archived for post-mortem before anything crosses
+        # back to the coordinator — the coordinator itself only ever sees
+        # relay_text(out) (the extracted footer, or a capped fallback) below.
+        if transcript_root is not None:
+            archive_transcript(transcript_root, task_id=tid, attempt=attempt,
+                               ep_name=ep.name, out=out)
+
         # A handoff is a planned outcome, not a malformed result — check for it
         # before the footer gate, which a handoff deliberately does not satisfy.
         # A handoff that is not dispatchable (vague Remaining, no Verify by) gets
@@ -502,7 +556,7 @@ def execute_task(task: str, plan: str, fleet: Fleet, verify_cmd: str | None,
             print(f"[handoff] {ep.name}: {len(parsed.done)} done, "
                   f"{len(parsed.remaining)} remaining", file=sys.stderr)
             return {"task": task, "status": "handoff", "attempts": attempt,
-                    "handoff": parsed, "output": out}
+                    "handoff": parsed, "output": relay_text(out)}
 
         # Fit check (mythos-core rule 11): dual-axis — power escalate or specialty
         # re-route. Honor a bare first line *or* a token after rule 13's preflight
@@ -515,7 +569,7 @@ def execute_task(task: str, plan: str, fleet: Fleet, verify_cmd: str | None,
                 print(f"[fit] {ep.name} suggests {kind}: {suggestion}", file=sys.stderr)
                 status = "hold" if hold_on_fail else "escalate"
                 _ledger_outcome(
-                    task=task, out=out, ep=ep, verify_exit=None,
+                    task=task, out=relay_text(out), ep=ep, verify_exit=None,
                     scope_verdict=None, metrics_ledger=metrics_ledger, sink=outcome_sink,
                     task_slug=task_slug,
                 )
@@ -547,7 +601,7 @@ def execute_task(task: str, plan: str, fleet: Fleet, verify_cmd: str | None,
                 status = "hold" if hold_on_fail else "escalate"
                 history.append(f"SCOPE: could not determine worktree changes: {exc}")
                 _ledger_outcome(
-                    task=task, out=out, ep=ep, verify_exit=None,
+                    task=task, out=relay_text(out), ep=ep, verify_exit=None,
                     scope_verdict="error", metrics_ledger=metrics_ledger, sink=outcome_sink,
                     task_slug=task_slug,
                 )
@@ -557,14 +611,14 @@ def execute_task(task: str, plan: str, fleet: Fleet, verify_cmd: str | None,
             if not verdict.ok:
                 print(f"[scope] rejected: {', '.join(verdict.offending)}", file=sys.stderr)
                 _ledger_outcome(
-                    task=task, out=out, ep=ep, verify_exit=None,
+                    task=task, out=relay_text(out), ep=ep, verify_exit=None,
                     scope_verdict="fail", metrics_ledger=metrics_ledger, sink=outcome_sink,
                     task_slug=task_slug,
                 )
                 recorded = True
                 return {"task": task, "status": "failed-scope", "attempts": attempt,
                         "offending": list(verdict.offending), "message": verdict.message,
-                        "output": out}
+                        "output": relay_text(out)}
             scope_label = "pass"
 
         if verify_cmd:
@@ -575,34 +629,34 @@ def execute_task(task: str, plan: str, fleet: Fleet, verify_cmd: str | None,
                 # keep trying so we do not double-count one task as many outcomes.
                 if attempt >= MAX_ATTEMPTS:
                     _ledger_outcome(
-                        task=task, out=out, ep=ep, verify_exit=1,
+                        task=task, out=relay_text(out), ep=ep, verify_exit=1,
                         scope_verdict=scope_label, metrics_ledger=metrics_ledger, sink=outcome_sink,
                         task_slug=task_slug,
                     )
                     recorded = True
                 continue
             _ledger_outcome(
-                task=task, out=out, ep=ep, verify_exit=0,
+                task=task, out=relay_text(out), ep=ep, verify_exit=0,
                 scope_verdict=scope_label, metrics_ledger=metrics_ledger, sink=outcome_sink,
                 task_slug=task_slug,
             )
             recorded = True
-            return {"task": task, "status": "ok", "attempts": attempt, "output": out}
+            return {"task": task, "status": "ok", "attempts": attempt, "output": relay_text(out)}
 
         # No verify command: still record claim vs unknown actual (exit None).
         _ledger_outcome(
-            task=task, out=out, ep=ep, verify_exit=None,
+            task=task, out=relay_text(out), ep=ep, verify_exit=None,
             scope_verdict=scope_label, metrics_ledger=metrics_ledger, sink=outcome_sink,
             task_slug=task_slug,
         )
         recorded = True
-        return {"task": task, "status": "ok", "attempts": attempt, "output": out}
+        return {"task": task, "status": "ok", "attempts": attempt, "output": relay_text(out)}
 
     status = "hold" if hold_on_fail else "escalate"
     # Exhausted retries (format failures, etc.) — record once if not already.
     if not recorded and last_ep is not None:
         _ledger_outcome(
-            task=task, out=last_out, ep=last_ep, verify_exit=None,
+            task=task, out=relay_text(last_out), ep=last_ep, verify_exit=None,
             scope_verdict=None, metrics_ledger=metrics_ledger, sink=outcome_sink,
             task_slug=task_slug,
         )
@@ -616,7 +670,8 @@ def execute_with_continuations(task: str, plan: str, fleet: Fleet, verify_cmd: s
                                task_slug: str | None = None,
                                outcome_sink: dict | None = None,
                                max_respawns: int = MAX_RESPAWNS,
-                               events: list[dict] | None = None) -> dict:
+                               events: list[dict] | None = None,
+                               transcript_root: Path | None = None) -> dict:
     """Run one task, respawning fresh contexts from handoffs up to the cap.
 
     Each continuation is a *new* context seeded with the handoff — never a longer
@@ -638,7 +693,7 @@ def execute_with_continuations(task: str, plan: str, fleet: Fleet, verify_cmd: s
         result = execute_task(
             spec, plan, fleet, verify_cmd, hold_on_fail, insist, scope,
             metrics_ledger=metrics_ledger, task_slug=task_slug,
-            outcome_sink=outcome_sink,
+            outcome_sink=outcome_sink, transcript_root=transcript_root,
         )
         if result["status"] != "handoff":
             if windows:
@@ -729,6 +784,12 @@ def main() -> None:
         default=None,
         help="optional slug prefix for outcome task_id (defaults from --plan-file stem)",
     )
+    ap.add_argument(
+        "--transcripts",
+        default=None,
+        help="root dir for archived per-task raw transcripts "
+             "(default: <worktree>/var/task-transcripts/; pass empty string to disable)",
+    )
     args = ap.parse_args()
     if not args.goal and not args.plan_file:
         ap.error("--goal or --plan-file required")
@@ -753,6 +814,13 @@ def main() -> None:
         metrics_ledger = Path(args.metrics_ledger)
     else:
         metrics_ledger = root / "var" / "fleet-metrics" / "outcomes.jsonl"
+
+    if args.transcripts == "":
+        transcript_root: Path | None = None
+    elif args.transcripts:
+        transcript_root = Path(args.transcripts)
+    else:
+        transcript_root = root
 
     task_slug = args.task_slug
     if task_slug is None and args.plan_file:
@@ -805,6 +873,7 @@ def main() -> None:
             t, plan, fleet, args.verify, args.hold_on_fail, args.insist, scope,
             metrics_ledger=metrics_ledger, task_slug=task_slug,
             outcome_sink=outcome_sink, max_respawns=args.max_respawns, events=events,
+            transcript_root=transcript_root,
         )
         if r.get("status") == "human-report":
             report_path = write_human_report(

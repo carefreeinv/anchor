@@ -13,9 +13,10 @@ import hashlib
 import json
 import re
 import time
+from collections.abc import Sequence
 from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Any, Literal, Sequence
+from typing import Any, Literal
 
 ClaimedStatus = Literal["success", "should-work", "blocked", "unparseable"]
 StopAction = Literal["continue", "escalate-tier", "human-report"]
@@ -334,3 +335,93 @@ def render_human_report(task: str, evidence: Sequence[OutcomeRecord]) -> str:
         "- Every tier this fleet has configured has now failed this task twice; "
         "no further automatic escalation is possible.\n"
     )
+
+
+# --- executor -> orchestrator footer contract (mythos-core rule 8) -----------
+# Only the structured footer crosses the boundary back to the coordinator; the
+# full transcript is archived separately (scripts/orchestrate.py) for audit.
+# Shares this module with the claimed-vs-actual ledger's own (looser, 2-section)
+# footer check above rather than a second, drifting implementation — this one
+# is the strict 3-section contract mythos-core rule 8 actually specifies.
+
+FOOTER_SECTIONS: tuple[str, ...] = ("Result", "How to verify", "Deferred / concerns")
+DEFAULT_FOOTER_MAX_LINES = 60
+FOOTER_TRUNCATION_MARKER = "[truncated by harness]"
+
+# Any top-level '##' heading — used both to find the three required ones and to
+# bound each one's content at the next heading of any kind. Whitespace after
+# '##' is optional (tolerates '##Result' as well as '##  Result') but a third
+# '#' is not — '### h3' never matches, so real subheadings inside a section's
+# body don't get mistaken for a new top-level boundary.
+_ANY_HEADING_RE = re.compile(r"^[ \t]*##(?!#)[ \t]*(.+?)[ \t]*$", re.MULTILINE)
+
+
+def _normalize_heading(text: str) -> str:
+    """Case/whitespace-insensitive key: collapses runs of whitespace, then the
+    spacing around a slash, so 'Deferred / concerns', 'Deferred/concerns', and
+    'DEFERRED  /  Concerns' all match the same canonical section."""
+    collapsed = re.sub(r"\s+", " ", text.strip().lower())
+    return re.sub(r"\s*/\s*", "/", collapsed)
+
+
+_FOOTER_CANONICAL_BY_KEY: dict[str, str] = {
+    _normalize_heading(section): section for section in FOOTER_SECTIONS
+}
+
+
+@dataclass(frozen=True)
+class FooterExtraction:
+    """Result of :func:`extract_footer`. ``missing`` names the required
+    sections absent when ``ok`` is False; empty otherwise."""
+
+    ok: bool
+    footer_text: str = ""
+    missing: tuple[str, ...] = ()
+    truncated: bool = False
+
+
+def extract_footer(text: str, *, max_lines: int = DEFAULT_FOOTER_MAX_LINES) -> FooterExtraction:
+    """Extract the mandatory three-section footer from raw executor output.
+
+    Tolerant of case/spacing drift in the heading text. When a heading appears
+    more than once (an executor may quote the template while reasoning before
+    producing its real answer), the LAST occurrence wins — each section's
+    content runs from its heading to the next '##' heading of any kind, or EOF.
+    All three sections are required; missing any is a rejection naming which,
+    never a partial acceptance. The reconstructed footer is capped at
+    ``max_lines`` total lines, truncated with an explicit marker — long enough
+    for a legitimate footer, short enough that smuggling a full transcript
+    inside '## Result' doesn't work.
+    """
+    if not text:
+        return FooterExtraction(ok=False, missing=FOOTER_SECTIONS)
+
+    matches = list(_ANY_HEADING_RE.finditer(text))
+    last_by_section: dict[str, re.Match] = {}
+    for m in matches:
+        canon = _FOOTER_CANONICAL_BY_KEY.get(_normalize_heading(m.group(1)))
+        if canon:
+            last_by_section[canon] = m  # later matches overwrite earlier ones
+
+    missing = tuple(section for section in FOOTER_SECTIONS if section not in last_by_section)
+    if missing:
+        return FooterExtraction(ok=False, missing=missing)
+
+    starts = [m.start() for m in matches]
+
+    def content_after(m: re.Match) -> str:
+        nxt = next((s for s in starts if s > m.start()), len(text))
+        return text[m.end():nxt].strip("\n")
+
+    parts = [
+        f"## {section}\n{content_after(last_by_section[section])}".rstrip()
+        for section in FOOTER_SECTIONS
+    ]
+    footer_text = "\n\n".join(parts).strip("\n") + "\n"
+
+    lines = footer_text.splitlines()
+    truncated = len(lines) > max_lines
+    if truncated:
+        footer_text = "\n".join(lines[:max_lines]) + f"\n{FOOTER_TRUNCATION_MARKER}\n"
+
+    return FooterExtraction(ok=True, footer_text=footer_text, truncated=truncated)

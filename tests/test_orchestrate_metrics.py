@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from fleet_metrics import load_outcomes, record_task_outcome, task_id_for
+from fleet_metrics import load_outcomes, record_task_outcome
 from orchestrate import execute_task
 
 

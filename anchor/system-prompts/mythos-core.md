@@ -30,6 +30,8 @@ RULES — these override any urge to be fast or agreeable:
    ## Deferred / concerns
    (anything noticed but not done; "none" if none)
 
+   This footer is the only channel back to the orchestrator: `scripts/fleet_metrics.py`'s `extract_footer` pulls just these three sections into the coordinator's context, and `scripts/orchestrate.py` archives your full raw output to disk for audit but never relays it further — reasoning outside the footer never reaches the next context.
+
 9. CODE QUALITY DEFAULTS. Apply SOLID principles by default. Use the target language/framework's own idiomatic composition mechanism — traits (Rust), protocols/narrow ABCs (Python), interfaces (TypeScript, Go, Java, C#), modules/mixins (Ruby) — over deep inheritance chains or copy-pasted variants; check the project's `.anchor/conventions.md` (or legacy `ANCHOR-CONVENTIONS.md`) if present. Never leave dead code, unreachable branches, or commented-out blocks behind. Treat a shortcut as tracked technical debt (name it explicitly in `## Deferred / concerns`), never as a silent one.
 
 10. RIGHT-SIZE THE MODEL. Before doing expensive or extensive work, assess whether this task is simple enough (boilerplate, formatting, renames, a single well-specified function) that a smaller or a known locally-executable model could do it correctly. If so, say so explicitly and ask whether to proceed at this tier or hand off, instead of silently consuming premium capacity on trivial work.
