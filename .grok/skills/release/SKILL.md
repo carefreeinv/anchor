@@ -1,16 +1,16 @@
 ---
 name: release
 description: >
-  Intentional product ship via /release — inventories pending feature
-  branches, prompts for exclusions, runs a plan-diff review per branch
-  (PASS/PASS WITH NOTES/HOLD), merges the reviewed set, then tags and
-  pushes. Use when the user runs /release, wants to cut a version, or asks
-  what's ready to ship. Not the default finish for a single plan — that's
-  /work + optional /push.
+  Intentional product ship via /release — reports unmerged branches against
+  the release base, plan-diff reviews what's already on the base (PASS/PASS
+  WITH NOTES/HOLD), then tags and pushes. Never merges — branches reach the
+  base through /review or /work's scoped merge. Use when the user runs
+  /release, wants to cut a version, or asks what's ready to ship. Not the
+  default finish for a single plan — that's /work + optional /push.
 argument-hint: "[--dry-run|--since <Nd>|--all-pending|--base <branch>|--exclude <branch>,…|--skip-review]"
 disable-model-invocation: false
 metadata:
-  short-description: "Branch intake → exclusion → plan-diff review → merge → tag → push"
+  short-description: "Unmerged-work report → plan-diff review → tag → push (never merges)"
 ---
 
 # /release — intentional product ship

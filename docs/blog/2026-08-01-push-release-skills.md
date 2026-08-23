@@ -19,7 +19,8 @@ forgotten feature branches, or a release that never got a second look at
 what it actually shipped.
 
 `/push` stays thin on purpose — confirm, push, done. `/release` stays
-deliberate on purpose — nothing merges without being reviewed first.
+deliberate on purpose — nothing already on the release base ships without
+being reviewed first, and `/release` itself never merges a branch onto it.
 
 ## `/push`
 
@@ -36,31 +37,38 @@ merges.
 
 ## `/release`
 
-Every branch with unmerged commits gets inventoried against the release
-base (`dev`, else `develop`, else mainline), using the same
-`pending_merges.py` logic `/review` already relies on — now extended with a
-recency window (`--since`, default 30 days) that always keeps
-completed-plan branches regardless of age, so finished work never quietly
-ages out of consideration.
+`/release` never merges. Every branch with unmerged commits gets reported
+against the release base (`dev`, else `develop`, else mainline), classified
+by its plan's lane — a branch sitting in `review-needed/`, the normal end
+state of finished agent work, is the thing most likely to be wrongly left
+out, so it's called out by name rather than silently omitted. This reuses
+the same `pending_merges.py` logic `/review` already relies on — now
+extended with a recency window (`--since`, default 30 days) that always
+keeps completed-plan branches regardless of age, so finished work never
+quietly ages out of consideration.
 
 ```text
-inventory pending branches
-  → exclusion prompt (hard, whenever candidates exist)
-  → plan-diff review per included branch → PASS / PASS WITH NOTES / HOLD
-  → merge the reviewed set (HOLD blocks unless overridden)
+unmerged-work report (classified by plan lane)
+  → stop-and-confirm (hard, whenever completed/ or review-needed/ work is missing from the base)
+  → plan-diff review of what is already on the base → PASS / PASS WITH NOTES / HOLD
   → confirm version → CHANGELOG → /tag → push
 ```
 
+Landing a branch on the base is not this skill's job: a **`/review`**
+Approve, or a **`/work`** scoped merge, does that. `/release` picks up only
+once work is already there.
+
 ## The plan–diff review is the point
 
-Before any branch merges, the session running `/release` reads its diff
-against the release base and checks it against the branch's actual plan —
+Before a version ships, the session running `/release` reads the diff of
+what's already on the release base against the branch's actual plan —
 scope, whether `Done when` is evidenced, obvious correctness gaps, doctrine
 violations, fit. This is the one place in the whole pipeline built
 specifically to catch a lesser executor's mistakes while a stronger
-reviewer is still watching, before any of it ships. A **HOLD** verdict
-blocks the merge until the user either fixes it, excludes the branch, or
-explicitly says "merge anyway" after seeing why.
+reviewer is still watching, before a version ships with them in it. A
+**HOLD** verdict blocks the **tag** until the user either fixes the branch,
+or explicitly overrides after seeing why — there is no merge step for it to
+block.
 
 `--skip-review` exists, but it's explicit-only and prints exactly what
 you're giving up before it runs.
