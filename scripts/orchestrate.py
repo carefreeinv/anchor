@@ -36,7 +36,15 @@ import time
 from pathlib import Path
 
 from anchor_client import Endpoint, Fleet, has_required_footer, load_prompt
-from fleet_metrics import record_task_outcome
+from fleet_metrics import (
+    FIT_TIER_LADDER,
+    load_outcomes,
+    normalize_fit_tier,
+    record_task_outcome,
+    render_human_report,
+    should_stop,
+    task_id_for,
+)
 from handoff import (
     Handoff,
     HandoffError,
@@ -190,6 +198,79 @@ def run_cmd(cmd: str) -> tuple[bool, str]:
     return p.returncode == 0, out
 
 
+# --- harness-enforced stop condition (mythos-core rule 6, mirrored harness-side) --
+# should_stop() reads the persistent outcome ledger rather than an in-memory attempt
+# counter, so the backstop survives across separate orchestrate.py invocations —
+# exactly the case a flailing model's own attempt-counting can't cover.
+
+
+def endpoint_model_name(ep) -> str:
+    """Same identity should_stop's (task, model) counting keys on — matches how
+    _ledger_outcome already names an endpoint when writing a row."""
+    return getattr(ep, "model", None) or getattr(ep, "name", "unknown")
+
+
+def endpoint_fit_tier(ep) -> str:
+    return normalize_fit_tier(getattr(ep, "tier", None) or "mid")
+
+
+def available_fit_tiers(fleet) -> tuple[str, ...]:
+    """This fleet's configured tiers, ascending. Falls back to the full ladder when
+    ``fleet`` can't be introspected (e.g. a test double with no ``.endpoints``) —
+    a conservative default that never claims exhaustion it can't actually see.
+    """
+    endpoints = getattr(fleet, "endpoints", None)
+    if not endpoints:
+        return FIT_TIER_LADDER
+    present = {endpoint_fit_tier(ep) for ep in endpoints}
+    return tuple(t for t in FIT_TIER_LADDER if t in present)
+
+
+def pick_escalation_endpoint(fleet, fit_tier: str):
+    """First endpoint at ``fit_tier``, or None if the fleet has none / can't be
+    introspected. Bypasses the executor role's tier-preference list on purpose —
+    escalation targets a specific rung, not "whatever the role prefers".
+    """
+    endpoints = getattr(fleet, "endpoints", None)
+    if not endpoints:
+        return None
+    for ep in endpoints:
+        if endpoint_fit_tier(ep) == fit_tier:
+            return ep
+    return None
+
+
+def write_human_report(root: Path, *, task_id: str, task_slug: str | None, report: str) -> Path:
+    """Persist a top-tier-exhaustion report to disk — "the orchestrator generates
+    it even if the model never did" means a file a human can actually open, not
+    just a string in an in-memory result dict."""
+    out_dir = Path(root) / "var" / "human-reports"
+    out_dir.mkdir(parents=True, exist_ok=True)
+    short = task_id.split(":")[-1]
+    name = f"{task_slug}-{short}" if task_slug else short
+    path = out_dir / f"{name}.md"
+    path.write_text(report, encoding="utf-8")
+    return path
+
+
+def escalation_directive(decision) -> str:
+    """Text appended to an escalated spec — both failures' evidence, per the plan's
+    "attaching both failures' evidence to the escalated spec" constraint."""
+    lines = "\n".join(
+        f"- attempt at tier '{rec.tier}' (model `{rec.model}`): "
+        f"verify_exit={rec.actual_verify_exit!r}, scope_verdict={rec.scope_verdict!r}"
+        for rec in decision.evidence
+    )
+    return (
+        f"\n\nESCALATION: {decision.reason}\n"
+        "Prior failed attempts (from the outcome ledger):\n"
+        f"{lines}\n"
+        "You are being dispatched at a higher tier because the lower tier failed "
+        "this task twice. Do not repeat the same approach without addressing why "
+        "it failed."
+    )
+
+
 def log_event(events: list[dict], event: str, **details) -> dict:
     """Role transitions and violations are explicit, logged orchestrator events."""
     rec = {"time": time.strftime("%Y-%m-%dT%H:%M:%S"), "event": event, **details}
@@ -329,13 +410,45 @@ def execute_task(task: str, plan: str, fleet: Fleet, verify_cmd: str | None,
     last_ep = None
     last_out: str | None = None
     recorded = False
+    tid = task_id_for(task, slug=task_slug)
+    fit_tiers = available_fit_tiers(fleet)
     for attempt in range(1, MAX_ATTEMPTS + 1):
         ep = fleet.pick("executor")
         last_ep = ep
+        escalation_suffix = ""
+
+        # Harness-enforced stop condition (mythos-core rule 6, mirrored harness-side):
+        # a persistent ledger check, not an in-memory attempt count, so a resumed
+        # invocation still refuses a third dispatch to a model that already failed
+        # this task twice — the model's own attempt-counting is a backstop, not this.
+        if metrics_ledger is not None:
+            ledger_rows = load_outcomes(metrics_ledger)
+            decision = should_stop(tid, endpoint_model_name(ep), ledger_rows,
+                                   tier=endpoint_fit_tier(ep), tier_ladder=fit_tiers)
+            if decision.action == "human-report":
+                report = render_human_report(task, decision.evidence)
+                print(f"[stop] human-report: {decision.reason}", file=sys.stderr)
+                return {"task": task, "status": "human-report", "attempts": attempt,
+                        "message": decision.reason, "report": report}
+            if decision.action == "escalate-tier":
+                escalated = pick_escalation_endpoint(fleet, decision.target_tier)
+                if escalated is None:
+                    print(f"[stop] escalate-tier to '{decision.target_tier}' requested but no "
+                          "such endpoint is configured — reporting up instead", file=sys.stderr)
+                    return {"task": task, "status": "escalate", "attempts": attempt,
+                            "message": decision.reason, "target_tier": decision.target_tier}
+                print(f"[stop] {decision.reason} -> {escalated.name} ({decision.target_tier})",
+                      file=sys.stderr)
+                ep = escalated
+                last_ep = ep
+                escalation_suffix = escalation_directive(decision)
+
         print(f"[exec {attempt}/{MAX_ATTEMPTS}] {ep.name}: {task[:70]}", file=sys.stderr)
         prompt = f"PLAN (context only):\n{plan}\n\nYOUR SINGLE TASK:\n{task}"
         if history:
             prompt += f"\n\nPREVIOUS ATTEMPT FAILED. Verbatim failure output:\n{history[-1]}"
+        if escalation_suffix:
+            prompt += escalation_suffix
 
         # Budget gate: refuse dispatch rather than truncate when the prompt already
         # exceeds this endpoint's serving ceiling — a decomposition error, not
@@ -684,6 +797,13 @@ def main() -> None:
             metrics_ledger=metrics_ledger, task_slug=task_slug,
             outcome_sink=outcome_sink, max_respawns=args.max_respawns, events=events,
         )
+        if r.get("status") == "human-report":
+            report_path = write_human_report(
+                root, task_id=task_id_for(t, slug=task_slug), task_slug=task_slug,
+                report=r["report"],
+            )
+            r["report_path"] = str(report_path)
+            log_event(events, "human-report", path=str(report_path))
         role_verdict = guard(EXECUTOR, before, spec_deny)
         if role_verdict is not None and not role_verdict.ok:
             r["status"] = "failed-role"

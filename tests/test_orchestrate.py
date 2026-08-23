@@ -741,6 +741,71 @@ def test_zero_max_respawns_escalates_without_hitting_the_unreachable_assert():
     assert result["status"] == "escalate"   # no AssertionError("unreachable")
 
 
+class TopTierEndpoint:
+    """Fake single-tier ('frontier') endpoint whose replies serve every role in
+    dispatch order, like SideEffectFleet — but exposes model/tier/.endpoints so
+    the harness stop condition can introspect it for escalation/human-report."""
+
+    def __init__(self, replies):
+        self.replies = list(replies)
+        self.name = "frontier-ep"
+        self.model = "frontier-model"
+        self.tier = "frontier"
+        self.quirks: dict = {}
+        self.calls = 0
+
+    def chat(self, messages, **kwargs):
+        self.calls += 1
+        return self.replies.pop(0)
+
+
+class TopTierFleet:
+    def __init__(self, replies):
+        self.ep = TopTierEndpoint(replies)
+        self.endpoints = [self.ep]
+
+    def pick(self, role):
+        return self.ep
+
+
+def test_human_report_is_written_to_disk_for_top_tier_exhaustion(git_repo, monkeypatch):
+    """Two prior failures at the fleet's only (and therefore top available) tier
+    means the third dispatch never happens — main() generates and persists a
+    structured report file itself, since the model never got a chance to."""
+    import json
+    from pathlib import Path
+
+    from fleet_metrics import record_task_outcome
+    import orchestrate
+
+    task_text = split_tasks(PLAN_TEXT)[0]
+    ledger = git_repo / "var" / "fleet-metrics" / "outcomes.jsonl"
+    for i in range(2):
+        record_task_outcome(
+            output="## Result\nfailed\n## How to verify\nn/a\n",
+            verify_exit=1, model="frontier-model", tier="frontier", task=task_text,
+            ledger_path=ledger, timestamp=float(i),
+        )
+
+    # planner call → PLAN_TEXT; executor call is refused before dispatch; critic call → verdict
+    fleet = TopTierFleet([PLAN_TEXT, "review: ok"])
+    out = _run_main(monkeypatch, git_repo, fleet)
+
+    orchestrate.main()  # no SystemExit — a human-report is not a role violation
+
+    assert fleet.ep.calls == 2  # planner + critic only; executor never dispatched
+
+    run = json.loads(out.read_text())
+    assert run["results"][0]["status"] == "human-report"
+    report_path = Path(run["results"][0]["report_path"])
+    assert report_path.is_file()
+    text = report_path.read_text(encoding="utf-8")
+    assert "## Tried" in text
+    assert "## Observed" in text
+    assert "## Hypothesis" in text
+    assert any(e["event"] == "human-report" for e in run["events"])
+
+
 def test_continuation_completes_with_a_passing_verify_command(git_repo):
     """The plan's Done when: handoff → continuation → verification actually green."""
     from pathlib import Path

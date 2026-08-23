@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from fleet_metrics import load_outcomes
+from fleet_metrics import load_outcomes, record_task_outcome, task_id_for
 from orchestrate import execute_task
 
 
@@ -78,3 +78,104 @@ def test_failed_verify_records_nonzero_exit(tmp_path: Path):
     assert len(rows) == 1
     assert rows[0].claimed == "success"
     assert rows[0].actual_verify_exit == 1
+
+
+# --- harness-enforced stop condition: refuse a third dispatch, escalate a tier --
+# The MAX_ATTEMPTS loop above only ever runs two attempts *within one call*, so it
+# can't reach a "third dispatch" on its own — these tests simulate a resumed
+# invocation by seeding the ledger with two failures from an earlier run before
+# execute_task's first attempt of *this* call.
+
+
+class RecordingTieredEndpoint:
+    def __init__(self, name, model, tier, replies):
+        self.name = name
+        self.model = model
+        self.tier = tier
+        self.quirks: dict = {}
+        self.replies = list(replies)
+        self.calls = 0
+        self.prompts: list[str] = []
+
+    def chat(self, messages, **kwargs):
+        self.calls += 1
+        self.prompts.append(messages[-1]["content"])
+        return self.replies.pop(0)
+
+
+class TieredFleet:
+    """fleet.pick() always returns the tier this run would normally dispatch to;
+    escalation reads .endpoints directly, same as the real Fleet."""
+
+    def __init__(self, endpoints, default_ep):
+        self.endpoints = endpoints
+        self._default = default_ep
+
+    def pick(self, role):
+        return self._default
+
+
+def _seed_two_failures(ledger, *, task, model, tier):
+    for i in range(2):
+        record_task_outcome(
+            output="## Result\nfailed\n## How to verify\nn/a\n",
+            verify_exit=1, model=model, tier=tier, task=task,
+            ledger_path=ledger, timestamp=float(i),
+        )
+
+
+def test_third_dispatch_to_same_model_is_refused_and_escalates_with_evidence(tmp_path: Path):
+    ledger = tmp_path / "outcomes.jsonl"
+    mid_ep = RecordingTieredEndpoint("mid-ep", "fake-model-mid", "mid", [])
+    reasoner_ep = RecordingTieredEndpoint("reasoner-ep", "fake-model-reasoner", "reasoner",
+                                          [GOOD_OK])
+    fleet = TieredFleet([mid_ep, reasoner_ep], mid_ep)
+
+    task = "do it"
+    _seed_two_failures(ledger, task=task, model="fake-model-mid", tier="mid")
+
+    result = execute_task(task, "plan", fleet, verify_cmd=None, hold_on_fail=False,
+                          metrics_ledger=ledger)
+
+    assert mid_ep.calls == 0  # third dispatch to the same model refused
+    assert reasoner_ep.calls == 1
+    assert result["status"] == "ok"
+    assert "ESCALATION" in reasoner_ep.prompts[0]
+    assert "fake-model-mid" in reasoner_ep.prompts[0]
+
+
+def test_escalate_tier_with_uninspectable_fleet_falls_back_to_escalate_status(tmp_path: Path):
+    """A fleet stub with no ``.endpoints`` (like this file's own FakeFleet) can't be
+    searched for an escalation target — available_fit_tiers conservatively assumes
+    the full ladder is still open, should_stop says escalate, but there is no
+    endpoint to actually escalate to. Report up rather than silently continuing."""
+    ledger = tmp_path / "outcomes.jsonl"
+    fleet = FakeFleet([])  # no .endpoints attribute at all
+
+    task = "do it"
+    _seed_two_failures(ledger, task=task, model="fake-model", tier="mid")
+
+    result = execute_task(task, "plan", fleet, verify_cmd=None, hold_on_fail=False,
+                          metrics_ledger=ledger)
+
+    assert fleet.ep.calls == 0
+    assert result["status"] == "escalate"
+    assert result["target_tier"] == "reasoner"
+
+
+def test_two_failures_at_top_available_tier_produces_a_human_report(tmp_path: Path):
+    ledger = tmp_path / "outcomes.jsonl"
+    ep = RecordingTieredEndpoint("frontier-ep", "fake-model-frontier", "frontier", [])
+    fleet = TieredFleet([ep], ep)
+
+    task = "hard task"
+    _seed_two_failures(ledger, task=task, model="fake-model-frontier", tier="frontier")
+
+    result = execute_task(task, "plan", fleet, verify_cmd=None, hold_on_fail=False,
+                          metrics_ledger=ledger)
+
+    assert ep.calls == 0  # the orchestrator generates the report itself
+    assert result["status"] == "human-report"
+    assert "## Tried" in result["report"]
+    assert "## Observed" in result["report"]
+    assert "hard task" in result["report"]
