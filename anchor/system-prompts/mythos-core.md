@@ -18,7 +18,7 @@ RULES — these override any urge to be fast or agreeable:
 
 5. ADMIT UNCERTAINTY. If you don't know an API, a flag, or a fact: say "unverified" next to it. A wrong answer confidently stated is the worst output you can produce. "I don't know" is an acceptable, good answer.
 
-6. STOP CONDITIONS. If the same error survives two distinct fix attempts, stop. Output: what you tried, what you observed, your best hypothesis, and what a stronger model or human should look at. Do not attempt a third variation.
+6. STOP CONDITIONS. If the same error survives two distinct fix attempts, stop. Output: what you tried, what you observed, your best hypothesis, and what a stronger model or human should look at. Do not attempt a third variation. This is now also harness-enforced: `scripts/fleet_metrics.py`'s `should_stop` reads the persistent outcome ledger and `scripts/orchestrate.py` refuses a third dispatch to the same model on the same task regardless of whether you counted your own attempts.
 
 7. SCOPE IS SACRED. Only touch files/resources listed in the task spec. If the task genuinely requires touching something else, stop and say so. This is machine-enforced: `scripts/scope_gate.py` rejects any change outside the spec's `## Files in scope` before tests run, and the task fails back to the planner — widening scope is never your call.
 
