@@ -15,6 +15,7 @@ import sys
 from pathlib import Path
 
 from anchor_client import Endpoint, Fleet, load_prompt
+from router import fleet_summary_block
 
 TUNER_SYSTEM = """You rewrite rough task descriptions into precise task specs. You do NOT solve the task.
 Fill in the template exactly. Where the rough description lacks information, write
@@ -29,6 +30,18 @@ CHARS_PER_TOKEN = 4  # conservative estimate; provider-reported usage wins where
 
 BUDGET_SECTION_RE = re.compile(
     r"^##\s+Budget\s*$([\s\S]*?)(?=^##\s|\Z)", re.MULTILINE | re.IGNORECASE
+)
+
+PROVIDED_CONTEXT_SECTION_RE = re.compile(
+    r"^##\s+Provided context\s*$([\s\S]*?)(?=^##\s|\Z)", re.MULTILINE | re.IGNORECASE
+)
+
+# The fleet summary is for tasks *about* routing/dispatch, not every executor task —
+# per plan constraint, executors get it only when the task itself is routing-related.
+ROUTING_RELATED_RE = re.compile(
+    r"\b(rout(?:e|ing)|endpoint|dispatch(?:ing)?|delegat\w*|escalat\w*|"
+    r"which (?:model|tier)|fleet|worker pool|model selection)\b",
+    re.IGNORECASE,
 )
 
 
@@ -55,6 +68,25 @@ def render_budget(target: Endpoint | None, template: str, rough: str,
     spent = estimate_tokens(template) + estimate_tokens(rough) + margin
     output_ceiling = max(context_window - spent, 0)
     return str(context_window), str(output_ceiling)
+
+
+def is_routing_related(task: str) -> bool:
+    """Whether *task* is itself about picking/dispatching to a fleet endpoint —
+    the only case an executor task spec earns fleet awareness at all."""
+    return bool(ROUTING_RELATED_RE.search(task))
+
+
+def inject_fleet_summary(spec: str, summary: str) -> str:
+    """Append the generated fleet summary to the spec's Provided context section.
+    No-op when there is nothing to add or the template's section is missing (template
+    drift; never fabricate a new section) — additive only, existing context untouched."""
+    if not summary:
+        return spec
+    match = PROVIDED_CONTEXT_SECTION_RE.search(spec)
+    if not match:
+        return spec
+    end = match.end(1)
+    return spec[:end] + f"\n{summary}\n" + spec[end:]
 
 
 def inject_budget(spec: str, context_window: str, output_ceiling: str) -> str:
@@ -84,7 +116,10 @@ def tune(rough: str, fleet: Fleet, target: str | None = None) -> str:
     print(f"[tuner: {ep.name} ({ep.model})]", file=sys.stderr)
     target_ep = find_endpoint(fleet, target) if target else None
     context_window, output_ceiling = render_budget(target_ep, template, rough)
-    return inject_budget(spec, context_window, output_ceiling)
+    spec = inject_budget(spec, context_window, output_ceiling)
+    if is_routing_related(rough):
+        spec = inject_fleet_summary(spec, fleet_summary_block(fleet))
+    return spec
 
 
 def main() -> None:

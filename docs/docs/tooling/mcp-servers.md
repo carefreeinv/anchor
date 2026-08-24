@@ -2,7 +2,7 @@
 sidebar_position: 3
 ---
 
-<!-- synced-from: mcp/model-fleet/README.md @ 8dd49f49367fa8ff484a00e3d14792954560d513 -->
+<!-- synced-from: mcp/model-fleet/README.md @ ced0b798cb6d8c9ef596f0d589062b8458b3887d -->
 <!-- synced-from: mcp/anchor-prompts/README.md @ 8bc9f0807b37234758877f8331fa90ccde11e32c -->
 <!-- synced-from: mcp/project-orchestrator/README.md @ 7483dd3e05094d984f765456a643a5fc4325bf4c -->
 
@@ -80,7 +80,9 @@ The delegation arm of the orchestrator pattern:
 
 - `delegate(task_spec, role, thinking)` — ship a self-contained spec to the right tier; output format-gated on return
 - `delegate_parallel_review(task_spec, work)` — two independent critics must agree; disagreement → HOLD (the Space-1 verify-twice rule, available everywhere)
-- `list_fleet` / `fleet_health` — registry view and reachability sweep
+- `list_fleet` — capped one-line-per-endpoint summary (name, tier, context size, capability phrase) + role routing; no `base_url`/model/quirk detail
+- `lookup_endpoint(name)` — full non-secret detail for one endpoint, on demand only
+- `fleet_health` — reachability sweep
 
 ## project-orchestrator
 

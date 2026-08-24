@@ -36,6 +36,8 @@ Playbook move #3 as a command: `python prompt_tuner.py "fix the login bug"` → 
 
 The "which tier deserves this task" rule as code: regex heuristics first (free), optional tiny-model classification fallback. `--send` dispatches immediately with the mythos-core system prompt.
 
+Also home to the deferred-catalog pattern for the registry itself: `summarize_endpoints(fleet)` generates a capped one-line-per-endpoint summary (name, tier, context size, one capability phrase — no `base_url`, model name, or quirk values), and `fleet_summary_block(fleet)` wraps it for splicing into a prompt. `orchestrate.py`'s planner phase and `prompt_tuner.py` (only for a routing-related rough task) inject that summary — never the raw registry. Full endpoint detail is a deliberate, on-demand `endpoint_detail(fleet, name)` call, mirrored as the model-fleet MCP's `lookup_endpoint(name)` tool; secrets never leave tooling either way (`ANCHOR_API_KEY` is an environment read at request time, not a registry field).
+
 ## plan_fit.py
 
 **Which ready plans should I take?** — read-only triage for one worker, so fit is applied mechanically instead of judged from plan headers. Identify yourself with `--tier` / `--model` / `--endpoint`; add `--effort` for cost advice. Prints one `take:`/`skip:` line per plan with the reason, then a claim command for the top pick. It never claims, moves, or leases — pair with `plan_select.py --next --claim`. Exit `0` something eligible, `1` nothing eligible (useful in cron guards), `2` error.

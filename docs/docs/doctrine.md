@@ -3,7 +3,7 @@ sidebar_position: 3
 sidebar_label: Doctrine
 ---
 
-<!-- synced-from: anchor/ANCHOR.md @ f0aa97d19d80bd6942479f603f31a0171694a94b -->
+<!-- synced-from: anchor/ANCHOR.md @ a0629c3e4782374f7444cbddf871a856337779eb -->
 
 # The Doctrine
 
@@ -119,6 +119,8 @@ flowchart LR
 ```
 
 Boilerplate, formatting, a rename, or one well-specified function gets flagged, with a question about handing off to a smaller model or one already registered in `scripts/endpoints.yaml`, instead of silently burning frontier capacity. Specialty mismatch (e.g. general-chat for multi-file software) uses `SUGGEST-REROUTE` — lateral, not always stronger. See [Model fitness](/model-fitness). `scripts/router.py` implements role lookup for fleet dispatch.
+
+The registry itself gets right-sized the same way: no one gets the raw `scripts/endpoints.yaml` in context. `router.summarize_endpoints()` generates a capped one-line-per-endpoint summary (name, tier, context size, one capability phrase — no `base_url`, model name, or quirk values), which the orchestrator hands to coordinator/planner roles and to executor tasks only when the task itself is routing-related. Full endpoint detail is a deliberate on-demand lookup — the model-fleet MCP's `lookup_endpoint(name)` tool, or `router.endpoint_detail()` directly — never a default include; `ANCHOR_API_KEY` stays an environment read at request time, never a registry field.
 
 *Right-sizing is one of the reasons [Savings](/savings) can be so large — please consider [donating](https://donate.stripe.com/28E6oHeq8fxQ5p7fmBdjO01) to help support this project.*
 

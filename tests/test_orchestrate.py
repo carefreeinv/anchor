@@ -532,6 +532,47 @@ def test_handoff_output_is_not_treated_as_a_format_failure():
     assert result["handoff"].remaining[0].verify_by == "pytest tests/test_export.py -q"
 
 
+def test_make_plan_injects_fleet_summary_never_raw_registry():
+    """Planner needs routing awareness for 'Route to' hints, but only the generated
+    summary — full endpoint detail (base_url, model) stays out of its context."""
+    from anchor_client import Endpoint
+    from orchestrate import make_plan
+
+    class SummaryFleet(RecordingFleet):
+        def __init__(self, replies):
+            super().__init__(replies)
+            self.endpoints = [Endpoint(
+                name="h100-nemotron", tier="reasoner",
+                base_url="http://10.0.1.11:8000/v1", model="nvidia/nemotron",
+                quirks={"think_toggle": "nemotron", "max_context": 65536},
+            )]
+            self.roles = {}
+
+    fleet = SummaryFleet(["## Steps\n| 1 | do it | x.py | pytest | executor |\n"])
+
+    make_plan("do the thing", "some context", fleet)
+
+    prompt = fleet.ep.prompts[0]
+    assert "FLEET SUMMARY" in prompt
+    assert "h100-nemotron" in prompt
+    assert "reasoner" in prompt
+    assert "http://10.0.1.11:8000/v1" not in prompt  # raw registry detail never pasted
+    assert "nvidia/nemotron" not in prompt
+
+
+def test_make_plan_omits_summary_block_for_fleet_without_endpoints():
+    """A test double / minimal fleet with no .endpoints must not break make_plan."""
+    from orchestrate import make_plan
+
+    fleet = RecordingFleet(["## Steps\n| 1 | do it | x.py | pytest | executor |\n"])
+
+    make_plan("do the thing", "some context", fleet)
+
+    prompt = fleet.ep.prompts[0]
+    assert "FLEET SUMMARY" not in prompt
+    assert prompt.endswith("CONTEXT:\nsome context")
+
+
 def test_undispatchable_handoff_gets_one_corrective_retry_then_escalates():
     """Remaining work with no Verify by is rejected — one retry, never a third."""
     from orchestrate import execute_task

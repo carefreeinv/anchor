@@ -1,4 +1,5 @@
-from router import route
+from anchor_client import Fleet
+from router import endpoint_detail, fleet_summary_block, route, summarize_endpoints
 
 
 class FakeEndpoint:
@@ -59,3 +60,116 @@ def test_specific_rule_wins_even_with_model_classify_enabled():
     # A non-executor rule match should short-circuit before ever touching the fleet.
     fleet = FakeFleet(raise_on_pick=True)
     assert route("audit this module for bugs", fleet, use_model=True) == "critic"
+
+
+def _registry(tmp_path, body):
+    registry = tmp_path / "endpoints.yaml"
+    registry.write_text(body)
+    return Fleet(registry)
+
+
+def test_summarize_endpoints_includes_name_tier_and_capability(tmp_path):
+    fleet = _registry(
+        tmp_path,
+        "endpoints:\n"
+        "  - name: h100-nemotron\n    tier: reasoner\n"
+        "    base_url: http://10.0.1.11:8000/v1\n    model: nvidia/nemotron\n"
+        "    quirks: {think_toggle: nemotron, max_context: 65536}\n"
+        "roles: {}\n",
+    )
+    lines = summarize_endpoints(fleet)
+    assert len(lines) == 1
+    assert "h100-nemotron" in lines[0]
+    assert "reasoner" in lines[0]
+    assert "ctx=65536" in lines[0]
+    assert "hybrid-reasoning (nemotron)" in lines[0]
+
+
+def test_summarize_endpoints_omits_context_when_unset(tmp_path):
+    fleet = _registry(
+        tmp_path,
+        "endpoints:\n"
+        "  - name: a\n    tier: swarm\n    base_url: http://a/v1\n    model: m\n"
+        "roles: {}\n",
+    )
+    assert "ctx=unspecified" in summarize_endpoints(fleet)[0]
+
+
+def test_summarize_endpoints_never_leaks_url_or_model(tmp_path):
+    fleet = _registry(
+        tmp_path,
+        "endpoints:\n"
+        "  - name: a\n    tier: swarm\n    base_url: http://10.0.1.99:8000/v1\n"
+        "    model: secret-internal-model-name\n"
+        "roles: {}\n",
+    )
+    line = summarize_endpoints(fleet)[0]
+    assert "10.0.1.99" not in line
+    assert "http" not in line
+    assert "secret-internal-model-name" not in line
+
+
+def test_summarize_endpoints_respects_line_cap(tmp_path):
+    fleet = _registry(
+        tmp_path,
+        "endpoints:\n"
+        "  - name: an-endpoint-with-a-very-long-name-that-keeps-going-and-going\n"
+        "    tier: executor-heavy\n    base_url: http://a/v1\n    model: m\n"
+        "    quirks: {reasoning_effort: high}\n"
+        "roles: {}\n",
+    )
+    line = summarize_endpoints(fleet)[0]
+    assert len(line) <= 100
+
+
+def test_summarize_endpoints_empty_fleet_returns_empty_list():
+    class NoEndpoints:
+        pass
+
+    assert summarize_endpoints(NoEndpoints()) == []
+
+
+def test_fleet_summary_block_empty_when_no_endpoints():
+    class NoEndpoints:
+        pass
+
+    assert fleet_summary_block(NoEndpoints()) == ""
+
+
+def test_fleet_summary_block_has_header_and_lines(tmp_path):
+    fleet = _registry(
+        tmp_path,
+        "endpoints:\n"
+        "  - name: a\n    tier: swarm\n    base_url: http://a/v1\n    model: m\n"
+        "roles: {}\n",
+    )
+    block = fleet_summary_block(fleet)
+    assert block.startswith("FLEET SUMMARY")
+    assert "lookup_endpoint" in block
+    assert "a · swarm" in block
+
+
+def test_endpoint_detail_returns_full_non_secret_fields(tmp_path):
+    fleet = _registry(
+        tmp_path,
+        "endpoints:\n"
+        "  - name: a\n    tier: swarm\n    base_url: http://a/v1\n    model: m\n"
+        "    quirks: {strip_think: true}\n"
+        "roles: {}\n",
+    )
+    detail = endpoint_detail(fleet, "a")
+    assert "http://a/v1" in detail
+    assert "m" in detail
+    assert "strip_think=True" in detail
+
+
+def test_endpoint_detail_unknown_name_lists_known_names(tmp_path):
+    fleet = _registry(
+        tmp_path,
+        "endpoints:\n"
+        "  - name: a\n    tier: swarm\n    base_url: http://a/v1\n    model: m\n"
+        "roles: {}\n",
+    )
+    detail = endpoint_detail(fleet, "nope")
+    assert "nope" in detail
+    assert "a" in detail
