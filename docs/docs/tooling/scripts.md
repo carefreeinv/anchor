@@ -49,17 +49,26 @@ python plan_fit.py --tier mid --profile coding-agent --json
 python plan_fit.py --tier small --next             # path only, for scripting
 ```
 
+## plan_parse.py
+
+Mechanical (no-LLM) plan parsing + triage primitives shared by `plan_select.py`, `plan_fit.py`, and daemon entrypoints. `strip_code_fences(text)` blanks fenced code block bodies before any header regex runs, so a plan that quotes an example header inside a fence (a doc walkthrough, `anchor/templates/plan.md` itself) is never read as the plan's own field. `safe_read_text(path)` never raises — a corrupt or unreadable `.local.md` returns `(None, reason)` instead of crash-looping a daemon poll. `triage_plan(record, worker)` is the three-way accept/skip/reject verdict a daemon wants: **reject** (unreadable, missing `## Goal`, human Assignee, unmet deps, underqualified — never eligible for this worker, full stop), **skip** (overqualified, or leased by another agent — eligible for someone else), **take** (good/unknown fit, deps met, agent-assignable). This is a strict superset of `plan_fit.py`'s existing binary take/skip CLI output, which is unchanged.
+
+No new runtime dependency: `scripts/` is designed to be copied standalone into consumer projects, so a maintained CommonMark library was considered and deliberately not added — a fence-aware line scan gets the real-world robustness win (quoted examples can't leak into a plan's own fields) without one more `pip install` for every project that scaffolds Anchor.
+
 ## work_once.py
 
 Headless puller for multi-tier fleets: same priority + Preferred-models fit + **Depends on** checks as interactive `/work` — **ready lanes only** (never bare-picks in-progress), one claim per invocation (optional `--max-plans N`). Each worker passes `--tier` or `--endpoint` and a unique `--agent-id`; a claim **moves** the plan to `.plans/in-progress/` and writes its lease under `.plans/.leases/` atomically. Other agents ignore foreign in-progress work; there is no silent reclaim. Keep a long job alive with `--heartbeat`, take over a crashed worker's expired lease with `--recover`. Unmet dependencies are skipped (`--no-dep-check` to override). A plan whose **Assignee** is a human is refused even by name (`--allow-assigned` to force). Park half-baked/stuck work: `--park ambiguous|blocked`. Return to ready: `--return-ready`. Parallel code edits: **`worktree_for_agent.py`** or `work_once.py --ensure-worktree` (one worktree per agent-id under `var/worktrees/`). Exit `1` means idle backlog (normal for cron). Full setup: [Fleet workers](/tooling/fleet-workers).
 
+`--triage` is the explicit **mechanical-only** entrypoint: prints one `take:`/`skip:`/`reject:` line per ready + own-in-progress plan via `plan_parse.triage_plan`, never claims, moves, or dispatches, and never opens a network connection — no LLM is ever consulted for the decision. Exit `0` when at least one plan is a take, `1` otherwise. `fleet_watch.py --triage` mirrors it for the systemd/cron wrapper.
+
 ```bash
 python work_once.py --list --tier mid --agent-id mid-1
 python work_once.py --once --endpoint h100-executor --agent-id mid-1 --run
+python work_once.py --triage --tier mid --agent-id mid-1     # mechanical only, no LLM/network
 python work_once.py --path .plans/in-progress/x.md --park blocked --agent-id mid-1
 ```
 
-Shared selection: `plan_select.py` (fit + deps). Claims + moves: `plan_lease.claim_and_move` / `park` / `return_to_ready`.
+Shared selection: `plan_select.py` (fit + deps, built on `plan_parse.py`). Claims + moves: `plan_lease.claim_and_move` / `park` / `return_to_ready`.
 
 ## plan_board.py
 

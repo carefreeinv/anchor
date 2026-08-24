@@ -96,6 +96,7 @@ Headless pull (companion to `/work`, not a replacement):
 python scripts/work_once.py --list --tier mid --agent-id worker-1
 python scripts/work_once.py --once --tier mid --agent-id worker-1   # → in-progress/
 python scripts/work_once.py --max-plans 3 --tier small --agent-id swarm-a
+python scripts/work_once.py --triage --tier mid --agent-id worker-1  # accept/skip/reject; no LLM, no claim
 ```
 
 Uses the same priority + Preferred-models rules; moves claimed plans into

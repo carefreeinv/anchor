@@ -364,3 +364,80 @@ def test_effective_fit_tier_grok_map():
     assert effective_fit_tier("Grok 4.5", "mid", "xhigh") == "reasoner"
     assert effective_fit_tier("xai/grok-4.5", "mid", "xhigh") == "reasoner"
     assert effective_fit_tier("Claude Sonnet 5", "mid", "high") == "mid"
+
+
+def test_corrupt_file_does_not_crash_inventory(tmp_path):
+    """A daemon polling ready lanes must survive one unreadable/corrupt plan."""
+    plans = _tree(tmp_path)
+    _plan(plans / "features" / "good.md", preferred="mid")
+    bad = plans / "features" / "bad.md"
+    bad.write_bytes(b"\xff\xfe\x00\x81 not valid utf-8")
+    worker = Worker("test", "mid")
+
+    recs = inventory_ready(plans, worker)
+
+    rels = {r.rel: r for r in recs}
+    assert "features/good.md" in rels
+    assert rels["features/good.md"].parse_error is None
+    assert "features/bad.md" in rels
+    bad_rec = rels["features/bad.md"]
+    assert bad_rec.parse_error is not None
+    assert bad_rec.fit is Fit.UNKNOWN
+
+
+def test_missing_goal_section_is_flagged(tmp_path):
+    plans = _tree(tmp_path)
+    path = plans / "features" / "no_goal.md"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        "# Plan: No Goal\n\n- **Value:** medium\n- **Preferred models:** mid\n\n"
+        "## Context read\nnotes\n\n## Done when\n- [ ] x\n",
+        encoding="utf-8",
+    )
+    worker = Worker("test", "mid")
+
+    recs = inventory_ready(plans, worker)
+
+    assert recs[0].has_goal is False
+
+
+def test_normal_plan_has_goal_true(tmp_path):
+    plans = _tree(tmp_path)
+    _plan(plans / "features" / "ok.md", preferred="mid")
+    worker = Worker("test", "mid")
+
+    recs = inventory_ready(plans, worker)
+
+    assert recs[0].has_goal is True
+
+
+def test_fenced_example_header_does_not_leak_into_real_fields(tmp_path):
+    """A plan that quotes an example header inside a code fence (a doc
+    walkthrough, or anchor/templates/plan.md itself) must be parsed by its own
+    real fields, not the fenced example's."""
+    plans = _tree(tmp_path)
+    path = plans / "features" / "fenced.md"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        "# Plan: Fenced\n\n"
+        "- **Value:** low\n"
+        "- **Priority:** P3\n"
+        "- **Preferred models:** small\n\n"
+        "## Context read\n\n"
+        "```markdown\n"
+        "- **Priority:** P1\n"
+        "- **Preferred models:** frontier\n"
+        "- **Assignee:** human\n"
+        "```\n\n"
+        "## Goal\nreal goal text\n\n## Done when\n- [ ] x\n",
+        encoding="utf-8",
+    )
+    worker = Worker("test", "small")
+
+    recs = inventory_ready(plans, worker)
+    rec = recs[0]
+
+    assert rec.priority == "P3"
+    assert rec.preferred == "small"
+    assert rec.agent_assignable is True
+    assert rec.fit is Fit.GOOD

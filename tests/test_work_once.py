@@ -58,6 +58,123 @@ def test_once_no_fit_exits_1(tmp_path):
     assert code == 1
 
 
+def test_triage_never_claims_and_reports_take(tmp_path, capsys):
+    root = _root(tmp_path)
+    _plan(root / ".plans" / "features" / "a.md", preferred="mid")
+    code = work_once.main(
+        ["--root", str(root), "--triage", "--tier", "mid", "--agent-id", "t1"]
+    )
+    assert code == 0
+    out = capsys.readouterr().out
+    assert "take: features/a.md" in out
+    # Never claimed — still sitting in features/, not moved to in-progress/.
+    assert (root / ".plans" / "features" / "a.md").is_file()
+    assert not (root / ".plans" / "in-progress" / "a.md").is_file()
+
+
+def test_triage_reports_reject_for_human_assignee(tmp_path, capsys):
+    root = _root(tmp_path)
+    _plan(root / ".plans" / "features" / "human.md", preferred="mid", assignee="alice")
+    work_once.main(
+        ["--root", str(root), "--triage", "--tier", "mid", "--agent-id", "t1"]
+    )
+    out = capsys.readouterr().out
+    assert "reject: features/human.md" in out
+    assert "alice" in out
+
+
+def test_triage_reports_reject_for_underqualified(tmp_path, capsys):
+    root = _root(tmp_path)
+    _plan(root / ".plans" / "features" / "hard.md", preferred="frontier")
+    code = work_once.main(
+        ["--root", str(root), "--triage", "--tier", "small", "--agent-id", "tiny"]
+    )
+    assert code == 1
+    out = capsys.readouterr().out
+    assert "reject: features/hard.md" in out
+    assert "underqualified" in out
+
+
+def test_triage_reports_skip_for_overqualified(tmp_path, capsys):
+    root = _root(tmp_path)
+    _plan(root / ".plans" / "features" / "easy.md", preferred="small")
+    code = work_once.main(
+        ["--root", str(root), "--triage", "--tier", "frontier", "--agent-id", "big"]
+    )
+    assert code == 1
+    out = capsys.readouterr().out
+    assert "skip: features/easy.md" in out
+    assert "overqualified" in out
+
+
+def test_triage_reports_reject_for_missing_goal(tmp_path, capsys):
+    root = _root(tmp_path)
+    path = root / ".plans" / "features" / "no_goal.md"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        "# Plan: t\n\n- **Preferred models:** mid\n\n## Context read\nnotes\n\n"
+        "## Done when\n- [ ] x\n",
+        encoding="utf-8",
+    )
+    code = work_once.main(
+        ["--root", str(root), "--triage", "--tier", "mid", "--agent-id", "t1"]
+    )
+    assert code == 1
+    out = capsys.readouterr().out
+    assert "reject: features/no_goal.md" in out
+    assert "Goal" in out
+
+
+def test_triage_reports_reject_for_unmet_deps_unless_ignored(tmp_path, capsys):
+    root = _root(tmp_path)
+    path = root / ".plans" / "features" / "dep.md"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        "# Plan: t\n\n- **Preferred models:** mid\n- **Depends on:** ghost-plan\n\n"
+        "## Goal\ng\n\n## Done when\n- [ ] x\n",
+        encoding="utf-8",
+    )
+    code = work_once.main(
+        ["--root", str(root), "--triage", "--tier", "mid", "--agent-id", "t1"]
+    )
+    assert code == 1
+    out = capsys.readouterr().out
+    assert "reject: features/dep.md" in out
+    assert "ghost-plan" in out
+
+    code2 = work_once.main([
+        "--root", str(root), "--triage", "--tier", "mid", "--agent-id", "t1",
+        "--no-dep-check",
+    ])
+    assert code2 == 0
+    out2 = capsys.readouterr().out
+    assert "take: features/dep.md" in out2
+
+
+def test_triage_empty_backlog_exits_1(tmp_path, capsys):
+    root = _root(tmp_path)
+    code = work_once.main(
+        ["--root", str(root), "--triage", "--tier", "mid", "--agent-id", "t1"]
+    )
+    assert code == 1
+    assert "no ready" in capsys.readouterr().out
+
+
+def test_triage_never_touches_network(monkeypatch, tmp_path, capsys):
+    """--triage must be pure local file I/O — no anchor_client.Endpoint.chat call."""
+    root = _root(tmp_path)
+    _plan(root / ".plans" / "features" / "a.md", preferred="mid")
+
+    def _boom(*a, **k):
+        raise AssertionError("triage must never dispatch a chat request")
+
+    monkeypatch.setattr("anchor_client.Endpoint.chat", _boom, raising=False)
+    code = work_once.main(
+        ["--root", str(root), "--triage", "--tier", "mid", "--agent-id", "t1"]
+    )
+    assert code == 0
+
+
 def test_bare_loop_never_picks_human_assigned(tmp_path):
     root = _root(tmp_path)
     _plan(root / ".plans" / "features" / "hers.md", preferred="mid", assignee="alice")

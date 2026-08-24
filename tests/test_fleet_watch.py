@@ -1,6 +1,7 @@
 from pathlib import Path
 
 import fleet_watch as fw
+import pytest
 
 
 def test_parse_interval_to_systemd():
@@ -76,6 +77,62 @@ def test_status_ok(tmp_path, capsys):
     out = capsys.readouterr().out
     assert "OK" in out
     assert "claude:opus" in out
+
+
+def test_cmd_list_or_once_builds_triage_command(tmp_path, monkeypatch):
+    project = tmp_path / "app"
+    (project / ".plans").mkdir(parents=True)
+    scripts = Path(fw.SCRIPTS_DIR)
+    captured = {}
+
+    def fake_call(cmd, env=None):
+        captured["cmd"] = cmd
+        return 0
+
+    monkeypatch.setattr(fw.subprocess, "call", fake_call)
+    args = fw.argparse.Namespace(
+        tier="mid", agent_id="t1", endpoint=None, model=None,
+        registry=None, run=False, python="python3",
+    )
+
+    code = fw.cmd_list_or_once(project, scripts, args, mode="triage")
+
+    assert code == 0
+    assert "--triage" in captured["cmd"]
+    assert "--list" not in captured["cmd"]
+    assert "--once" not in captured["cmd"]
+
+
+def test_cmd_list_or_once_builds_list_and_once_commands(tmp_path, monkeypatch):
+    project = tmp_path / "app"
+    (project / ".plans").mkdir(parents=True)
+    scripts = Path(fw.SCRIPTS_DIR)
+    captured = []
+
+    def fake_call(cmd, env=None):
+        captured.append(cmd)
+        return 0
+
+    monkeypatch.setattr(fw.subprocess, "call", fake_call)
+    args = fw.argparse.Namespace(
+        tier="mid", agent_id="t1", endpoint=None, model=None,
+        registry=None, run=False, python="python3",
+    )
+
+    fw.cmd_list_or_once(project, scripts, args, mode="list")
+    fw.cmd_list_or_once(project, scripts, args, mode="once")
+
+    assert "--list" in captured[0] and "--triage" not in captured[0]
+    assert "--once" in captured[1] and "--triage" not in captured[1]
+
+
+def test_cli_triage_needs_tier_or_endpoint(tmp_path, capsys):
+    project = tmp_path / "app"
+    (project / ".plans").mkdir(parents=True)
+    with pytest.raises(SystemExit) as exc_info:
+        fw.main(["--project", str(project), "--triage"])
+    assert exc_info.value.code == 2
+    assert "--triage needs" in capsys.readouterr().err
 
 
 def test_cli_emit_systemd(tmp_path, capsys):
