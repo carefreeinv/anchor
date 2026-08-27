@@ -54,6 +54,7 @@ from handoff import (
     parse_handoff,
 )
 from roles import CRITIC, EXECUTOR, PLANNER, RoleCapabilities, check_role_writes
+from router import fleet_summary_block
 from scope_gate import (
     ScopeConfig,
     ScopeError,
@@ -314,6 +315,11 @@ def enforce_role_phase(caps: RoleCapabilities, root: Path | str,
 def make_plan(goal: str, context: str, fleet: Fleet) -> str:
     ep = fleet.pick("planner")
     print(f"[plan] {ep.name}", file=sys.stderr)
+    # Planner picks 'Route to' targets, so it needs fleet awareness — but only the
+    # generated summary, never the raw registry (secrets/URLs stay in tooling).
+    summary = fleet_summary_block(fleet)
+    if summary:
+        context = f"{context}\n\n{summary}" if context else summary
     return ep.chat(
         [{"role": "system", "content": load_prompt("anchor/system-prompts/mythos-core.md")
           + "\nYour ONLY output is a plan following the template. Do not implement."},

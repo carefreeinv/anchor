@@ -28,6 +28,74 @@ planner = requires designing an approach across components. critic = requires ju
 or deep single-problem reasoning. tuner = trivial/mechanical text work. executor = everything else.
 Reply with the single word only."""
 
+SUMMARY_LINE_CAP = 100  # hard cap per plan constraint; generated, never hand-maintained
+
+_CAPABILITY_BY_TIER = {
+    "swarm": "tiny/fast",
+    "executor": "mid executor",
+    "executor-heavy": "heavier executor",
+    "reasoner": "deep reasoning",
+    "frontier": "frontier-class",
+    "detached": "local/detached",
+}
+
+
+def _capability_phrase(quirks: dict, tier: str) -> str:
+    """One short phrase describing what an endpoint is good for — derived only from
+    fields already in the registry, never hand-maintained."""
+    toggle = quirks.get("think_toggle")
+    if toggle:
+        return f"hybrid-reasoning ({toggle})"
+    if quirks.get("reasoning_effort"):
+        return "reasoning-effort dial"
+    return _CAPABILITY_BY_TIER.get(tier, "standard chat")
+
+
+def summarize_endpoints(fleet) -> list[str]:
+    """One capped one-line summary per endpoint: name, tier, context size, one
+    capability phrase. Never includes base_url, model, or any quirk value that could
+    leak infrastructure/secrets — full detail is a deliberate, on-demand lookup
+    (``endpoint_detail`` / the model-fleet MCP ``lookup_endpoint`` tool), not
+    something every caller gets by default."""
+    lines = []
+    for ep in getattr(fleet, "endpoints", None) or []:
+        ctx = ep.quirks.get("max_context")
+        ctx_str = str(int(ctx)) if ctx else "unspecified"
+        phrase = _capability_phrase(ep.quirks, ep.tier)
+        line = f"{ep.name} · {ep.tier} · ctx={ctx_str} · {phrase}"
+        if len(line) > SUMMARY_LINE_CAP:
+            prefix = f"{ep.name} · {ep.tier} · ctx={ctx_str} · "
+            room = SUMMARY_LINE_CAP - len(prefix) - 1
+            phrase = (phrase[:room] + "…") if room > 0 else "…"
+            line = prefix + phrase
+        lines.append(line)
+    return lines
+
+
+def fleet_summary_block(fleet) -> str:
+    """Header + summary lines, or '' when the fleet has no introspectable endpoints
+    (e.g. a test double). Safe to splice into a prompt unconditionally."""
+    lines = summarize_endpoints(fleet)
+    if not lines:
+        return ""
+    return "FLEET SUMMARY (generated; full endpoint detail via model-fleet MCP lookup_endpoint):\n" + "\n".join(lines)
+
+
+def endpoint_detail(fleet, name: str) -> str:
+    """Full non-secret detail for one endpoint, resolved only on explicit request.
+    Never includes an API key — those come from ``ANCHOR_API_KEY`` at request time,
+    not the registry."""
+    endpoints = getattr(fleet, "endpoints", None) or []
+    ep = next((e for e in endpoints if e.name == name), None)
+    if ep is None:
+        known = ", ".join(e.name for e in endpoints) or "(none configured)"
+        return f"No endpoint named {name!r}. Known: {known}"
+    quirks = ", ".join(f"{k}={v}" for k, v in ep.quirks.items())
+    detail = f"{ep.name} [{ep.tier}] {ep.model} @ {ep.base_url}"
+    if quirks:
+        detail += f"\nquirks: {quirks}"
+    return detail
+
 
 def route(task: str, fleet: Fleet, use_model: bool = False) -> str:
     for pattern, role in RULES:

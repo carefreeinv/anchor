@@ -4,7 +4,8 @@ The delegation arm of the orchestrator pattern: the frontier agent plans, then c
 
 Tools:
 
-- `list_fleet` — endpoints + role routing from `scripts/endpoints.yaml`
+- `list_fleet` — one capped summary line per endpoint (name, tier, context size, capability phrase) + role routing, generated from `scripts/endpoints.yaml`; no `base_url`, model name, or quirk detail
+- `lookup_endpoint(name)` — full non-secret detail for one endpoint, on demand (never a default include; `ANCHOR_API_KEY` stays an environment read, never a registry field)
 - `delegate(task_spec, role, thinking)` — send a self-contained spec to a worker; output is format-gated
 - `delegate_parallel_review(task_spec, work)` — two independent critics must agree (Space-1 verify-twice rule); disagreement → HOLD
 - `fleet_health` — reachability sweep
