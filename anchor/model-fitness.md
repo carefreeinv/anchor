@@ -47,9 +47,11 @@ If the task is **clearly over-tier** for this session (premium/frontier capacity
 trivial work):
 
 1. Entire first line: `SUGGEST-DOWNGRADE: <cheaper model or tier> — <one-line reason>`
-2. **Stop and wait** for the operator (interactive) or let the fleet re-dispatch
-   (orchestrator honors the token). Proceed only if they insist / “do it here” /
-   `--insist` — then mark shaky judgment `(unverified)` if unsure.
+2. **Stop and wait** — `orchestrate.py` honors the token immediately (no retry
+   burn) but does not itself pick or dispatch a cheaper endpoint; the operator
+   (interactive) or an unattended caller re-dispatches to the suggested target.
+   Proceed only if they insist / “do it here” / `--insist` — then mark shaky
+   judgment `(unverified)` if unsure.
 3. Prefer targets from the project’s model-priority list or a reachable local swarm.
 
 **Heuristics (down, conservative):** boilerplate, formatting-only, renames, a single

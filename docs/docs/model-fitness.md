@@ -3,7 +3,7 @@ sidebar_position: 4
 sidebar_label: Model Fitness
 ---
 
-<!-- synced-from: anchor/model-fitness.md @ 4b3cb67a4b42649b6819dda7b0a5d31dcfa57015 -->
+<!-- synced-from: anchor/model-fitness.md @ c810f6bd581752219ca4fb0784c73ee632815d62 -->
 
 # Model fitness
 
