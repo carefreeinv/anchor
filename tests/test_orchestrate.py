@@ -52,7 +52,10 @@ class FakeFleet:
         return self.ep
 
 
-GOOD_OUTPUT = "did the thing\n## Result\nok\n## How to verify\npytest -q\n"
+GOOD_OUTPUT = (
+    "did the thing\n## Result\nok\n## How to verify\npytest -q\n"
+    "## Deferred / concerns\nNone.\n"
+)
 
 
 def test_execute_task_honors_suggest_escalate_without_burning_attempts():

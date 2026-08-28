@@ -47,6 +47,48 @@ VERBOSE_OUTPUT = (
 
 MALFORMED_OUTPUT = "I fixed it, trust me, no need for a footer here."
 
+# Has '## Result' and '## How to verify' but omits '## Deferred / concerns' —
+# the exact gap a looser 2-section footer check would wave through while the
+# stricter 3-section extractor rejects it. Retained rambling preamble so a
+# regression back to the loose check would leak it, same as VERBOSE_OUTPUT.
+MISSING_DEFERRED_SECTION_OUTPUT = (
+    "Let me think out loud about the widget for a while, tracing through the "
+    "code and reasoning about the edge cases before answering, none of which "
+    "the coordinator should ever see back in its own context.\n"
+    "## Result\n"
+    "Implemented the widget.\n"
+    "## How to verify\n"
+    "pytest tests/test_widget.py -q\n"
+)
+
+
+def test_missing_deferred_concerns_is_not_silently_accepted():
+    """A reply short exactly one required section must not pass the retry
+    gate on attempt 1 — it is malformed just like MALFORMED_OUTPUT, not a
+    free pass to relay the raw reply (rambling included)."""
+    fleet = RecordingFleet(
+        [MISSING_DEFERRED_SECTION_OUTPUT, MISSING_DEFERRED_SECTION_OUTPUT]
+    )
+    result = execute_task(
+        "do the thing", "plan", fleet, verify_cmd=None, hold_on_fail=False,
+    )
+
+    assert result["status"] == "escalate"
+    assert fleet.ep.calls == 2  # one corrective retry, then stop
+
+
+def test_missing_deferred_concerns_then_corrected_relays_footer_only():
+    fleet = RecordingFleet([MISSING_DEFERRED_SECTION_OUTPUT, VERBOSE_OUTPUT])
+    result = execute_task(
+        "do the thing", "plan", fleet, verify_cmd=None, hold_on_fail=False,
+    )
+
+    assert result["status"] == "ok"
+    assert fleet.ep.calls == 2
+    assert "Implemented the widget." in result["output"]
+    # The corrected attempt's own preamble never reaches the coordinator either.
+    assert "reasoning about the edge cases" not in result["output"]
+
 
 def test_coordinator_sees_only_the_footer_not_the_rambling(tmp_path: Path):
     fleet = RecordingFleet([VERBOSE_OUTPUT])

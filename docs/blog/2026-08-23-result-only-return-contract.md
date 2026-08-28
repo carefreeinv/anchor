@@ -47,16 +47,20 @@ smuggling a full transcript inside `## Result` doesn't work either.
 `scripts/orchestrate.py` archives every dispatch's full raw reply to
 `var/task-transcripts/<task-hash>.log` — a metadata header per attempt,
 appended across retries and respawns — before anything crosses back to the
-coordinator. What actually crosses is `relay_text(out)`: the extracted
-footer when the reply has one, or the raw reply capped at the same line
-budget when it doesn't. Either way, the coordinator's context, the next
-task's prompt, and the claimed-vs-actual ledger's claim-parsing input all
-see the same bounded text — never the unbounded original.
+coordinator. What crosses is `relay_text(out)`, and the retry gate is what
+guarantees which branch of it fires: a reply missing any of the three
+required sections never reaches `relay_text` as an accepted result in the
+first place, so by the time it's called on a `status: ok` reply the
+extraction always succeeds — the coordinator's context and the next task's
+prompt see the extracted footer, never a raw-capped fallback.
+`relay_text`'s raw-capped branch still exists for the outcome ledger's
+audit record on an exhausted-retries escalation, where "log what was said"
+matters more than the strict contract.
 
-A reply with no recognizable footer at all still gets exactly the treatment
-rule 6/8 already specified: one corrective retry with the expected shape
-quoted, then escalation. Nothing about that path changed — only what
-happens to a reply that *does* have one.
+A reply missing any of the three required sections — not just one with no
+recognizable footer at all — gets exactly the treatment rule 6/8 already
+specified: one corrective retry with the expected shape quoted, then
+escalation.
 
 ## Using it
 

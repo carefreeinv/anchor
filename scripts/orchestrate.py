@@ -584,8 +584,11 @@ def execute_task(task: str, plan: str, fleet: Fleet, verify_cmd: str | None,
             )
             continue
 
-        if not has_required_footer(out):
-            history.append("FORMAT: output missing required '## Result'/'## How to verify' footer")
+        if not extract_footer(out).ok:
+            history.append(
+                "FORMAT: output missing one or more required footer sections "
+                "('## Result' / '## How to verify' / '## Deferred / concerns')"
+            )
             continue
 
         # Scope gate (mythos-core rule 7, machine-enforced): reject any change
