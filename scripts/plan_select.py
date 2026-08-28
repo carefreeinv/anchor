@@ -44,9 +44,7 @@ from dataclasses import dataclass, replace
 from enum import Enum
 from pathlib import Path
 
-GOAL_RE = re.compile(
-    r"^##\s+Goal\s*$([\s\S]*?)(?=^##\s|\Z)", re.MULTILINE | re.IGNORECASE
-)
+from plan_parse import GOAL_RE, has_goal_section, safe_read_text, strip_code_fences
 
 READY_LANES = ("bugs", "features")
 IN_PROGRESS_LANE = "in-progress"
@@ -180,6 +178,8 @@ class PlanRecord:
     deps_notes: tuple[str, ...] = ()  # human-readable check notes
     assignee: str | None = None  # raw Assignee value; None == unset (agent-eligible)
     agent_assignable: bool = True  # False when assigned to a named person
+    parse_error: str | None = None  # set when the file could not be read at all
+    has_goal: bool = True  # False when ## Goal is missing/empty (daemon triage: reject)
 
     @property
     def ready(self) -> bool:
@@ -441,9 +441,6 @@ def inventory_all_plan_summaries(plans_root: Path) -> list[dict[str, str]]:
     """
     if not plans_root.is_dir():
         return []
-    goal_re = re.compile(
-        r"^##\s+Goal\s*$([\s\S]*?)(?=^##\s|\Z)", re.MULTILINE | re.IGNORECASE
-    )
     out: list[dict[str, str]] = []
     for lane_dir in sorted(p for p in plans_root.iterdir() if p.is_dir()):
         if lane_dir.name.startswith("."):
@@ -451,11 +448,11 @@ def inventory_all_plan_summaries(plans_root: Path) -> list[dict[str, str]]:
         for path in sorted(lane_dir.glob("*.md")):
             if path.name == "README.md":
                 continue
-            try:
-                text = path.read_text(encoding="utf-8")
-            except OSError:
+            raw_text, parse_error = safe_read_text(path)
+            if parse_error is not None:
                 continue
-            gm = goal_re.search(text)
+            text = strip_code_fences(raw_text)
+            gm = GOAL_RE.search(text)
             goal = " ".join((gm.group(1) if gm else "").split())[:240]
             out.append(
                 {
@@ -746,7 +743,29 @@ def _record_from_path(
     plans_root: Path | None = None,
     git_check: bool = True,
 ) -> PlanRecord:
-    text = path.read_text(encoding="utf-8")
+    raw_text, parse_error = safe_read_text(path)
+    if parse_error is not None:
+        # Corrupt/unreadable file: never crash the daemon loop over one bad plan.
+        # Every field below falls back to a safe default; triage_plan's
+        # parse_error check rejects this record before any other field matters.
+        return PlanRecord(
+            path=path.resolve(),
+            rel=f"{lane}/{path.name}",
+            lane=lane,
+            slug=plan_slug(path),
+            value="medium",
+            priority=DEFAULT_PRIORITY,
+            preferred=None,
+            title=path.name,
+            fit=Fit.UNKNOWN,
+            owner=owner,
+            parse_error=parse_error,
+            has_goal=False,
+        )
+    # Fence-stripped once, reused by every field parser below — a plan that
+    # quotes an example header inside a code fence (anchor/templates/plan.md
+    # does exactly that) must never have the example read as its own field.
+    text = strip_code_fences(raw_text)
     preferred = parse_preferred(text)
     deps = tuple(parse_depends_on(text))
     root = plans_root if plans_root is not None else path.parent.parent
@@ -768,6 +787,7 @@ def _record_from_path(
         deps_notes=notes,
         assignee=parse_assignee(text),
         agent_assignable=is_agent_assignable(text),
+        has_goal=has_goal_section(text),
     )
 
 
@@ -1092,11 +1112,10 @@ def format_list_table(records: list[PlanRecord]) -> str:
 
 
 def _goal_snippet(path: Path, limit: int = 200) -> str:
-    try:
-        text = path.read_text(encoding="utf-8")
-    except OSError:
+    text, parse_error = safe_read_text(path)
+    if parse_error is not None:
         return ""
-    m = GOAL_RE.search(text)
+    m = GOAL_RE.search(strip_code_fences(text))
     return " ".join((m.group(1) if m else "").split())[:limit]
 
 

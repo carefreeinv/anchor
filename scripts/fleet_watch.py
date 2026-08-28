@@ -270,8 +270,9 @@ def cmd_list_or_once(
     scripts: Path,
     args: argparse.Namespace,
     *,
-    once: bool,
+    mode: str,
 ) -> int:
+    """mode: 'once' (claim + execute), 'list', or 'triage' (mechanical, no LLM/network)."""
     worker = WorkerSpec(
         tier=args.tier,
         agent_id=args.agent_id or f"watch-{os.environ.get('USER', 'agent')}",
@@ -281,7 +282,7 @@ def cmd_list_or_once(
         registry=args.registry,
         run=args.run,
     )
-    if once:
+    if mode == "once":
         cmd = work_once_cmd(
             scripts, project, worker, python=args.python
         )
@@ -291,7 +292,7 @@ def cmd_list_or_once(
             str(scripts / "work_once.py"),
             "--root",
             str(project.resolve()),
-            "--list",
+            "--list" if mode == "list" else "--triage",
             "--agent-id",
             worker.agent_id,
         ]
@@ -477,10 +478,15 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--status", action="store_true", help="inspect project + installed timers")
     ap.add_argument("--list", action="store_true", help="run work_once --list for project")
     ap.add_argument("--once", action="store_true", help="run work_once --once for project")
-    ap.add_argument("--tier", help="worker tier for --list/--once")
-    ap.add_argument("--agent-id", help="agent id for --list/--once")
-    ap.add_argument("--endpoint", help="endpoint name for --list/--once")
-    ap.add_argument("--model", help="model name for --list/--once")
+    ap.add_argument(
+        "--triage", action="store_true",
+        help="run work_once --triage for project (mechanical take/skip/reject; "
+             "no LLM, no network, no claim)",
+    )
+    ap.add_argument("--tier", help="worker tier for --list/--once/--triage")
+    ap.add_argument("--agent-id", help="agent id for --list/--once/--triage")
+    ap.add_argument("--endpoint", help="endpoint name for --list/--once/--triage")
+    ap.add_argument("--model", help="model name for --list/--once/--triage")
     ap.add_argument("--registry", help="endpoints.yaml path")
     ap.add_argument("--run", action="store_true", help="with --once, pass --run to work_once")
     ap.add_argument(
@@ -523,12 +529,17 @@ def main(argv: list[str] | None = None) -> int:
     if args.list:
         if not args.tier and not args.endpoint:
             ap.error("--list needs --tier or --endpoint")
-        return cmd_list_or_once(project, scripts, args, once=False)
+        return cmd_list_or_once(project, scripts, args, mode="list")
+
+    if args.triage:
+        if not args.tier and not args.endpoint:
+            ap.error("--triage needs --tier or --endpoint")
+        return cmd_list_or_once(project, scripts, args, mode="triage")
 
     if args.once:
         if not args.tier and not args.endpoint:
             ap.error("--once needs --tier or --endpoint")
-        return cmd_list_or_once(project, scripts, args, once=True)
+        return cmd_list_or_once(project, scripts, args, mode="once")
 
     if args.emit or args.install_user or args.write_dir:
         if not args.worker:

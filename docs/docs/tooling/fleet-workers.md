@@ -295,6 +295,7 @@ flowchart LR
 | One plan | `--once` (default when not listing) | Cron / timer / agent turn |
 | Up to N plans | `--max-plans N` | Drain a burst without “run forever” |
 | Inventory only | `--list` | Debugging fit; no claim |
+| Mechanical triage only | `--triage` | No LLM, no network, no claim — accept/skip/reject with a reason per plan |
 
 Never “drain entire backlog forever” as the default—bounded polls keep economics and blast radius under control.
 

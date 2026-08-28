@@ -137,6 +137,7 @@ FLEET_FILES: list[str] = [
     "scripts/handoff.py",
     "scripts/work_once.py",
     "scripts/plan_select.py",
+    "scripts/plan_parse.py",
     "scripts/plan_lease.py",
     "scripts/plan_board.py",
     "scripts/plan_fit.py",

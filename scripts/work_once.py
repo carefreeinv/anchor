@@ -47,6 +47,7 @@ from plan_lease import (
     renew,
     return_to_ready,
 )
+from plan_parse import TriageAction, triage_plan
 from plan_select import (
     REGISTRY_TIER_TO_FIT,
     Fit,
@@ -182,6 +183,33 @@ def cmd_list(plans_root: Path, worker: Worker, agent_id: str) -> int:
             who = lease.agent_id if lease else "?"
             print(f"#   {rel}  agent={who}", file=sys.stderr)
     return 0
+
+
+def cmd_triage(
+    plans_root: Path,
+    worker: Worker,
+    agent_id: str,
+    *,
+    ignore_deps: bool = False,
+) -> int:
+    """Mechanical accept/skip/reject over ready + own in-progress plans.
+
+    No LLM, no network, no claim/move/dispatch — purely a read of already-parsed
+    ``PlanRecord``s through :func:`plan_parse.triage_plan`. Safe to run on every
+    daemon/fleet-worker poll before anything that would cost tokens. Exit ``0``
+    when at least one plan is a **take**, ``1`` otherwise (mirrors ``plan_fit.py``).
+    """
+    records = inventory(plans_root, worker, agent_id=agent_id)
+    if not records:
+        print("(no ready or own in-progress plans)")
+        return 1
+    any_take = False
+    for rec in records:
+        verdict = triage_plan(rec, worker, ignore_deps=ignore_deps, agent_id=agent_id)
+        print(f"{verdict.action.value}: {rec.rel} — {verdict.reason}")
+        if verdict.action is TriageAction.TAKE:
+            any_take = True
+    return 0 if any_take else 1
 
 
 def pick_claim_one(
@@ -321,6 +349,12 @@ def main(argv: list[str] | None = None) -> int:
         "--list",
         action="store_true",
         help="list ready plans with fit; do not claim or execute",
+    )
+    ap.add_argument(
+        "--triage",
+        action="store_true",
+        help="mechanical take/skip/reject over ready + own in-progress plans "
+             "(no LLM, no network, no claim); exit 0 if anything is a take",
     )
     ap.add_argument(
         "--once",
@@ -577,6 +611,11 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.list:
         return cmd_list(plans_root, worker, args.agent_id)
+
+    if args.triage:
+        return cmd_triage(
+            plans_root, worker, args.agent_id, ignore_deps=args.no_dep_check
+        )
 
     max_n = args.max_plans
     if max_n is None:
