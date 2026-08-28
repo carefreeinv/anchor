@@ -36,7 +36,15 @@ import time
 from pathlib import Path
 
 from anchor_client import Endpoint, Fleet, has_required_footer, load_prompt
-from fleet_metrics import record_task_outcome
+from fleet_metrics import (
+    FIT_TIER_LADDER,
+    load_outcomes,
+    normalize_fit_tier,
+    record_task_outcome,
+    render_human_report,
+    should_stop,
+    task_id_for,
+)
 from handoff import (
     Handoff,
     HandoffError,
@@ -65,6 +73,31 @@ BUDGET_CHARS_PER_TOKEN = 4  # matches prompt_tuner's conservative estimate
 HANDOFF_THRESHOLD = 0.8
 # A task needing a fourth window is decomposed wrong, not merely large.
 MAX_RESPAWNS = 2
+
+# Fit-gate tokens (mythos-core rule 11). A rule-13 preflight block may precede them.
+FIT_GATE_SCAN_LINES = 12
+_FIT_GATE_PREFIXES = ("SUGGEST-ESCALATE", "SUGGEST-DOWNGRADE", "SUGGEST-REROUTE")
+
+
+def fit_gate_line(out: str) -> str | None:
+    """Return the first power/specialty fit-gate line, or None.
+
+    Honors a bare first line *and* a token after mythos-core rule 13's six-item
+    preflight. Only the first ``FIT_GATE_SCAN_LINES`` non-empty lines are
+    inspected so later prose quoting the tokens cannot trip the gate.
+    """
+    seen = 0
+    for raw in out.splitlines():
+        line = raw.strip()
+        if not line:
+            continue
+        seen += 1
+        upper = line.upper()
+        if any(upper.startswith(p) for p in _FIT_GATE_PREFIXES):
+            return line
+        if seen >= FIT_GATE_SCAN_LINES:
+            break
+    return None
 
 
 def estimate_tokens(text: str) -> int:
@@ -163,6 +196,79 @@ def run_cmd(cmd: str) -> tuple[bool, str]:
     p = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=1800)
     out = (p.stdout + p.stderr)[-4000:]
     return p.returncode == 0, out
+
+
+# --- harness-enforced stop condition (mythos-core rule 6, mirrored harness-side) --
+# should_stop() reads the persistent outcome ledger rather than an in-memory attempt
+# counter, so the backstop survives across separate orchestrate.py invocations —
+# exactly the case a flailing model's own attempt-counting can't cover.
+
+
+def endpoint_model_name(ep) -> str:
+    """Same identity should_stop's (task, model) counting keys on — matches how
+    _ledger_outcome already names an endpoint when writing a row."""
+    return getattr(ep, "model", None) or getattr(ep, "name", "unknown")
+
+
+def endpoint_fit_tier(ep) -> str:
+    return normalize_fit_tier(getattr(ep, "tier", None) or "mid")
+
+
+def available_fit_tiers(fleet) -> tuple[str, ...]:
+    """This fleet's configured tiers, ascending. Falls back to the full ladder when
+    ``fleet`` can't be introspected (e.g. a test double with no ``.endpoints``) —
+    a conservative default that never claims exhaustion it can't actually see.
+    """
+    endpoints = getattr(fleet, "endpoints", None)
+    if not endpoints:
+        return FIT_TIER_LADDER
+    present = {endpoint_fit_tier(ep) for ep in endpoints}
+    return tuple(t for t in FIT_TIER_LADDER if t in present)
+
+
+def pick_escalation_endpoint(fleet, fit_tier: str):
+    """First endpoint at ``fit_tier``, or None if the fleet has none / can't be
+    introspected. Bypasses the executor role's tier-preference list on purpose —
+    escalation targets a specific rung, not "whatever the role prefers".
+    """
+    endpoints = getattr(fleet, "endpoints", None)
+    if not endpoints:
+        return None
+    for ep in endpoints:
+        if endpoint_fit_tier(ep) == fit_tier:
+            return ep
+    return None
+
+
+def write_human_report(root: Path, *, task_id: str, task_slug: str | None, report: str) -> Path:
+    """Persist a top-tier-exhaustion report to disk — "the orchestrator generates
+    it even if the model never did" means a file a human can actually open, not
+    just a string in an in-memory result dict."""
+    out_dir = Path(root) / "var" / "human-reports"
+    out_dir.mkdir(parents=True, exist_ok=True)
+    short = task_id.split(":")[-1]
+    name = f"{task_slug}-{short}" if task_slug else short
+    path = out_dir / f"{name}.md"
+    path.write_text(report, encoding="utf-8")
+    return path
+
+
+def escalation_directive(decision) -> str:
+    """Text appended to an escalated spec — both failures' evidence, per the plan's
+    "attaching both failures' evidence to the escalated spec" constraint."""
+    lines = "\n".join(
+        f"- attempt at tier '{rec.tier}' (model `{rec.model}`): "
+        f"verify_exit={rec.actual_verify_exit!r}, scope_verdict={rec.scope_verdict!r}"
+        for rec in decision.evidence
+    )
+    return (
+        f"\n\nESCALATION: {decision.reason}\n"
+        "Prior failed attempts (from the outcome ledger):\n"
+        f"{lines}\n"
+        "You are being dispatched at a higher tier because the lower tier failed "
+        "this task twice. Do not repeat the same approach without addressing why "
+        "it failed."
+    )
 
 
 def log_event(events: list[dict], event: str, **details) -> dict:
@@ -304,13 +410,54 @@ def execute_task(task: str, plan: str, fleet: Fleet, verify_cmd: str | None,
     last_ep = None
     last_out: str | None = None
     recorded = False
+    tid = task_id_for(task, slug=task_slug)
+    fit_tiers = available_fit_tiers(fleet)
     for attempt in range(1, MAX_ATTEMPTS + 1):
         ep = fleet.pick("executor")
         last_ep = ep
+        escalation_suffix = ""
+
+        # Harness-enforced stop condition (mythos-core rule 6, mirrored harness-side):
+        # a persistent ledger check, not an in-memory attempt count, so a resumed
+        # invocation still refuses a third dispatch to a model that already failed
+        # this task twice — the model's own attempt-counting is a backstop, not this.
+        #
+        # This re-checks should_stop after EVERY hop, not just once against the base
+        # tier: fleet.pick("executor") always returns the same base-tier endpoint, so
+        # checking only that endpoint would forget an escalated tier's own failures on
+        # the next invocation and re-escalate the same one hop forever, never reaching
+        # a tier that is itself exhausted. The ladder is strictly monotone
+        # (target_tier is always one rung higher), so this always terminates.
+        if metrics_ledger is not None:
+            ledger_rows = load_outcomes(metrics_ledger)
+            while True:
+                decision = should_stop(tid, endpoint_model_name(ep), ledger_rows,
+                                       tier=endpoint_fit_tier(ep), tier_ladder=fit_tiers)
+                if decision.action == "continue":
+                    break
+                if decision.action == "human-report":
+                    report = render_human_report(task, decision.evidence)
+                    print(f"[stop] human-report: {decision.reason}", file=sys.stderr)
+                    return {"task": task, "status": "human-report", "attempts": attempt,
+                            "message": decision.reason, "report": report}
+                escalated = pick_escalation_endpoint(fleet, decision.target_tier)
+                if escalated is None:
+                    print(f"[stop] escalate-tier to '{decision.target_tier}' requested but no "
+                          "such endpoint is configured — reporting up instead", file=sys.stderr)
+                    return {"task": task, "status": "escalate", "attempts": attempt,
+                            "message": decision.reason, "target_tier": decision.target_tier}
+                print(f"[stop] {decision.reason} -> {escalated.name} ({decision.target_tier})",
+                      file=sys.stderr)
+                ep = escalated
+                last_ep = ep
+                escalation_suffix = escalation_directive(decision)
+
         print(f"[exec {attempt}/{MAX_ATTEMPTS}] {ep.name}: {task[:70]}", file=sys.stderr)
         prompt = f"PLAN (context only):\n{plan}\n\nYOUR SINGLE TASK:\n{task}"
         if history:
             prompt += f"\n\nPREVIOUS ATTEMPT FAILED. Verbatim failure output:\n{history[-1]}"
+        if escalation_suffix:
+            prompt += escalation_suffix
 
         # Budget gate: refuse dispatch rather than truncate when the prompt already
         # exceeds this endpoint's serving ceiling — a decomposition error, not
@@ -357,21 +504,20 @@ def execute_task(task: str, plan: str, fleet: Fleet, verify_cmd: str | None,
             return {"task": task, "status": "handoff", "attempts": attempt,
                     "handoff": parsed, "output": out}
 
-        # Fit check (mythos-core rules 10–11): too hard (ESCALATE) or too easy
-        # (DOWNGRADE). Honor either first line immediately instead of burning
-        # attempts, unless the operator ran with --insist.
-        _fit_line = out.strip().splitlines()[0] if out.strip() else ""
-        _fit_upper = _fit_line.upper()
-        if (
-            _fit_upper.startswith("SUGGEST-ESCALATE")
-            or _fit_upper.startswith("SUGGEST-DOWNGRADE")
-        ):
+        # Fit check (mythos-core rules 10–11): dual-axis, bidirectional — power
+        # too-hard (ESCALATE), power too-easy (DOWNGRADE), or specialty (REROUTE).
+        # Honor a bare first line *or* a token after rule 13's preflight instead
+        # of burning attempts, unless the operator ran with --insist.
+        _fit_line = fit_gate_line(out)
+        if _fit_line:
             suggestion = _fit_line[:300]
-            kind = (
-                "downgrade"
-                if _fit_upper.startswith("SUGGEST-DOWNGRADE")
-                else "escalation"
-            )
+            _fit_upper = _fit_line.upper()
+            if _fit_upper.startswith("SUGGEST-DOWNGRADE"):
+                kind = "downgrade"
+            elif _fit_upper.startswith("SUGGEST-REROUTE"):
+                kind = "re-route"
+            else:
+                kind = "escalation"
             if not insist:
                 print(f"[fit] {ep.name} suggests {kind}: {suggestion}", file=sys.stderr)
                 status = "hold" if hold_on_fail else "escalate"
@@ -385,9 +531,9 @@ def execute_task(task: str, plan: str, fleet: Fleet, verify_cmd: str | None,
                         "suggestion": suggestion, "history": history}
             history.append(
                 f"Your previous output was a fit gate ({suggestion[:80]}…). "
-                "The operator insists you proceed at this tier: stay strictly in "
-                "scope, mark shaky output (unverified), and do not SUGGEST-ESCALATE "
-                "or SUGGEST-DOWNGRADE again."
+                "The operator insists you proceed at this tier/profile: stay strictly "
+                "in scope, mark shaky output (unverified), and do not SUGGEST-ESCALATE, "
+                "SUGGEST-DOWNGRADE, or SUGGEST-REROUTE again."
             )
             continue
 
@@ -565,7 +711,7 @@ def main() -> None:
     ap.add_argument("--hold-on-fail", action="store_true",
                     help="detached mode: hold failed tasks for later instead of escalating")
     ap.add_argument("--insist", action="store_true",
-                    help="override workers' SUGGEST-ESCALATE / SUGGEST-DOWNGRADE fit checks and make them proceed")
+                    help="override workers' SUGGEST-ESCALATE / SUGGEST-DOWNGRADE / SUGGEST-REROUTE fit checks and make them proceed")
     ap.add_argument("--scope-spec",
                     help="task-spec markdown with '## Files in scope'; changes outside it "
                          "are rejected before --verify runs")
@@ -667,6 +813,13 @@ def main() -> None:
             metrics_ledger=metrics_ledger, task_slug=task_slug,
             outcome_sink=outcome_sink, max_respawns=args.max_respawns, events=events,
         )
+        if r.get("status") == "human-report":
+            report_path = write_human_report(
+                root, task_id=task_id_for(t, slug=task_slug), task_slug=task_slug,
+                report=r["report"],
+            )
+            r["report_path"] = str(report_path)
+            log_event(events, "human-report", path=str(report_path))
         role_verdict = guard(EXECUTOR, before, spec_deny)
         if role_verdict is not None and not role_verdict.ok:
             r["status"] = "failed-role"

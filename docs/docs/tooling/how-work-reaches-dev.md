@@ -54,7 +54,57 @@ proves the branch is exactly what the run thinks it is. All of it must hold:
 python scripts/merge_feature.py --root <checkout> --slug <slug> \
   --touched touched.txt --expect-head <sha> --dry-run
 # 0 would merge · 3 scope violation · 4 precondition · 5 conflict · 2 git error
+#                                              6 merge staged, not committed
 ```
+
+**Exit `6` is not a failure and not a success.** A merge that cannot fast-forward
+creates a commit, and a commit is gated *before* it exists — so the run stages the
+merge and stops, leaving the tree parked on the integration branch with the merge
+in the index. Nothing has been committed yet. Run `/commit-prep` against that
+merged tree, then finish it:
+
+```bash
+python scripts/merge_feature.py --root <checkout> --commit-staged   # prep green
+python scripts/merge_feature.py --root <checkout> --abort-staged    # prep red
+```
+
+`--commit-staged` stages prep's own edits along with the merge and commits both,
+then returns to the branch you started on. `--abort-staged` unwinds the merge and
+leaves the integration branch untouched. Leaving a run at exit `6` without doing
+either leaves the checkout mid-merge, so treat it as work in progress, not a
+result.
+
+A run can also report **already contained**: every commit on the branch is
+already on the integration branch (it was merged earlier and the branch has
+since been left behind). That exits `0` like a successful merge, because the
+work *is* integrated — but it says so explicitly rather than printing a SHA
+that implies this run moved something, and it touches nothing.
+
+Both finishers check that the merge they recorded is still the merge in front of
+them, and refuse rather than guess — `MERGE_HEAD` existing is not enough, so it is
+compared against the exact commit that was merged and a *different* staged merge is
+refused rather than committed under this plan's name. The comparison is against
+that commit, not the branch name: the branch is expected to move, since committing
+a fix is how a red prep gets resolved. If you resolved the merge by hand in between,
+`--commit-staged` refuses (exit `4`) instead of committing whatever is now in the
+tree, and `--abort-staged` clears the stale record **without** resetting anything
+— a `reset --hard` against a tree the record no longer describes would destroy
+unrelated uncommitted work rather than undo a merge. If a merge is in progress on
+a *different* branch than the one recorded, both refuse.
+
+A merge also requires `--root` itself to be fit for one. It is refused when that
+checkout already has a merge in progress or an unfinished staged record — the
+conflict probe would otherwise abort another agent's staged merge, and both skills
+point every agent at the same shared checkout — and when it holds uncommitted or
+untracked files. The last check applies to **any run that actually merges,
+including `--dry-run`**, and for two reasons: the conflict probe ends in a
+`git reset --hard` that would discard uncommitted work it did not create, and
+anything still present later is swept into the merge commit by
+`--commit-staged`'s `git add -A`. The two runs that touch nothing are exempt — a
+fast-forward, and an already-contained branch — because neither probes nor
+commits. Note this is a *different* check from the clean-tree gate, which
+follows the feature branch's worktree: the tree that did the work and the tree the
+merge lands in are different directories on the topology `/work` recommends.
 
 `--expect-head` is **required**: without the SHA the run committed there is no way
 to tell the branch has not moved since, and provenance is a must-hold condition

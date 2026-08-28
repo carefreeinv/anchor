@@ -128,7 +128,14 @@ from the plan body** (and optional user wording).
 5. **Preserve basename:** move with the **same filename** (e.g.
    `drafts/foo.local.md` → `features/foo.local.md`; `drafts/foo.md` →
    `features/foo.md`). Do **not** drop `.local`. Prefer `git mv` when the source
-   is already tracked; else `mv`. Create the target dir if needed.
+   is already tracked; else `mv`. Create the target dir if needed. A promote of a
+   **tracked** plan is a tracked change — commit it via the **light path** — the
+   `/commit-prep` exemption for plans-only commits (see the platform brief) —
+   state what moved and why, then `git add .plans/` and
+   `git commit -m "…" -- .plans/`; the pathspec matters — a bare `git commit`
+   commits the whole index. No CHANGELOG, no blog,
+   no test run. Untracked (`.local.md`, or a project that ignores `.plans/`): say
+   "promoted (untracked)" and commit nothing.
 6. Do **not** start `/work` unless the user immediately asks.
 7. Report old path → new path **and** the inferred lane + one-line reason
    (e.g. `features/ — Value: high + “add fleet-watch skill” Goal`; note if still

@@ -22,8 +22,9 @@ path-required skill). Full procedure:
 3. **Inventory:** manifest, `.anchor/`, platform roots, `.plans/`, legacy fleet.
 4. **Manifest present** → `anchor --check` / `--upgrade --dry-run`; present
    take/keep table; confirm before `--upgrade --yes`. No `--force` unless user
-   accepts overwriting local mods. Fix **source missing** scaffolded skills by
-   refreshing from `$ANCHOR_ROOT/platforms/…` and updating manifest src/hash.
+   accepts overwriting local mods. Fix **source missing** by `anchor --upgrade`
+   (remaps known moves such as dual-use `/local-models`) or refresh remaining
+   `$ANCHOR_ROOT/platforms/…` paths and update manifest src/hash.
 5. **No manifest** → dry-run scaffold; on conflicts classify (identical /
    user agent config / tooling / legacy) and propose **merge / backup / skip**.
 6. Confirm before writes; verify with `anchor --check`.

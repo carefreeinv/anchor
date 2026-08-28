@@ -1,10 +1,9 @@
-<!-- synced-from: platforms/chat/CHAT.md @ e07c9344d4d67edd378555fa9c4ffd60def5878c -->
 ---
 sidebar_position: 5
 sidebar_label: Generic Chat
 ---
 
-<!-- synced-from: platforms/chat/CHAT.md @ PENDING -->
+<!-- synced-from: platforms/chat/CHAT.md @ f73ef77f6e247dda47c70d2c33fe8c33c704bef3 -->
 
 # Generic Chat
 
@@ -13,7 +12,7 @@ Install: paste `platforms/chat/CHAT.md`'s session preamble into custom instructi
 
 ## ChatGPT / GPT-5.6 (reviewed 2026-07-08)
 
-ChatGPT currently serves GPT-5.5 with an Instant Mini fallback that can vary the tier mid-session — restate constraints after quality shifts. The GPT-5.6 family (Sol/Terra/Luna) is strong at agentic coding `(unverified, vendor)`, but OpenAI's own system card documents a greater tendency to exceed user intent — unrequested actions and claiming unperformed work — which is exactly what the hard rules (verify-don't-claim, `(unverified)` marking, scope) exist to counter. Tier guidance: Terra for executor economics, Luna for tuner work, Sol only where its agentic edge is needed. Poor-fit requests use bidirectional fit per [model fitness](/model-fitness): `SUGGEST-ESCALATE:` when too hard, `SUGGEST-DOWNGRADE:` when clearly over-tier — not merely an unfamiliar codebase or a stronger tier existing.
+ChatGPT currently serves GPT-5.5 with an Instant Mini fallback that can vary the tier mid-session — restate constraints after quality shifts. The GPT-5.6 family (Sol/Terra/Luna) is strong at agentic coding `(unverified, vendor)`, but OpenAI's own system card documents a greater tendency to exceed user intent — unrequested actions and claiming unperformed work — which is exactly what the hard rules (verify-don't-claim, `(unverified)` marking, scope) exist to counter. Tier guidance: Terra for executor economics, Luna for tuner work, Sol only where its agentic edge is needed. Poor-fit requests get a dual-axis, bidirectional gate per [model fitness](/model-fitness): `SUGGEST-ESCALATE:` for weak-column power issues, `SUGGEST-DOWNGRADE:` when clearly over-tier, or `SUGGEST-REROUTE: coding-agent — …` when pure general-chat cannot run multi-file software — not merely an unfamiliar codebase or a stronger tier existing.
 
 ## The constraint that shapes everything here
 

@@ -13,7 +13,7 @@
 - **Value:** high | medium | low          <!-- features only; omit for bugs -->
 - **Priority:** P1 | P2 | P3               <!-- P1 > P2 > P3; default P2 if omitted; orders within a lane -->
 - **Slug:** <filename without .md and without .local>
-- **Preferred models:** <names and/or tiers — who should execute this plan>
+- **Preferred models:** <names and/or tiers and optional specialty profile tags (`coding-agent`, `terminal-agent`, `critic`, `planner`, `general-chat`, `multimodal`, `swarm-local`) — who should execute this plan; e.g. `mid, coding-agent` or `coding-agent, Claude Sonnet 5`>
 - **Assignee:** ai                          <!-- optional; default ai. A person's name/username/email (or `human`) marks a plan agents must NOT auto-claim — a human completes it; agents may still edit its body for status/comments and commit that -->
 - **Depends on:** <comma-separated plan slugs, or `none`>  <!-- other .plans work that must be done first -->
 
@@ -96,7 +96,7 @@ Use **model names** and/or **tiers** (see `.anchor/ANCHOR.md` routing + `.anchor
 | Tier | Typical models | Good for |
 |------|----------------|----------|
 | `small` | Haiku, Qwen3 4–8B, Gemma 3 12B | Boilerplate, renames, formatting, thin docs |
-| `mid` | Sonnet-class, Grok 4.5, Qwen3 32B, GPT Terra | Scoped multi-file features, refactors, routine reviews |
+| `mid` | Sonnet-class, **Grok 4.5** (prefer cheaper), Grok 4.6 @ low/unknown, Qwen3 32B, GPT Terra | Scoped multi-file features, refactors, routine reviews |
 | `reasoner` | Opus-class, Nemotron thinking-on, R1 distill | Architecture, deep single-bug, security-adjacent |
 | `frontier` | Fable-class | Multi-hour autonomy, large migrations, multi-service debug |
 

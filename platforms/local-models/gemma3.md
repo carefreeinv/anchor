@@ -11,7 +11,7 @@ Gemma 3's chat template has **no true system role** — "system" text is folded 
 - Put `mythos-core.md` at the top of the FIRST user message, followed by `---`, then the task spec.
 - Instructions decay over turns faster than on models with a real system slot → hard rule: **one task per conversation**, never multi-turn task chains.
 
-Registry mapping for the fleet scripts (`scripts/fit_device.py` emits this for you):
+Registry mapping for the fleet scripts (`.anchor/scripts/fit_device.py` emits this for you):
 
 ```yaml
 quirks:

@@ -40,11 +40,12 @@ The "which tier deserves this task" rule as code: regex heuristics first (free),
 
 **Which ready plans should I take?** — read-only triage for one worker, so fit is applied mechanically instead of judged from plan headers. Identify yourself with `--tier` / `--model` / `--endpoint`; add `--effort` for cost advice. Prints one `take:`/`skip:` line per plan with the reason, then a claim command for the top pick. It never claims, moves, or leases — pair with `plan_select.py --next --claim`. Exit `0` something eligible, `1` nothing eligible (useful in cron guards), `2` error.
 
-**Effort is a cost dial, not a tier promotion:** `--effort` only advises raising or lowering the dial; it never changes which plans are eligible. Plans with a human **Assignee** (a name/username/email, or `human`) are shown as skipped with reason `assigned to <who>` — agents never auto-claim them. `--json` for tooling, `--eligible-only` to quiet the skips, `--next` to print just the top path.
+**Grok family:** `--effort` sets **effective** Preferred eligibility (`low`→mid, `medium`/`high`→reasoner, `xhigh`→frontier on 4.6; 4.5 `xhigh` coerces to high/reasoner; omitted → mid). **Other products:** `--effort` is a cost dial only and does not change which plans are eligible. Optional `--profile <tag>` (`coding-agent`, `terminal-agent`, `critic`, `planner`, `general-chat`, `multimodal`, `swarm-local`) adds a soft JSON `specialty_hint` when Preferred lists known tags — mismatch is reported, not a skip. Plans with a human **Assignee** (a name/username/email, or `human`) are shown as skipped with reason `assigned to <who>` — agents never auto-claim them. `--json` for tooling, `--eligible-only` to quiet the skips, `--next` to print just the top path.
 
 ```bash
 python plan_fit.py --tier mid --effort high        # what can I take, and am I overpaying?
 python plan_fit.py --endpoint h100-nemotron --json
+python plan_fit.py --tier mid --profile coding-agent --json
 python plan_fit.py --tier small --next             # path only, for scripting
 ```
 

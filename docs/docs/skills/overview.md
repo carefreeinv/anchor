@@ -22,7 +22,7 @@ and Grok Build; install paths differ.
 | [**`/optimize`**](/skills/optimize) | Check a project against **standards for its type** (sharing metadata, discoverability, repo hygiene) → checkbox-picked improvement plans. | Current project root / `.plans/drafts/` | Yes |
 | [**`/fleet-watch`**](/skills/fleet-watch) | Turn on **background** pullers for a project’s `.plans/` (often from Anchor CWD with a sibling name, or from the project itself). | CWD if it has `.plans/`, else named path / `../app` | Yes |
 | [**`/install-anchor`**](/skills/install-anchor) | Anywhere `anchor` is missing or broken on **PATH** (first machine setup or new shell). | Locates Anchor checkout; not project-specific | Yes |
-| [**`/local-models`**](/skills/local-models) | **Inside a project** when choosing/installing a **lean local** executor for this machine. | This host + optional reconfigure draft for **this** project | Scaffolded only (`platforms/…`) |
+| [**`/local-models`**](/skills/local-models) | **Any host** (Anchor checkout or project) when choosing/installing a **lean local** executor for **this** machine. Re-run per clone — multi-machine safe. | This host; operator defaults from Anchor; machine-local wiring + portable project notes | Yes (dual-use base + scaffold) |
 
 ### Quick chooser
 
@@ -55,15 +55,15 @@ flowchart TD
 
 | Command | Best used | Notes |
 |---------|-----------|--------|
-| **`/commit-prep`** | Before **any** `git commit` in Anchor-using projects | Scaffolded into every project. Prep only (tests, CHANGELOG, blog-if-warranted); does not commit. Project-agnostic — discovers this repo's CI, changelog, and blog conventions. See platform docs. |
+| **`/commit-prep`** | Before any commit outside `.plans/`, and before any merge commit (plans-only commits take the light path) | Scaffolded into every project. Prep only (tests, CHANGELOG, blog-if-warranted); does not commit. Project-agnostic — discovers this repo's CI, changelog, and blog conventions. See platform docs. |
 | **`/config`** | From the **Anchor** checkout (or with Anchor checkout available) | Saves global platform/fleet/model-priority defaults via `config.sh`. |
 
 ## Packaging reminder
 
 | Kind | Examples | Lives in |
 |------|----------|----------|
-| **Dual-use** (Anchor base **and** scaffolded into projects) | `/draft`, `/work`, `/review`, `/audit`, `/deploy`, `/optimize`, `/commit-prep`, `/fleet-watch`, `/install-anchor` | Anchor `.grok/skills` / `.claude/commands` (and scaffolded copies) |
-| **Scaffolded into projects** (source under `platforms/`) | `/local-models`, project `/anchor` | `platforms/claude-code/…`, `platforms/grok-build/…` |
+| **Dual-use** (Anchor base **and** scaffolded into projects) | `/draft`, `/work`, `/review`, `/audit`, `/deploy`, `/optimize`, `/commit-prep`, `/fleet-watch`, `/install-anchor`, `/local-models` | Anchor `.grok/skills` / `.claude/commands` (and scaffolded copies) |
+| **Scaffolded into projects** (source under `platforms/`) | project `/anchor` (CWD default) | `platforms/claude-code/…`, `platforms/grok-build/…` |
 | **Anchor base only** (path-required `/anchor`) | Anchor `/anchor` | Anchor checkout base skills — not the project CWD-default variant |
 
 CLI reference for scaffold/upgrade without an agent: [The `anchor` CLI](/tooling/cli).

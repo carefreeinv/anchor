@@ -5,11 +5,15 @@ import json
 from pathlib import Path
 
 from fleet_metrics import (
+    FIT_TIER_LADDER,
     OutcomeRecord,
     append_outcome,
     load_outcomes,
+    normalize_fit_tier,
     parse_claimed_status,
     record_task_outcome,
+    render_human_report,
+    should_stop,
     task_id_for,
 )
 
@@ -138,3 +142,108 @@ def test_task_id_stable_and_content_free():
     assert a == b
     assert a != c
     assert "Do the thing" not in a
+
+
+# --- should_stop: harness-enforced mirror of mythos-core rule 6 --------------
+
+
+def _rec(*, model="fake-model", task_id="t1", verify_exit=1, scope_verdict=None,
+         timestamp=1.0, tier="mid", claimed="unparseable") -> OutcomeRecord:
+    return OutcomeRecord(
+        model=model, tier=tier, task_id=task_id, claimed=claimed,
+        actual_verify_exit=verify_exit, scope_verdict=scope_verdict, timestamp=timestamp,
+    )
+
+
+def test_should_stop_continues_with_one_failure():
+    ledger = [_rec()]
+    decision = should_stop("t1", "fake-model", ledger, tier="mid")
+    assert decision.action == "continue"
+
+
+def test_should_stop_escalates_after_two_failures():
+    ledger = [_rec(timestamp=1.0), _rec(timestamp=2.0)]
+    decision = should_stop("t1", "fake-model", ledger, tier="mid")
+    assert decision.action == "escalate-tier"
+    assert decision.target_tier == "reasoner"
+    assert len(decision.evidence) == 2
+
+
+def test_should_stop_human_report_at_top_available_tier():
+    ledger = [_rec(timestamp=1.0), _rec(timestamp=2.0)]
+    # tier_ladder ends at "reasoner" for this fleet — no frontier endpoint configured.
+    decision = should_stop("t1", "fake-model", ledger, tier="reasoner",
+                           tier_ladder=("small", "mid", "reasoner"))
+    assert decision.action == "human-report"
+    assert decision.target_tier is None
+    assert len(decision.evidence) == 2
+
+
+def test_should_stop_human_report_at_true_top_of_default_ladder():
+    ledger = [_rec(timestamp=1.0), _rec(timestamp=2.0)]
+    decision = should_stop("t1", "fake-model", ledger, tier="frontier")
+    assert decision.action == "human-report"
+    assert decision.target_tier is None
+
+
+def test_should_stop_counts_a_scope_gate_rejection_as_a_failure():
+    ledger = [
+        _rec(verify_exit=None, scope_verdict="fail", timestamp=1.0),
+        _rec(verify_exit=None, scope_verdict="fail", timestamp=2.0),
+    ]
+    decision = should_stop("t1", "fake-model", ledger, tier="mid")
+    assert decision.action == "escalate-tier"
+
+
+def test_should_stop_ignores_rows_that_are_not_recorded_failures():
+    """A handoff never reaches the ledger (execute_task returns before recording
+    one), and a no-verify-cmd success is not a failure either — neither counts."""
+    ledger = [
+        _rec(verify_exit=None, scope_verdict=None, timestamp=1.0),
+        _rec(verify_exit=None, scope_verdict="pass", timestamp=2.0),
+        _rec(verify_exit=0, scope_verdict="pass", timestamp=3.0),
+    ]
+    decision = should_stop("t1", "fake-model", ledger, tier="mid")
+    assert decision.action == "continue"
+
+
+def test_should_stop_is_scoped_to_the_same_task_and_model():
+    ledger = [
+        _rec(model="fake-model", task_id="t1", timestamp=1.0),
+        _rec(model="fake-model", task_id="t1", timestamp=2.0),
+    ]
+    assert should_stop("t2", "fake-model", ledger, tier="mid").action == "continue"
+    assert should_stop("t1", "other-model", ledger, tier="mid").action == "continue"
+
+
+def test_normalize_fit_tier_maps_registry_tiers():
+    assert normalize_fit_tier("executor") == "mid"
+    assert normalize_fit_tier("executor-heavy") == "mid"
+    assert normalize_fit_tier("swarm") == "small"
+    assert normalize_fit_tier("reasoner") == "reasoner"
+    assert normalize_fit_tier("frontier") == "frontier"
+    assert normalize_fit_tier("detached") == "mid"
+    assert normalize_fit_tier("mid") == "mid"  # already normalized
+    assert normalize_fit_tier("made-up-tier") == "mid"  # unlabeled default
+    assert normalize_fit_tier("") == "mid"
+
+
+def test_fit_tier_ladder_is_the_canonical_four_tiers():
+    assert FIT_TIER_LADDER == ("small", "mid", "reasoner", "frontier")
+
+
+def test_render_human_report_carries_task_and_evidence():
+    evidence = (
+        _rec(model="m1", tier="reasoner", verify_exit=1, timestamp=1.0, claimed="should-work"),
+        _rec(model="m1", tier="reasoner", scope_verdict="fail", verify_exit=None,
+             timestamp=2.0, claimed="blocked"),
+    )
+    report = render_human_report("Fix the race condition in the queue", evidence)
+    assert "Fix the race condition in the queue" in report
+    assert "## Tried" in report
+    assert "## Observed" in report
+    assert "## Hypothesis" in report
+    assert "m1" in report
+    assert "reasoner" in report
+    assert "verify_exit=1" in report
+    assert "scope_verdict='fail'" in report

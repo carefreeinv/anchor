@@ -151,6 +151,24 @@ gates are green, follow **`/work`** / project rules: if plan work is complete,
 dictate `git add` / `git commit` on the **feature branch** (not main/dev);
 optional `git push -u origin HEAD`.
 
+**Plans-only commits take the light path.** A commit whose paths are *entirely*
+under `.plans/` — a lane move, review notes, a `## Handoff` line — needs no
+CHANGELOG, no blog and no test run: a lane move cannot break a test. Say what
+moved and why, then dictate:
+
+```bash
+git add .plans/
+git commit -m "Plans: <slug> → <lane> (<reason>)" -- .plans/
+```
+
+The `-- .plans/` pathspec goes **after** the message, and it is load-bearing: a
+bare `git commit` would sweep everything already staged into an ungated commit.
+This is also the one commit that may land on an integration branch rather than a
+feature branch — **`/review`**, **`/work`** and **`/draft --promote`** each make it
+on whichever branch the lane move exists on. Never dictate it while a merge is
+staged: git refuses a partial commit mid-merge, and dropping the pathspec to make
+the error go away would commit the whole merge ungated.
+
 **Merging from chat:** you never merge — you have no tools, so *the human* runs every
 command. After a green prep and a feature-branch commit, you may ask the operator the
 `/work` culmination question (review now / merge to `dev` now / hold for testing). On
@@ -162,8 +180,21 @@ python scripts/merge_feature.py --root . --slug <slug> --touched touched.txt \
   --expect-head <sha> --dry-run   # 0 would merge · 3 scope · 4 precondition · 5 conflict
 ```
 
-Only if that exits `0` should they re-run it without `--dry-run`. Never dictate a
-merge to `main`/`master` — that is `/review`'s promotion survey.
+Only if that exits `0` should they re-run it without `--dry-run`.
+
+The real run can exit **`6`**, which is neither failure nor success: the merge could
+not fast-forward, so it is **staged and uncommitted**, waiting for a commit gate.
+Do not report that as merged. Ask the human to run `/commit-prep` against the merged
+tree and relay the result, then dictate exactly one of:
+
+```bash
+python scripts/merge_feature.py --root . --commit-staged   # prep green
+python scripts/merge_feature.py --root . --abort-staged    # prep red
+```
+
+Their checkout stays mid-merge until one of those runs, so never end a session on an
+exit `6` without saying so. Never dictate a merge to `main`/`master` — that is
+`/review`'s promotion survey.
 
 ## Cautions specific to chat UIs
 
@@ -189,10 +220,14 @@ merge to `main`/`master` — that is `/review`'s promotion survey.
 - Tier guidance when relaying API choices to the human: Terra ≈ GPT-5.5 quality at
   about half the cost (the executor pick); Luna for tuner/light-executor work; Sol
   only where its agentic-coding edge is actually needed.
-- Fit check applies here too (**bidirectional**): weak column / too hard →
-  `SUGGEST-ESCALATE: <model> — <reason>` as the first line; clear over-tier
-  (frontier-class chat on rename-only glue) →
+- Fit check applies here too (**dual-axis, bidirectional**): if the pending request
+  lands in the current model's weak column (`.anchor/model-fitness.md`), say
+  `SUGGEST-ESCALATE: <model> — <reason>` as the first line. If it's clear over-tier
+  instead (frontier-class chat on rename-only glue), say
   `SUGGEST-DOWNGRADE: <cheaper model or tier> — <reason>` and wait for the human.
-  Good fit → silence. Proceed only if they insist. The mere existence of a stronger
-  model, an unfamiliar codebase, or one hard-looking step is not a reason to hand
-  the request back.
+  If power is fine but the session is pure **general-chat** (no shell/repo tools)
+  and the human needs multi-file software execution, say
+  `SUGGEST-REROUTE: coding-agent — leave software implementation for a software-dev
+  optimized model` and let them switch harness. Proceed only if they insist. Good
+  fit on every axis → silence. The mere existence of a stronger model, an unfamiliar
+  codebase, or one hard-looking step is not a reason to hand the request back.

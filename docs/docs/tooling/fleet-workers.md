@@ -46,7 +46,7 @@ flowchart TB
    - **Depends on:** other-slug   # or `none` after checking existing plans
    ```
 
-4. Fleet tooling available in the project (or Anchor repo): `scripts/work_once.py`, `plan_select.py`, `plan_lease.py`, optionally `orchestrate.py` + `endpoints.yaml`.
+4. Fleet tooling available under `.anchor/scripts/` in a fleet-scaffolded project (or `scripts/` in the Anchor repo itself): `work_once.py`, `plan_select.py`, `plan_lease.py`, optionally `orchestrate.py` + `endpoints.yaml`.
 5. Unique **`--agent-id`** per concurrent worker so `in-progress/` ownership is clear; never execute a plan under `in-progress/` you did not move there.
 6. Workers **skip** plans with unmet **Depends on** (dependency still open / not completed).
 7. **Preferred orchestrator** for the project (who plans, coordinates, and analyzes cross-plan deps—not every swarm node):
@@ -55,7 +55,7 @@ flowchart TB
    # Existing project (one command)
    anchor /path/to/project --set-orchestrator claude:opus
 
-   # Or edit ANCHOR-CONVENTIONS.md → **Preferred orchestrator:** `claude:opus`
+   # Or edit .anchor/conventions.md → **Preferred orchestrator:** `claude:opus`
 
    # Defaults for new scaffolds
    ./config.sh --platform claude,local:qwen3 --orchestrator claude:opus --model-priority local,claude:sonnet,claude:opus

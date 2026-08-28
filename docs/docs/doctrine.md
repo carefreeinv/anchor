@@ -62,7 +62,7 @@ flowchart TB
 - **Role separation** — planner → executor → critic as three clean contexts outperforms one long chat, even on the same model. In the orchestrated path the split is harness-enforced by the `scripts/roles.py` capability map (planner writes only `.plans/**`; executor never `.plans/**` or its own spec; critic writes nothing), applied per phase by `orchestrate.py` and by the project-orchestrator MCP server's role-scoped toolsets. Role transitions are logged orchestrator events; single-model sessions keep the discipline by prompt alone.
 - **Planned continuation instead of context rot** — a task that outgrows its window degrades into a continuation, not a truncated answer. Near its declared ceiling the executor emits a structured handoff (`templates/handoff.md`: done + how each item was checked, remaining work as ready-to-dispatch sub-specs, decisions made, files touched, open concerns) and the orchestrator respawns a **fresh** context seeded with it — never a longer conversation. Mythos-core rule 15 requires the handoff; `orchestrate.py` decides when one is due from its own token accounting, rejects remaining work with no verify command, and refuses a continuation whose scope grew. Cap: 2 continuations, then back to the planner.
 - **External verification** — tests, linters, builds, and diff-scope checks decide done-ness. Fleet runs pair the model’s claim with actual verify exits in `var/fleet-metrics/outcomes.jsonl`; aggregate with `fitness_report.py` and prefer those rates when updating model-fitness prose.
-- **Escalation paths** — ambiguity, architecture, and twice-failed tasks go up a tier by rule, not by judgment.
+- **Escalation paths** — ambiguity, architecture, and twice-failed tasks go up a tier by rule, not by judgment. The twice-failed-task path is harness-enforced: `fleet_metrics.py`'s `should_stop` reads the outcome ledger (not an in-memory count) and refuses a third dispatch to the same model on the same task. `orchestrate.py` consults it before every (re)dispatch — two recorded failures escalate one tier with both failures' evidence attached; two failures at the top available tier produce a structured human report even if the model never wrote one.
 
 ## The templates
 
@@ -105,18 +105,20 @@ Escalation isn't the only direction that matters — before spending an expensiv
 ```mermaid
 flowchart LR
   task["Incoming task"]
-  size{"Needs this tier?"}
-  down["SUGGEST-DOWNGRADE"]
-  up["SUGGEST-ESCALATE"]
+  size{"Power + specialty fit?"}
+  down["SUGGEST-DOWNGRADE (power)"]
+  up["SUGGEST-ESCALATE (power)"]
+  lat["SUGGEST-REROUTE (specialty)"]
   go["Proceed in scope (silence)"]
 
   task --> size
-  size -->|"too hard"| up
+  size -->|"too hard / weak column"| up
   size -->|"too easy"| down
-  size -->|"fit"| go
+  size -->|"wrong product shape"| lat
+  size -->|"fit both axes"| go
 ```
 
-Boilerplate, formatting, a rename, or one well-specified function gets a first-line `SUGGEST-DOWNGRADE: <cheaper> — <reason>` (stop unless insisted), instead of silently burning frontier capacity. Too-hard work uses `SUGGEST-ESCALATE`. See [Model fitness](/model-fitness). `scripts/router.py` classifies fleet roles; interactive agents use the first-line protocol, not silent model swap.
+Boilerplate, formatting, a rename, or one well-specified function gets a first-line `SUGGEST-DOWNGRADE: <cheaper> — <reason>` (stop unless insisted), instead of silently burning frontier capacity. Too-hard work uses `SUGGEST-ESCALATE`; a specialty mismatch (e.g. general-chat for multi-file software) uses `SUGGEST-REROUTE` — lateral, not always stronger. See [Model fitness](/model-fitness). `scripts/router.py` classifies fleet roles; interactive agents use the first-line protocol, not silent model swap.
 
 *Right-sizing is one of the reasons [Savings](/savings) can be so large — please consider [donating](https://donate.stripe.com/28E6oHeq8fxQ5p7fmBdjO01) to help support this project.*
 

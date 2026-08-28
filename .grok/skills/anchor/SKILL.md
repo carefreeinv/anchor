@@ -213,9 +213,10 @@ anchor "$PROJECT" --check
 
 5. Summarize: platforms, fleet, conventions path (`.anchor/conventions.md`), any backups created, leftover manual steps (PATH, MCP registration, `/local-models`).
 
-**Source-missing scaffolded skills:** if `--check` reports source missing for files
-now living under `platforms/` (e.g. old `local-models` paths), refresh from
-`$ANCHOR_ROOT/platforms/…` and update manifest `src` + hash.
+**Source-missing scaffolded skills:** if `--check` reports source missing, prefer
+`anchor --upgrade` (CLI remaps known moves such as dual-use `/local-models` from
+`platforms/…` → base `.grok/skills/…`). For other paths still under
+`$ANCHOR_ROOT/platforms/…`, refresh from there and update manifest `src` + hash.
 
 ### 8. Creative assistance (encouraged)
 

@@ -12,7 +12,7 @@ Tools:
 ## Install
 
 ```bash
-cd mcp/model-fleet && pip install "mcp[cli]" requests pyyaml
+cd mcp/model-fleet && pip install "mcp[cli]>=1.2.0,<3" requests pyyaml
 claude mcp add model-fleet -- python /abs/path/mcp/model-fleet/server.py
 ```
 

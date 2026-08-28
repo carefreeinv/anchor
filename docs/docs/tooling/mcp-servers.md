@@ -2,6 +2,10 @@
 sidebar_position: 3
 ---
 
+<!-- synced-from: mcp/model-fleet/README.md @ 8dd49f49367fa8ff484a00e3d14792954560d513 -->
+<!-- synced-from: mcp/anchor-prompts/README.md @ 8bc9f0807b37234758877f8331fa90ccde11e32c -->
+<!-- synced-from: mcp/project-orchestrator/README.md @ 7483dd3e05094d984f765456a643a5fc4325bf4c -->
+
 # MCP servers
 
 Three stdio servers ship in `mcp/`, installable into Claude Code, Grok Build (if MCP-capable), or any MCP client:
@@ -27,6 +31,39 @@ flowchart LR
 ```
 
 Until a Preferred orchestrator is set for a project, a frontier session may act as temporary coordinator (see [CLI — Preferred orchestrator](/tooling/cli#preferred-orchestrator-per-project)).
+
+## Supported SDK versions
+
+The servers work against **both** MCP Python SDK majors: `mcp[cli]>=1.2.0,<3`.
+
+SDK 2.0 removed `mcp.server.fastmcp` and renamed `FastMCP` to `MCPServer`. Because
+the decorator surface (`tool`, `prompt`, `resource`) and `run()` are unchanged
+across the rename, each server resolves the class once at import and works either
+way — so a fresh install gets 2.x and an operator pinned to 1.x is not broken.
+
+Install with the bound, not bare:
+
+```bash
+pip install "mcp[cli]>=1.2.0,<3" requests pyyaml
+```
+
+That range is what the servers **support**, and it is what their `pyproject.toml`
+files declare. Anchor's own CI pins a single major (`requirements-dev.txt`) so a new
+SDK release cannot turn a blocked push red with no code change — and a separate
+weekly `sdk-unpinned` job resolves the real range and imports every server against
+it, so the detection is kept as a signal rather than traded away.
+
+:::note If `mcp` seems missing
+This repository has its own top-level `mcp/` **directory**. It has no
+`__init__.py`, so it is only a PEP 420 namespace *portion* — an installed `mcp`
+package found later on `sys.path` still wins, and running from the repo root with
+the SDK installed resolves the real package normally.
+
+It matters only when the SDK is **not** installed: from the repo root the
+directory turns the honest `No module named 'mcp'` into the more confusing
+`No module named 'mcp.server'`. If you see that, install the SDK — do not go
+looking for a path problem.
+:::
 
 ## anchor-prompts
 

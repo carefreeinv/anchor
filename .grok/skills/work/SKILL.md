@@ -18,6 +18,12 @@ markdown under **`.plans/`** (dotdir — use that path explicitly; many UIs hide
 If `.plans/README.md` exists, treat it as the process contract. This skill is the
 entrypoint; do not re-derive priority rules from chat history alone.
 
+**Fleet script paths in this file assume the Anchor source tree's own
+`scripts/`.** This same file is also scaffolded verbatim into every dependent
+project, where fleet tooling lives under **`.anchor/scripts/`** instead —
+substitute that prefix throughout when `scripts/<name>.py` isn't at the
+project root but `.anchor/scripts/<name>.py` is.
+
 **Path is authoritative.** A plan’s lane and lifecycle are determined only by
 which directory it lives in — never by `Lane:` or `Status:` fields inside the
 file. Ignore those fields if present; do not write them.
@@ -141,15 +147,22 @@ floor**: it does not exclude `small`.
 
 Before selecting a plan, identify **all three**:
 
-1. **Model name + fit tier** (product name if known; else closest tier). Use
-   `.anchor/model-fitness.md` and the plan-template table. **Name and catalog
-   tier win over vibes** — e.g. **Grok 4.5 is mid-class** for Preferred matching
-   (listed under `mid`; named “Grok 4.5” is a good hit). Temporary-coordinator
-   eligibility is not the same as “treat every `mid` plan as overqualified.”
+1. **Model name + fit tier** — your identity is the **harness/system-prompt**
+   product name (or an explicit `/model`/`--model`/endpoint override), never a
+   guess from training weights. Use `.anchor/model-fitness.md` and the
+   plan-template table. **Name and catalog tier win over vibes** — e.g. if the
+   harness says "You are Grok 4.6", you report **Grok 4.6** and match Preferred
+   `mid`/named "Grok 4.6"; report Grok 4.5 only when the harness actually says
+   4.5. Temporary-coordinator eligibility is not the same as “treat every `mid`
+   plan as overqualified.”
 2. **Cost posture** when the product supports it: current **reasoning effort** /
-   thinking mode if known (`low` | `medium` | `high` | …). **High effort on a
-   mid-class model is a cost dial, not a tier promotion** — it does not by
-   itself make you overqualified for `mid` Preferred plans.
+   thinking mode if known (`low` | `medium` | `high` | `xhigh` | …). **Grok family
+   effort map (4.5/4.6):** reported effort sets **effective fit tier**
+   (`low`→mid, `medium`/`high`→reasoner, `xhigh`→frontier; **unknown effort →
+   mid**). Report `<harness-named product> @ <effort> → effective <tier>` before
+   Preferred matching — e.g. `Grok 4.6 @ high → effective reasoner` (a lookup by
+   harness name, never a pick from the cost ladder). **Non-Grok products:** high
+   effort remains a **cost dial only**, not a tier promotion.
 3. **Cheaper capacity** on this host/fleet (next subsection) — required whenever
    fit is poor **or** the top ready work is `small`/`mid` while this session is
    expensive (true higher tier, or mid model stuck on high effort).
@@ -209,7 +222,7 @@ yourself if only the human/UI can.
 | Preferred (use highest listed tier) | Suggested effort on reasoning models |
 |-------------------------------------|--------------------------------------|
 | `small` | `low` (or `minimal` / `none` if the product offers them) |
-| `mid` | `low` or `medium` |
+| `mid` | `low` (Grok: **`low` only** — `medium` already → reasoner) |
 | `reasoner` | `high` |
 | `frontier` | `high` or `xhigh` as needed |
 
@@ -217,7 +230,7 @@ yourself if only the human/UI can.
 
 | Product | Lower cost for `small`/`mid` work | Raise for `reasoner`+ work |
 |---------|-----------------------------------|----------------------------|
-| **Grok Build (TUI)** | `/effort low` — or `/model <id> low` | `/effort high` |
+| **Grok Build (TUI)** | `/effort low` — or `/model <id> low` | `/effort high` or `/effort xhigh` (4.6) |
 | **Grok CLI / headless** | `--effort low` / `--reasoning-effort low` | `--effort high` |
 | **API (Grok-class)** | `reasoning_effort: "low"` | `"high"` |
 | **Nemotron / Qwen3 hybrid** | thinking **off** for bulk execute | thinking **on** for plan/critic |
@@ -225,19 +238,24 @@ yourself if only the human/UI can.
 
 Effort vs fit:
 
-- **Good fit + high effort on `small`/`mid` Preferred:** print the lower-effort
-  command in one line, then **execute** (or pause one turn only if the operator
-  must apply a slash command first — say which). Do **not** reclassify as
-  overqualified solely because effort is high.
-- **True overqualified** (clearly higher *tier* than all Preferred, e.g. Fable
-  on `small`/`mid` only) **+ no cheaper worker + operator needs progress:**
-  suggest `/work --no-fit-check` **and** the effort/model command above; stop
-  unless they insist or already authorized “do it on this model.” Use Rule 2's
-  terse skip format — an expensive session declining cheap work should cost the
-  operator three lines, not three paragraphs.
-- **Underqualified:** still skip. Suggest a stronger session/model — cranking
-  effort up is not a substitute when Preferred needs reasoner/frontier you are
-  not.
+- **Grok + reported effort:** use **effective tier** for good/under/overqualified
+  (e.g. Grok 4.6 @ high is effective reasoner — **overqualified for Preferred `mid`/`small` only**;
+  Grok 4.6 @ xhigh is effective frontier — **overqualified for `small`, `mid`, and `reasoner`**;
+  Grok @ low (or omitted) is mid — underqualified for Preferred `reasoner`/`frontier` only;
+  **Grok @ medium already promotes to reasoner** (overqualified for mid-only — use `low`);
+  Grok 4.5 @ xhigh coerces to high → reasoner, not frontier). Pass
+  `--effort` to `plan_fit` / `work_once` when known.
+- **Good fit + wasteful effort on `small`/`mid` Preferred:** print the lower-effort
+  command (`/effort low`) in one line, then **execute** (or pause one turn if the
+  operator must apply a slash command first). On **non-Grok** models, do **not**
+  reclassify as overqualified solely because effort is high.
+- **True overqualified** (effective tier above all Preferred, e.g. Fable or
+  Grok@xhigh or Fable on `small`/`mid` only) **+ no cheaper worker + operator needs progress:**
+  suggest lower effort / cheaper endpoint **and** `/work --no-fit-check` if needed;
+  stop unless they insist. Use Rule 2's terse skip format.
+- **Underqualified:** still skip. On Grok, suggest **raising** `/effort` (medium /
+  high / xhigh on 4.6) when the map would make you eligible; on other products,
+  cranking effort is not a substitute for a stronger model.
 
 ### Matching
 
@@ -277,6 +295,17 @@ Escalate on your **weak column** (`.anchor/model-fitness.md`) and on
 orchestration-class work — not on the mere existence of a stronger model. "A
 better model could do this" is true of nearly every plan and is not a fit
 verdict.
+
+**Specialty axis (dual-axis fit):** after power/tier fit is OK, judge whether
+you are the right *kind* of model for the plan (profiles in
+`.anchor/model-fitness.md`: `coding-agent`, `terminal-agent`, `critic`,
+`planner`, `general-chat`, `multimodal`, `swarm-local`). Material specialty
+mismatch → entire first line `SUGGEST-REROUTE: <target or profile> — <reason>`
+and stop unless the operator insists (same insist contract as escalate). Example:
+swarm-local / general-chat session leaving multi-file software for
+`coding-agent`. Good fit on **both** power and specialty → silence. Preferred
+models may list profile tags next to tiers; mechanical `plan_fit` / pickers still
+use tiers + names only — profile tags guide self-assessment.
 
 ### Rules
 
@@ -433,12 +462,51 @@ move + what `/commit-prep` reported; add-then-delete still counts) · **mergeabl
 python scripts/merge_feature.py --root <checkout> --slug <slug> \
   --touched <file-with-one-path-per-line> --expect-head <sha> --dry-run
 # 0 would merge · 3 scope · 4 precondition · 5 conflict · 2 git error
+#      6 merge staged, NOT committed — finish it with the flags below
 ```
 
 `--expect-head` is **required** (provenance must hold). Point `--root` at a checkout
 where the integration branch is **free** — git will not check out a branch live in
 another worktree, so from `var/worktrees/<agent>` run it against the main checkout;
 the gate detects the conflict up front and names the path to use.
+
+**A non-fast-forward merge exits `6` — staged, not committed** — the merged tree is
+state neither branch was prepped in, so the helper stages it and hands control back.
+Exit `6` is neither success nor failure: never report it as merged. Run
+`/commit-prep` against the merged tree, then finish it with **one** of:
+
+```bash
+python scripts/merge_feature.py --root <checkout> --commit-staged   # prep green
+python scripts/merge_feature.py --root <checkout> --abort-staged    # prep red
+```
+
+`--commit-staged` stages everything first (prep edits the working tree; a bare
+`git commit` during a merge drops its output). `--abort-staged` falls back to a hard
+reset because `git merge --abort` refuses once prep has touched a merged file; that
+discards prep's edits to **tracked** files, while anything prep *created* is
+untracked and survives on disk. Both check the staged merge is of the exact
+*commit* that was merged — not merely that some merge exists, and not against the
+branch name, which legitimately advances when you commit a prep fix — and refuse
+rather than guess if you resolved the
+merge by hand in between — `--abort-staged` then clears the stale record without
+resetting, because a reset against a tree the record no longer describes destroys
+unrelated work rather than undoing a merge. The checkout stays mid-merge until one
+runs. A fast-forward exits `0` with a real SHA and owes nothing.
+
+A run can also report **already contained**: every commit on the branch is
+already on the integration branch (it was merged earlier and the branch has
+since been left behind). That exits `0` like a successful merge, because the
+work *is* integrated — but it says so explicitly rather than printing a SHA
+that implies this run moved something, and it touches nothing.
+
+The helper also refuses when `--root` already has a merge in progress or an
+unfinished staged record, or when it holds uncommitted/untracked files. That
+last one applies to **any run that actually merges, `--dry-run` included**: the
+gate probes for conflicts with a real `git merge` and ends the probe with
+`git reset --hard`, which cannot tell your uncommitted edits from merge
+residue — so "merge nothing" would still cost you them. Point `--root` at a
+*clean* integration checkout. The two runs that touch nothing are exempt: a
+fast-forward, and an already-contained branch — neither probes nor commits.
 
 Drop `--dry-run` to land it. Never pass the operator's answer to the helper — check
 6 is yours to hold. **Rejected by design:** landing only the in-scope paths when the
@@ -464,7 +532,13 @@ handed to /review 2026-08-01
 #### Answers 1 and 3
 
 `git mv` the plan from `in-progress/` to `.plans/review-needed/` (create if needed)
-and drop its lease — *agent asserts Done when*, not a final archive. Tell the human
+and drop its lease — *agent asserts Done when*, not a final archive. **Then commit
+that move** via the light path — the `/commit-prep` exemption for plans-only commits
+(see the platform brief): state what moved and why, then `git add .plans/` and
+`git commit -m "…" -- .plans/`; no CHANGELOG, no blog, no test run. The pathspec matters —
+a bare `git commit` would sweep in anything else already staged. If this plan is
+untracked (`*.local.md`, or a project that ignores `.plans/`), say “lane move
+(untracked)” and commit nothing. Tell the human
 to run **`/review`**: Approve merges `feature/<slug>` → dev then → `completed/`;
 Needs Work → `bugs|features/`; Skip. Never move `review-needed/` → `completed/`
 yourself.

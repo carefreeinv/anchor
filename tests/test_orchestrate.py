@@ -123,6 +123,113 @@ def test_execute_task_insist_overrides_suggest_downgrade():
     assert fleet.ep.calls == 2
 
 
+def test_execute_task_honors_suggest_reroute_without_burning_attempts():
+    """Specialty-axis fit gate (mythos-core rule 11) — same no-retry contract as escalate."""
+    from orchestrate import execute_task
+
+    fleet = FakeFleet([
+        "SUGGEST-REROUTE: coding-agent — leave multi-file software for a software-dev optimized model",
+    ])
+    result = execute_task("implement the auth middleware across three packages", "plan", fleet,
+                          verify_cmd=None, hold_on_fail=False)
+
+    assert result["status"] == "escalate"
+    assert result["attempts"] == 1
+    assert "coding-agent" in result["suggestion"]
+    assert fleet.ep.calls == 1
+
+
+def test_execute_task_insist_overrides_suggest_reroute():
+    from orchestrate import execute_task
+
+    fleet = FakeFleet([
+        "SUGGEST-REROUTE: coding-agent — wrong specialty",
+        GOOD_OUTPUT,
+    ])
+    result = execute_task("do it anyway", "plan", fleet,
+                          verify_cmd=None, hold_on_fail=False, insist=True)
+
+    assert result["status"] == "ok"
+    assert result["attempts"] == 2
+    assert fleet.ep.calls == 2
+
+
+RULE13_THEN_REROUTE = (
+    "Goal restated? PASS\n"
+    "Acceptance criteria present? PASS\n"
+    "Files-in-scope listed? PASS\n"
+    "Budget declared and fits (spec's ## Budget)? PASS\n"
+    "Tier + specialty fit OK (rule 11: power escalate and/or specialty re-route)? FAIL\n"
+    "Task small enough for this tier (rule 10)? PASS\n"
+    "SUGGEST-REROUTE: coding-agent — leave multi-file software for a software-dev optimized model\n"
+)
+
+RULE13_THEN_DOWNGRADE = (
+    "Goal restated? PASS\n"
+    "Acceptance criteria present? PASS\n"
+    "Files-in-scope listed? PASS\n"
+    "Budget declared and fits (spec's ## Budget)? PASS\n"
+    "Tier + specialty fit OK (rule 11: power escalate and/or specialty re-route)? PASS\n"
+    "Task small enough for this tier (rule 10)? FAIL\n"
+    "SUGGEST-DOWNGRADE: small — rename-only; local swarm is enough\n"
+)
+
+
+def test_fit_gate_line_finds_token_after_preflight():
+    from orchestrate import fit_gate_line
+
+    line = fit_gate_line(RULE13_THEN_REROUTE)
+    assert line is not None and line.startswith("SUGGEST-REROUTE: coding-agent")
+    buried = "\n".join(f"note {i}" for i in range(15))
+    buried += "\nSUGGEST-REROUTE: coding-agent — too late\n"
+    assert fit_gate_line(buried) is None
+
+
+def test_fit_gate_line_finds_downgrade_token_after_preflight():
+    from orchestrate import fit_gate_line
+
+    line = fit_gate_line(RULE13_THEN_DOWNGRADE)
+    assert line is not None and line.startswith("SUGGEST-DOWNGRADE: small")
+
+
+def test_execute_task_honors_reroute_after_rule13_preflight():
+    """Rule 13 prints six preflight lines then the token — must not FORMAT-retry."""
+    from orchestrate import execute_task
+
+    fleet = FakeFleet([RULE13_THEN_REROUTE])
+    result = execute_task(
+        "implement the auth middleware across three packages",
+        "plan",
+        fleet,
+        verify_cmd=None,
+        hold_on_fail=False,
+    )
+
+    assert result["status"] == "escalate"
+    assert result["attempts"] == 1
+    assert "coding-agent" in result["suggestion"]
+    assert fleet.ep.calls == 1
+
+
+def test_execute_task_honors_downgrade_after_rule13_preflight():
+    """Same contract as reroute-after-preflight, but for the power/downgrade token."""
+    from orchestrate import execute_task
+
+    fleet = FakeFleet([RULE13_THEN_DOWNGRADE])
+    result = execute_task(
+        "rename the helper file",
+        "plan",
+        fleet,
+        verify_cmd=None,
+        hold_on_fail=False,
+    )
+
+    assert result["status"] == "escalate"
+    assert result["attempts"] == 1
+    assert "small" in result["suggestion"]
+    assert fleet.ep.calls == 1
+
+
 def test_execute_task_rejects_out_of_scope_before_tests(git_repo):
     """Out-of-scope worktree edit → failed-scope, and --verify never runs."""
     from pathlib import Path
@@ -698,6 +805,71 @@ def test_zero_max_respawns_escalates_without_hitting_the_unreachable_assert():
         "big task", "plan", fleet, verify_cmd=None, hold_on_fail=False, max_respawns=0)
 
     assert result["status"] == "escalate"   # no AssertionError("unreachable")
+
+
+class TopTierEndpoint:
+    """Fake single-tier ('frontier') endpoint whose replies serve every role in
+    dispatch order, like SideEffectFleet — but exposes model/tier/.endpoints so
+    the harness stop condition can introspect it for escalation/human-report."""
+
+    def __init__(self, replies):
+        self.replies = list(replies)
+        self.name = "frontier-ep"
+        self.model = "frontier-model"
+        self.tier = "frontier"
+        self.quirks: dict = {}
+        self.calls = 0
+
+    def chat(self, messages, **kwargs):
+        self.calls += 1
+        return self.replies.pop(0)
+
+
+class TopTierFleet:
+    def __init__(self, replies):
+        self.ep = TopTierEndpoint(replies)
+        self.endpoints = [self.ep]
+
+    def pick(self, role):
+        return self.ep
+
+
+def test_human_report_is_written_to_disk_for_top_tier_exhaustion(git_repo, monkeypatch):
+    """Two prior failures at the fleet's only (and therefore top available) tier
+    means the third dispatch never happens — main() generates and persists a
+    structured report file itself, since the model never got a chance to."""
+    import json
+    from pathlib import Path
+
+    import orchestrate
+    from fleet_metrics import record_task_outcome
+
+    task_text = split_tasks(PLAN_TEXT)[0]
+    ledger = git_repo / "var" / "fleet-metrics" / "outcomes.jsonl"
+    for i in range(2):
+        record_task_outcome(
+            output="## Result\nfailed\n## How to verify\nn/a\n",
+            verify_exit=1, model="frontier-model", tier="frontier", task=task_text,
+            ledger_path=ledger, timestamp=float(i),
+        )
+
+    # planner call → PLAN_TEXT; executor call is refused before dispatch; critic call → verdict
+    fleet = TopTierFleet([PLAN_TEXT, "review: ok"])
+    out = _run_main(monkeypatch, git_repo, fleet)
+
+    orchestrate.main()  # no SystemExit — a human-report is not a role violation
+
+    assert fleet.ep.calls == 2  # planner + critic only; executor never dispatched
+
+    run = json.loads(out.read_text())
+    assert run["results"][0]["status"] == "human-report"
+    report_path = Path(run["results"][0]["report_path"])
+    assert report_path.is_file()
+    text = report_path.read_text(encoding="utf-8")
+    assert "## Tried" in text
+    assert "## Observed" in text
+    assert "## Hypothesis" in text
+    assert any(e["event"] == "human-report" for e in run["events"])
 
 
 def test_continuation_completes_with_a_passing_verify_command(git_repo):

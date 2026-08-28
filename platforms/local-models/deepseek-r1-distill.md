@@ -11,7 +11,7 @@
 - Force thinking: ensure output begins with `<think>`. Strip `<think>...</think>` before feeding downstream or into history.
 - No few-shot examples in the prompt — they degrade R1-style models. Describe the format; don't demonstrate it.
 
-Registry mapping for the fleet scripts (`scripts/fit_device.py` emits this for you):
+Registry mapping for the fleet scripts (`.anchor/scripts/fit_device.py` emits this for you):
 
 ```yaml
 quirks:

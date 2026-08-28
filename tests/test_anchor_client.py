@@ -2,7 +2,14 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 import requests
-from anchor_client import MAX_RETRIES, Endpoint, Fleet, load_prompt, resolve_doctrine_path
+from anchor_client import (
+    MAX_RETRIES,
+    Endpoint,
+    Fleet,
+    load_prompt,
+    project_root_from,
+    resolve_doctrine_path,
+)
 
 
 def make_response(content="ok"):
@@ -65,6 +72,67 @@ def test_strip_think_removes_think_blocks(mock_post):
 
     assert out == "final answer"
     assert "<think>" not in out
+
+
+def test_project_root_from_source_scripts(tmp_path):
+    root = tmp_path / "myproj"
+    (root / "scripts").mkdir(parents=True)
+    f = root / "scripts" / "anchor_client.py"
+    f.touch()
+    assert project_root_from(f) == root
+
+
+def test_project_root_from_source_mcp(tmp_path):
+    root = tmp_path / "myproj"
+    (root / "mcp" / "project-orchestrator").mkdir(parents=True)
+    f = root / "mcp" / "project-orchestrator" / "server.py"
+    f.touch()
+    assert project_root_from(f) == root
+
+
+def test_project_root_from_dot_anchor_scripts(tmp_path):
+    root = tmp_path / "myproj"
+    (root / ".anchor" / "scripts").mkdir(parents=True)
+    f = root / ".anchor" / "scripts" / "anchor_client.py"
+    f.touch()
+    assert project_root_from(f) == root
+
+
+def test_project_root_from_dot_anchor_mcp(tmp_path):
+    root = tmp_path / "myproj"
+    (root / ".anchor" / "mcp" / "project-orchestrator").mkdir(parents=True)
+    f = root / ".anchor" / "mcp" / "project-orchestrator" / "server.py"
+    f.touch()
+    assert project_root_from(f) == root
+
+
+def test_resolve_doctrine_path_dual_reads_legacy_anchor_prefix(tmp_path):
+    root = tmp_path / "myproj"
+    (root / "anchor" / "system-prompts").mkdir(parents=True)
+    target = root / "anchor" / "system-prompts" / "mythos-core.md"
+    target.write_text("legacy content", encoding="utf-8")
+
+    resolved = resolve_doctrine_path(".anchor/system-prompts/mythos-core.md", root=root)
+
+    assert resolved == target
+
+
+def test_resolve_doctrine_path_prefers_dot_anchor_when_both_exist(tmp_path):
+    root = tmp_path / "myproj"
+    (root / "anchor" / "system-prompts").mkdir(parents=True)
+    (root / ".anchor" / "system-prompts").mkdir(parents=True)
+    (root / "anchor" / "system-prompts" / "mythos-core.md").write_text("legacy", encoding="utf-8")
+    scaffold = root / ".anchor" / "system-prompts" / "mythos-core.md"
+    scaffold.write_text("scaffolded", encoding="utf-8")
+
+    resolved = resolve_doctrine_path(".anchor/system-prompts/mythos-core.md", root=root)
+
+    assert resolved == scaffold
+
+
+def test_resolve_doctrine_path_missing_raises(tmp_path):
+    with pytest.raises(FileNotFoundError):
+        resolve_doctrine_path("anchor/does-not-exist.md", root=tmp_path)
 
 
 def test_fleet_pick_round_robins_within_tier(tmp_path):
@@ -240,11 +308,36 @@ def test_resolve_doctrine_path_prefers_given_then_dot_anchor(tmp_path):
     ).read_text(encoding="utf-8") == "CORE"
 
 
-def test_resolve_doctrine_path_missing_raises(tmp_path):
-    with pytest.raises(FileNotFoundError):
-        resolve_doctrine_path("anchor/nope.md", root=tmp_path)
-
-
 def test_load_prompt_reads_source_tree():
     text = load_prompt("anchor/system-prompts/mythos-core.md")
     assert "FIT CHECK" in text or "fit check" in text.lower() or "Mythos" in text or len(text) > 100
+
+
+def test_endpoint_sends_reasoning_effort_quirk(monkeypatch):
+    """Grok endpoint quirk injects reasoning_effort into the OpenAI body."""
+    import anchor_client as ac
+    from anchor_client import Endpoint
+
+    captured = {}
+
+    class FakeResp:
+        status_code = 200
+        def raise_for_status(self):
+            return None
+        def json(self):
+            return {"choices": [{"message": {"content": "ok\n## Result\nx\n## How to verify\ny"}}]}
+
+    def fake_post(url, *, json, headers, timeout):
+        captured["json"] = json
+        return FakeResp()
+
+    monkeypatch.setattr(ac, "_post_with_retry", fake_post)
+    ep = Endpoint(
+        name="grok",
+        tier="mid",
+        base_url="http://example/v1",
+        model="grok-4.6",
+        quirks={"reasoning_effort": "xhigh"},
+    )
+    ep.chat([{"role": "user", "content": "hi"}], max_tokens=16)
+    assert captured["json"].get("reasoning_effort") == "xhigh"

@@ -10,7 +10,7 @@ Prompts: `plan_task(goal)`, `critique_work(spec, work)`.
 ## Install
 
 ```bash
-cd mcp/anchor-prompts && pip install "mcp[cli]" requests pyyaml
+cd mcp/anchor-prompts && pip install "mcp[cli]>=1.2.0,<3" requests pyyaml
 # Claude Code
 claude mcp add anchor-prompts -- python /abs/path/mcp/anchor-prompts/server.py
 # Any other MCP client: stdio transport, command = python server.py
