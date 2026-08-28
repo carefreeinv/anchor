@@ -535,6 +535,8 @@ def test_plan_conventions_includes_model_routing_with_priority(tmp_path):
     assert result is not None
     _, content = result
     assert "SUGGEST-ESCALATE" in content
+    assert "SUGGEST-DOWNGRADE" in content
+    assert "SUGGEST-REROUTE" in content
     assert ".anchor/model-fitness.md" in content
     assert "1. `nim`" in content and "3. `claude:sonnet`" in content
     assert "**Preferred orchestrator:** `claude:sonnet`" in content

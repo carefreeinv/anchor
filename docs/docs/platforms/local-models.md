@@ -3,7 +3,7 @@ sidebar_position: 4
 sidebar_label: Local Models
 ---
 
-<!-- synced-from: platforms/local-models/README.md @ 2195a215e8fab0f1c986df3a0de9fc506c40f14d -->
+<!-- synced-from: platforms/local-models/README.md @ 91b07e86a6c4223e50249ad4b2dbdd892e09ade1 -->
 
 # Local Models
 
@@ -12,7 +12,7 @@ Per-model adaptations live in `platforms/local-models/`. General laws first — 
 1. One task spec per fresh context (small models degrade fastest with context length)
 2. Force the output format; reject-and-retry outputs missing the footer
 3. External verification always — smaller model = more confident fabrication
-4. Right-size the role (**dual-axis fit**): small models are good executors and decent critics, poor planners. **Specialty:** R1 distills are `critic` — bulk multi-file implement → `SUGGEST-REROUTE: coding-agent — …`. Qwen3 ≤8B / host-local swarm is `swarm-local` thin glue — large multi-service software → `SUGGEST-REROUTE: coding-agent — leave for a software-dev optimized model`. Escalate on planning/architecture and the model file's weak list; re-route on the wrong *kind* of work; not on nerves. See [model fitness](/model-fitness).
+4. Right-size the role (**dual-axis, bidirectional fit**): small models are good executors and decent critics, poor planners. Premium sessions should `SUGGEST-DOWNGRADE` clear swarm work to local when reachable. **Specialty:** R1 distills are `critic` — bulk multi-file implement → `SUGGEST-REROUTE: coding-agent — …`. Qwen3 ≤8B / host-local swarm is `swarm-local` thin glue — large multi-service software → `SUGGEST-REROUTE: coding-agent — leave for a software-dev optimized model`. Escalate on planning/architecture and the model file's weak list; re-route on the wrong *kind* of work; not on nerves. See [model fitness](/model-fitness).
 5. More parameters at Q4 beats fewer at Q8; a wrong chat template costs more than quantization
 6. Tracked plans follow the same `/work` contract when the harness has shell
 7. **Docs describe current state, not plans** — never write product docs from `.plans/` contents

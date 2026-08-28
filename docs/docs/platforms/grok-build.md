@@ -3,7 +3,7 @@ sidebar_position: 2
 sidebar_label: Grok Build
 ---
 
-<!-- synced-from: platforms/grok-build/GROK.md @ 923379d3a897292bab7fdafd88536a1c25e353b0 -->
+<!-- synced-from: platforms/grok-build/GROK.md @ 0fe2e009207a813eba969da78d47dc0d3b9231c3 -->
 
 # Grok Build
 
@@ -36,7 +36,7 @@ The hard rules (restate → plan → one-step-per-turn → verify-don't-claim �
 
 ## Grok 4.6 (and 4.5) (reviewed 2026-08-12)
 
-Prefer **Grok 4.5** for lighter/cheaper mid (file-scoped execute, terminal/CLI); **Grok 4.6** for sustained multi-step agent work. Priority tokens: `grok:4.5`, `grok:4.6`. Play to terminal/CLI and multi-step loops; decompose repo-scale issues to file-scoped specs. Base catalog tier is **mid**. A **reported** `reasoning_effort` sets **effective** Preferred tier (`low`→mid, `medium`/`high`→reasoner, `xhigh`→frontier on 4.6; 4.5 `xhigh` coerces to high → reasoner). Omitted effort stays mid. TUI: **`/effort low|medium|high|xhigh`**. Dual-axis fit: power → `SUGGEST-ESCALATE:`; specialty mismatch → `SUGGEST-REROUTE:`. Mid is a floor Grok clears — do not skip file-scoped `mid` plans because Preferred also names a stronger product. Reported `high` *does* make Grok effective reasoner (skips mid-only Preferred).
+Prefer **Grok 4.5** for lighter/cheaper mid (file-scoped execute, terminal/CLI); **Grok 4.6** for sustained multi-step agent work. Priority tokens: `grok:4.5`, `grok:4.6`. Play to terminal/CLI and multi-step loops; decompose repo-scale issues to file-scoped specs. Base catalog tier is **mid**. A **reported** `reasoning_effort` sets **effective** Preferred tier (`low`→mid, `medium`/`high`→reasoner, `xhigh`→frontier on 4.6; 4.5 `xhigh` coerces to high → reasoner). Omitted effort stays mid. TUI: **`/effort low|medium|high|xhigh`**; CLI/headless: **`--effort low`**. Before [**`/work`**](/skills/work) burns high effort on mid plans, probe for a cheaper local/fleet executor (`scripts/endpoints.yaml`); if none are reachable, emit the effort command rather than a dead stop. Community-reported tool-use flakiness `(unverified)` makes external verification load-bearing. Dual-axis, bidirectional fit: too hard → `SUGGEST-ESCALATE:`; clear over-tier → `SUGGEST-DOWNGRADE:`; specialty mismatch → `SUGGEST-REROUTE:`. Mid is a floor Grok clears — do not skip file-scoped `mid` plans because Preferred also names a stronger product. Reported `high` *does* make Grok effective reasoner (skips mid-only Preferred).
 
 If MCP is available, connect `anchor-prompts` and call `tune_prompt` on any vague task before starting, and `preflight_check` before executing any spec.
 

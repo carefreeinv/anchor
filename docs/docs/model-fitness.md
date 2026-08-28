@@ -3,50 +3,56 @@ sidebar_position: 4
 sidebar_label: Model Fitness
 ---
 
-<!-- synced-from: anchor/model-fitness.md @ 636b4aa933211a75376a10f9e755d1292216a4bc -->
+<!-- synced-from: anchor/model-fitness.md @ c810f6bd581752219ca4fb0784c73ee632815d62 -->
 
 # Model fitness
 
 Where each supported model excels and where it fails — reviewed **2026-08-12** (dual-axis specialty profiles) — plus the protocol that makes the list actionable: the **dual-axis fit check** (power + specialty). Vendor-reported numbers stay `(unverified)` until your own `benchmark.py` run confirms them; your benchmark table, not this page, is your routing policy.
 
-## The fit check (dual-axis)
+## The fit check (dual-axis, bidirectional)
 
-Every fleet worker gets mythos-core rule 11: before planning, compare the pending task against your own row **on two axes**. Fit is a **gate**, not a soft suggestion. Good on **both** axes → silence and proceed.
+Every fleet worker (and interactive session on each user prompt that sets work) gets mythos-core rules 10–11: before planning, compare the pending task against your own row on **two axes**, power first, then specialty. Fit is a **gate**, not chat. Power is **bidirectional** — too hard escalates, too easy downgrades. Good on **both** axes → silence and proceed.
 
 ```mermaid
 flowchart TB
-  task["Pending task"]
+  task["Pending task / user prompt"]
+  row["Compare to own fitness row"]
   power{"Power OK?<br/>weak column / orchestration"}
   spec{"Specialty OK?<br/>product profile"}
+  size{"Over-tier?<br/>too easy"}
   go["Plan and execute"]
   esc["SUGGEST-ESCALATE"]
+  down["SUGGEST-DOWNGRADE"]
   reroute["SUGGEST-REROUTE"]
   stop["Stop"]
   insist{"Operator insists?"}
   shaky["Proceed in scope<br/>mark unverified"]
 
-  task --> power
-  power -->|no| esc --> stop
+  task --> row --> power
+  power -->|no, too hard| esc --> stop
   power -->|yes| spec
   spec -->|no| reroute --> stop
-  spec -->|yes| go
+  spec -->|yes| size
+  size -->|yes, too easy| down --> stop
+  size -->|no| go
   stop --> insist
   insist -->|yes| shaky
-  insist -->|no| handoff["Handoff / wait"]
+  insist -->|no| handoff["Handoff / switch model"]
 ```
 
-| Axis | First line | When |
-|------|------------|------|
-| Power | `SUGGEST-ESCALATE: <target> — <reason>` | Weak column, orchestration-class, under-tier |
-| Specialty | `SUGGEST-REROUTE: <target or profile> — <reason>` | Power OK but wrong *kind* of model (lateral) |
+| Axis | Direction | First line | When |
+|------|-----------|------------|------|
+| Power | Too hard | `SUGGEST-ESCALATE: <target> — <reason>` | Weak column, orchestration-class, under-tier |
+| Power | Too easy | `SUGGEST-DOWNGRADE: <cheaper> — <reason>` | Clear over-tier (boilerplate, rename, format-only) |
+| Specialty | Wrong shape | `SUGGEST-REROUTE: <target or profile> — <reason>` | Power OK but wrong *kind* of model (lateral) |
 
 **Profile tags (v1):** `coding-agent`, `terminal-agent`, `critic`, `planner`, `general-chat`, `multimodal`, `swarm-local`. Example: `SUGGEST-REROUTE: coding-agent — leave multi-file software for a software-dev optimized model`. Specialty is **not** “a stronger model exists.”
 
-The operator can insist (`orchestrate.py --insist`); the worker then proceeds in scope with `(unverified)`. Scaffolded projects carry model-priority in `ANCHOR-CONVENTIONS.md`. Rule 10 still right-sizes trivial work downward. Plans may list profile tags in **Preferred models** (e.g. `mid, coding-agent`); mechanical pickers still key on tiers + names only.
+The operator can insist (`orchestrate.py --insist` or “do it here”); the worker then proceeds in scope with `(unverified)`. Prefer project model-priority (`ANCHOR-CONVENTIONS.md`) for escalate/downgrade targets. Downgrade heuristics stay **conservative** — normal mid multi-file work is not “too easy.” Plans may list profile tags in **Preferred models** (e.g. `mid, coding-agent`); mechanical pickers still key on tiers + names only.
 
-**What does *not* trigger the fit check.** Do not escalate/re-route because a stronger model exists, because a plan's **Preferred models** names one (only listed *tiers* set the power floor; *unknown* fit is **eligible**), because the task is unfamiliar or multi-file *within your profile*, or because one step looks hard. Over-shy refusal is a real failure mode.
+**What does *not* trigger the fit check.** Do not escalate, downgrade, or re-route because a stronger model exists, because a plan's **Preferred models** names one (only listed *tiers* set the power floor; *unknown* fit is **eligible**), because the task is unfamiliar or multi-file *within your profile*, or because one step looks hard. Do not spam downgrade because a cheaper model exists for routine executor work. Over-shy refusal is a real failure mode too.
 
-`orchestrate.py` honors `SUGGEST-ESCALATE` **and** `SUGGEST-REROUTE` immediately (escalate/hold) without burning retries. The token may be the entire first line or follow rule 13's six-line preflight; later prose quoting the tokens is ignored.
+`orchestrate.py` honors first-line `SUGGEST-ESCALATE`, `SUGGEST-DOWNGRADE`, **and** `SUGGEST-REROUTE` immediately (no retry burn). The token may be the entire first line or follow rule 13's six-line preflight; later prose quoting the tokens is ignored.
 
 Copy-paste examples (the argument after the colon is always the **destination** profile or model — never the source):
 

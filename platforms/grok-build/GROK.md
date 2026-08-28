@@ -68,6 +68,8 @@ Bare `grok` = whatever session you opened; versioned tokens make a 4.5 sunset a 
   work; vendor composite ≈ GPT-5.6 Sol `(unverified, vendor)`.
 - **Grok 4.5** (public 2026-07-09) — still the **default cheap Grok** for thin mid work
   while available; same effort map (`xhigh` coerced to `high` → reasoner, not frontier).
+- Community reports intermittent regressions and tool-use flakiness `(unverified)` —
+  external verification per the hard rules above is load-bearing here, not ceremony.
 - **Base catalog tier = mid; reported effort sets effective Preferred tier**
   (Grok family only — see `model-fitness.md` “Effort as effective tier”):
 
@@ -89,18 +91,22 @@ Bare `grok` = whatever session you opened; versioned tokens make a 4.5 sunset a 
 - **`/work`:** pass `--effort` into `plan_fit` / `work_once` when you know the dial
   so eligibility matches. Before burning high/`xhigh` on `small`/`mid` Preferred,
   probe cheaper local/fleet capacity. Full contract: `.grok/skills/work/SKILL.md`.
-- Fit check before starting any task (**dual-axis**, mythos-core rule 11): `.anchor/model-fitness.md`
-  has Grok 4.5 / 4.6 rows (`terminal-agent` + `coding-agent`). **Power** poor fit →
-  `SUGGEST-ESCALATE:` first line. **Specialty** mismatch (e.g. pure long multimodal
-  design doc better on `multimodal`, or pure chat UI with no shell) →
-  `SUGGEST-REROUTE: <target or profile> — <reason>`, not a silent attempt. Good on
-  both axes → silence. Symmetrically, **mid is a floor you clear, not a ceiling you
-  apologize for**: repo-scale issue resolution is a documented weak spot for Grok
-  4.5 (check `model-fitness.md` for the row matching your session's harness-named
-  product), file-scoped `mid` plans are not. Do not skip a plan because its **Preferred
+- Fit check before starting any task (**dual-axis, bidirectional**; mythos-core
+  rules 10–11): `.anchor/model-fitness.md` has Grok 4.5 / 4.6 rows (`terminal-agent`
+  + `coding-agent`). **Power**, too hard, poor fit → `SUGGEST-ESCALATE:` first line;
+  **power**, too easy, clear over-tier trivial work on a high-cost session →
+  `SUGGEST-DOWNGRADE: <cheaper> — <reason>` and stop unless the operator insists.
+  **Specialty** mismatch (e.g. pure long multimodal design doc better on
+  `multimodal`, or pure chat UI with no shell) → `SUGGEST-REROUTE: <target or
+  profile> — <reason>`, not a silent attempt. Good on every axis → silence.
+  Symmetrically, **mid is a floor you clear, not a ceiling you apologize for**:
+  repo-scale issue resolution is a documented weak spot for Grok 4.5 (check
+  `model-fitness.md` for the row matching your session's harness-named product),
+  file-scoped `mid` plans are not. Do not skip a plan because its **Preferred
   models** also names a stronger product — only listed *tiers* gate power. Reported
   `high` makes Grok **effective reasoner** (skips mid-only Preferred); omitted
-  `--effort` stays mid.
+  `--effort` stays mid. Prefer `/effort low` for mechanical steps rather than
+  silent premium spend when staying on Grok.
 
 ## Working with this repo's tooling
 

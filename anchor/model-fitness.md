@@ -8,12 +8,17 @@ and say so before burning tokens.
 
 ## The fit check (every model, every task) — dual-axis
 
-Before planning, compare the pending task against your row below (and the project's
+Before planning (and on each **user-submitted** interactive prompt that sets or
+redirects work), compare the pending task against your row below and the project's
 `ANCHOR-CONVENTIONS.md` / `.anchor/conventions.md` model-routing / **Preferred
-orchestrator** sections). Run **two axes in order**. Good fit on **both** → emit
-**nothing** about models and proceed.
+orchestrator** sections. Fit is a **gate**, not chatter. Run **two axes in order**
+— power first, then specialty. Power is **bidirectional** (too hard → escalate,
+too easy → downgrade); specialty is always a **lateral** re-route. Good fit on
+**both** axes → emit **nothing** about models and proceed.
 
 ### Axis 1 — power (tier / weak column / orchestration)
+
+#### Too hard → escalate (mythos-core rule 11)
 
 If the task lands in your **weak** column — or is orchestration-class work and you
 are not that preferred orchestrator:
@@ -22,6 +27,10 @@ are not that preferred orchestrator:
    (prefer the project's Preferred orchestrator when set)
 2. Stop. Do not begin the task.
 3. Proceed only if the operator insists — then stay in scope and mark `(unverified)`.
+
+**Heuristics (up):** multi-service architecture, multi-hour autonomy, security-adjacent
+deep dives, weak-column hit, orchestration / cross-plan **Depends on** when you are
+not the Preferred orchestrator.
 
 **Temporary coordinator:** if Preferred orchestrator is **unset** and no project MCP
 coordinator is registered, a **frontier / near-frontier** model (Fable-class,
@@ -32,8 +41,27 @@ and local models must **not** self-appoint—escalate to a stronger session or t
 operator. Recommend setting a durable orchestrator with
 `anchor <project> --set-orchestrator …`.
 
-Suggest *downward* too (per mythos-core rule 10): boilerplate on a frontier tier wastes
-credits exactly the way hard problems on a swarm node waste attempts.
+#### Too easy → downgrade (mythos-core rule 10)
+
+If the task is **clearly over-tier** for this session (premium/frontier capacity on
+trivial work):
+
+1. Entire first line: `SUGGEST-DOWNGRADE: <cheaper model or tier> — <one-line reason>`
+2. **Stop and wait** — `orchestrate.py` honors the token immediately (no retry
+   burn) but does not itself pick or dispatch a cheaper endpoint; the operator
+   (interactive) or an unattended caller re-dispatches to the suggested target.
+   Proceed only if they insist / “do it here” / `--insist` — then mark shaky
+   judgment `(unverified)` if unsure.
+3. Prefer targets from the project’s model-priority list or a reachable local swarm.
+
+**Heuristics (down, conservative):** boilerplate, formatting-only, renames, a single
+well-specified function, pure classification/summary glue. Do **not** downgrade merely
+because “a cheaper model exists” for normal mid-tier multi-file work.
+
+Examples:
+
+- `SUGGEST-DOWNGRADE: small — rename-only; Haiku/local swarm is enough`
+- `SUGGEST-DOWNGRADE: qwen3:4b-local — formatting pass; keep frontier for architecture`
 
 ### Axis 2 — specialty (computational / product profile)
 
@@ -75,11 +103,12 @@ ignored by `plan_select` — they guide **self-assessment**, not the picker floo
 
 ### What does *not* trigger the fit check
 
-The gate is your **weak column**, orchestration-class work, and **material
-specialty mismatch**. It is not a general licence to decline. Over-shy
-escalation/re-route has a cost the transcript never shows: the plan sits in the
-backlog, the operator waits, and a model that could have finished it is idle. Do
-**not** escalate or re-route merely because:
+The gate is your **weak column**, orchestration-class work, **clear over-tier**
+work, and **material specialty mismatch**. It is not a general licence to
+decline. Over-shy escalation, spam downgrade, and over-eager re-route all have a
+cost the transcript never shows: the plan sits in the backlog, the operator
+waits, and a model that could have finished it is idle. Do **not** escalate,
+downgrade, or re-route merely because:
 
 - **A stronger model exists.** True of nearly every task; not a fit verdict.
 - **A plan's `Preferred models` names a stronger product.** Only listed **tiers**
@@ -92,9 +121,9 @@ backlog, the operator waits, and a model that could have finished it is idle. Do
 - **A single step looks hard.** Claim the plan; route or escalate *that step*
   (per-step `Route to`, `## Escalation triggers`), or hand the plan back to ready.
 
-Escalating or re-routing when you shouldn't is a real failure mode, not the safe
-default — it just fails quietly. Weigh it the same way you weigh attempting work
-above your tier or outside your profile.
+Escalating, downgrading, or re-routing when you shouldn't is a real failure mode,
+not the safe default — it just fails quietly. Weigh it the same way you weigh
+attempting work above your tier or outside your profile.
 
 ## Frontier / API models
 
@@ -187,11 +216,13 @@ it grows large; automated rotation is out of scope here.
 
 - Scaffolded into every project (core doctrine file); `ANCHOR-CONVENTIONS.md` adds the
   operator's model-priority order next to it.
-- `mythos-core.md` rule 11 makes the **dual-axis** fit check binding for every fleet worker;
-  `orchestrate.py` treats `SUGGEST-ESCALATE` (power) and `SUGGEST-REROUTE`
-  (specialty) as immediate fit gates (no burned attempts) unless run with `--insist`.
-  The token may be the entire first line, or follow mythos-core rule 13's six-line
-  preflight block; later prose quoting the tokens is ignored.
+- `mythos-core.md` rules 10–11 make the **dual-axis, bidirectional** fit check
+  binding for every fleet worker; `orchestrate.py` treats `SUGGEST-ESCALATE`
+  (power, up) and `SUGGEST-DOWNGRADE` (power, down) — rule 10 — and
+  `SUGGEST-REROUTE` (specialty) — rule 11 — as immediate fit gates (no burned
+  attempts) unless run with `--insist`. The token may be the entire first line,
+  or follow mythos-core rule 13's six-line preflight block; later prose quoting
+  the tokens is ignored.
 - Re-review this file when a listed model ships a major version; entries carry the
   review date above. Prefer observed fitness report numbers over vendor claims
   when sample sizes are large enough (see above).

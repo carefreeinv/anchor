@@ -80,7 +80,7 @@ MAX_RESPAWNS = 2
 
 # Fit-gate tokens (mythos-core rule 11). A rule-13 preflight block may precede them.
 FIT_GATE_SCAN_LINES = 12
-_FIT_GATE_PREFIXES = ("SUGGEST-ESCALATE", "SUGGEST-REROUTE")
+_FIT_GATE_PREFIXES = ("SUGGEST-ESCALATE", "SUGGEST-DOWNGRADE", "SUGGEST-REROUTE")
 
 
 def fit_gate_line(out: str) -> str | None:
@@ -564,13 +564,20 @@ def execute_task(task: str, plan: str, fleet: Fleet, verify_cmd: str | None,
             return {"task": task, "status": "handoff", "attempts": attempt,
                     "handoff": parsed, "output": relay_text(out)}
 
-        # Fit check (mythos-core rule 11): dual-axis — power escalate or specialty
-        # re-route. Honor a bare first line *or* a token after rule 13's preflight
-        # instead of burning attempts, unless the operator ran with --insist.
+        # Fit check (mythos-core rules 10–11): dual-axis, bidirectional — power
+        # too-hard (ESCALATE), power too-easy (DOWNGRADE), or specialty (REROUTE).
+        # Honor a bare first line *or* a token after rule 13's preflight instead
+        # of burning attempts, unless the operator ran with --insist.
         _fit_line = fit_gate_line(out)
         if _fit_line:
             suggestion = _fit_line[:300]
-            kind = "re-route" if _fit_line.upper().startswith("SUGGEST-REROUTE") else "escalation"
+            _fit_upper = _fit_line.upper()
+            if _fit_upper.startswith("SUGGEST-DOWNGRADE"):
+                kind = "downgrade"
+            elif _fit_upper.startswith("SUGGEST-REROUTE"):
+                kind = "re-route"
+            else:
+                kind = "escalation"
             if not insist:
                 print(f"[fit] {ep.name} suggests {kind}: {suggestion}", file=sys.stderr)
                 status = "hold" if hold_on_fail else "escalate"
@@ -585,8 +592,8 @@ def execute_task(task: str, plan: str, fleet: Fleet, verify_cmd: str | None,
             history.append(
                 f"Your previous output was a fit gate ({suggestion[:80]}…). "
                 "The operator insists you proceed at this tier/profile: stay strictly "
-                "in scope, mark shaky output (unverified), and do not SUGGEST-ESCALATE "
-                "or SUGGEST-REROUTE again."
+                "in scope, mark shaky output (unverified), and do not SUGGEST-ESCALATE, "
+                "SUGGEST-DOWNGRADE, or SUGGEST-REROUTE again."
             )
             continue
 
@@ -768,7 +775,8 @@ def main() -> None:
     ap.add_argument("--hold-on-fail", action="store_true",
                     help="detached mode: hold failed tasks for later instead of escalating")
     ap.add_argument("--insist", action="store_true",
-                    help="override workers' SUGGEST-ESCALATE / SUGGEST-REROUTE fit checks and make them proceed")
+                    help="override workers' SUGGEST-ESCALATE / SUGGEST-DOWNGRADE / "
+                         "SUGGEST-REROUTE fit checks and make them proceed")
     ap.add_argument("--scope-spec",
                     help="task-spec markdown with '## Files in scope'; changes outside it "
                          "are rejected before --verify runs")

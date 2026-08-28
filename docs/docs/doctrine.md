@@ -3,7 +3,7 @@ sidebar_position: 3
 sidebar_label: Doctrine
 ---
 
-<!-- synced-from: anchor/ANCHOR.md @ c650a3973372dd8299467497c51f82d23ed8df92 -->
+<!-- synced-from: anchor/ANCHOR.md @ 5c79cd516b45621b989eb298299ec60cc5ee84b9 -->
 
 # The Doctrine
 
@@ -106,10 +106,10 @@ Escalation isn't the only direction that matters — before spending an expensiv
 flowchart LR
   task["Incoming task"]
   size{"Power + specialty fit?"}
-  down["Suggest cheaper / local (rule 10)"]
+  down["SUGGEST-DOWNGRADE (power)"]
   up["SUGGEST-ESCALATE (power)"]
   lat["SUGGEST-REROUTE (specialty)"]
-  go["Proceed in scope"]
+  go["Proceed in scope (silence)"]
 
   task --> size
   size -->|"too hard / weak column"| up
@@ -118,7 +118,7 @@ flowchart LR
   size -->|"fit both axes"| go
 ```
 
-Boilerplate, formatting, a rename, or one well-specified function gets flagged, with a question about handing off to a smaller model or one already registered in `scripts/endpoints.yaml`, instead of silently burning frontier capacity. Specialty mismatch (e.g. general-chat for multi-file software) uses `SUGGEST-REROUTE` — lateral, not always stronger. See [Model fitness](/model-fitness). `scripts/router.py` implements role lookup for fleet dispatch.
+Boilerplate, formatting, a rename, or one well-specified function gets a first-line `SUGGEST-DOWNGRADE: <cheaper> — <reason>` (stop unless insisted), instead of silently burning frontier capacity. Too-hard work uses `SUGGEST-ESCALATE`; a specialty mismatch (e.g. general-chat for multi-file software) uses `SUGGEST-REROUTE` — lateral, not always stronger. See [Model fitness](/model-fitness). `scripts/router.py` classifies fleet roles; interactive agents use the first-line protocol, not silent model swap.
 
 The registry itself gets right-sized the same way: no one gets the raw `scripts/endpoints.yaml` in context. `router.summarize_endpoints()` generates a capped one-line-per-endpoint summary (name, tier, context size, one capability phrase — no `base_url`, model name, or quirk values), which the orchestrator hands to coordinator/planner roles and to executor tasks only when the task itself is routing-related. Full endpoint detail is a deliberate on-demand lookup — the model-fleet MCP's `lookup_endpoint(name)` tool, or `router.endpoint_detail()` directly — never a default include; `ANCHOR_API_KEY` stays an environment read at request time, never a registry field.
 

@@ -3,7 +3,7 @@ sidebar_position: 1
 sidebar_label: Claude Code
 ---
 
-<!-- synced-from: platforms/claude-code/CLAUDE.md @ 502da84cc554659ec0cab36850be1726293a2192 -->
+<!-- synced-from: platforms/claude-code/CLAUDE.md @ 7d8307754e603ecdcfe731cd82eebff33df0818b -->
 
 # Claude Code
 
@@ -40,7 +40,7 @@ flowchart TB
 
 **Fleet offload.** With `model-fleet` connected, mechanical steps go to your own hardware (`delegate` tool) before spending plan-limit tokens. The frontier agent stays the judge, your fleet becomes the hands.
 
-**Standing rules** apply to every tier: fit-check-first **dual-axis** (weak column / orchestration → `SUGGEST-ESCALATE:`; wrong specialty/profile → `SUGGEST-REROUTE:` e.g. coding-agent — see [model fitness](/model-fitness); good on both axes → silence; a stronger model merely existing, a plan naming one, or one hard-looking step are not reasons to hand work back), restate-first, **surface the best-fit skill** (before acting, offer an available skill or command that would do the request faster in a single line, then proceed — a suggestion, not a gate; only skills actually loaded, at most once per capability per session), one step at a time, verify-don't-claim, two-failures-then-escalate, scope is sacred, required output footer, **docs describe current state not plans** (never document `.plans/` contents as product docs; document shipped code only), **`/commit-prep` before any commit outside `.plans/`, and before any merge commit**, and **capacity limits are a scheduling problem** — on a session/weekly cap or a forced tier downgrade, checkpoint and then reroute to the next model that clears the task's fitness floor, wait for a near reset, or stop and report (see [capacity routing](/capacity-routing)); never finish on a silently downgraded tier and never weaken the work to beat a cap.
+**Standing rules** apply to every tier: fit-check-first **dual-axis, bidirectional** (weak column / orchestration → `SUGGEST-ESCALATE:`; clear over-tier → `SUGGEST-DOWNGRADE:`; wrong specialty/profile → `SUGGEST-REROUTE:` e.g. coding-agent — see [model fitness](/model-fitness); good on every axis → silence; a stronger model merely existing, a plan naming one, or one hard-looking step are not reasons to hand work back), restate-first, **surface the best-fit skill** (before acting, offer an available skill or command that would do the request faster in a single line, then proceed — a suggestion, not a gate; only skills actually loaded, at most once per capability per session), one step at a time, verify-don't-claim, two-failures-then-escalate, scope is sacred, required output footer, **docs describe current state not plans** (never document `.plans/` contents as product docs; document shipped code only), **`/commit-prep` before any commit outside `.plans/`, and before any merge commit**, and **capacity limits are a scheduling problem** — on a session/weekly cap or a forced tier downgrade, checkpoint and then reroute to the next model that clears the task's fitness floor, wait for a near reset, or stop and report (see [capacity routing](/capacity-routing)); never finish on a silently downgraded tier and never weaken the work to beat a cap.
 
 ## Tracked plans
 

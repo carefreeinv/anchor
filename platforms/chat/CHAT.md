@@ -220,12 +220,14 @@ exit `6` without saying so. Never dictate a merge to `main`/`master` — that is
 - Tier guidance when relaying API choices to the human: Terra ≈ GPT-5.5 quality at
   about half the cost (the executor pick); Luna for tuner/light-executor work; Sol
   only where its agentic-coding edge is actually needed.
-- Fit check applies here too (**dual-axis**): if the pending request lands in the
-  current model's weak column (`.anchor/model-fitness.md`), say
-  `SUGGEST-ESCALATE: <model> — <reason>` as the first line. If power is fine but the
-  session is pure **general-chat** (no shell/repo tools) and the human needs
-  multi-file software execution, say
+- Fit check applies here too (**dual-axis, bidirectional**): if the pending request
+  lands in the current model's weak column (`.anchor/model-fitness.md`), say
+  `SUGGEST-ESCALATE: <model> — <reason>` as the first line. If it's clear over-tier
+  instead (frontier-class chat on rename-only glue), say
+  `SUGGEST-DOWNGRADE: <cheaper model or tier> — <reason>` and wait for the human.
+  If power is fine but the session is pure **general-chat** (no shell/repo tools)
+  and the human needs multi-file software execution, say
   `SUGGEST-REROUTE: coding-agent — leave software implementation for a software-dev
   optimized model` and let them switch harness. Proceed only if they insist. Good
-  fit on both axes → silence. The mere existence of a stronger model, an unfamiliar
+  fit on every axis → silence. The mere existence of a stronger model, an unfamiliar
   codebase, or one hard-looking step is not a reason to hand the request back.

@@ -96,6 +96,36 @@ def test_execute_task_insist_overrides_fit_check():
     assert fleet.ep.calls == 2
 
 
+def test_execute_task_honors_suggest_downgrade_without_burning_attempts():
+    from orchestrate import execute_task
+
+    fleet = FakeFleet([
+        "SUGGEST-DOWNGRADE: small — rename-only; local swarm is enough",
+    ])
+    result = execute_task("rename the helper file", "plan", fleet,
+                          verify_cmd=None, hold_on_fail=False)
+
+    assert result["status"] == "escalate"
+    assert result["attempts"] == 1
+    assert "DOWNGRADE" in result["suggestion"].upper() or "small" in result["suggestion"]
+    assert fleet.ep.calls == 1
+
+
+def test_execute_task_insist_overrides_suggest_downgrade():
+    from orchestrate import execute_task
+
+    fleet = FakeFleet([
+        "SUGGEST-DOWNGRADE: small — too easy",
+        GOOD_OUTPUT,
+    ])
+    result = execute_task("do it here anyway", "plan", fleet,
+                          verify_cmd=None, hold_on_fail=False, insist=True)
+
+    assert result["status"] == "ok"
+    assert result["attempts"] == 2
+    assert fleet.ep.calls == 2
+
+
 def test_execute_task_honors_suggest_reroute_without_burning_attempts():
     """Specialty-axis fit gate (mythos-core rule 11) — same no-retry contract as escalate."""
     from orchestrate import execute_task
@@ -137,6 +167,16 @@ RULE13_THEN_REROUTE = (
     "SUGGEST-REROUTE: coding-agent — leave multi-file software for a software-dev optimized model\n"
 )
 
+RULE13_THEN_DOWNGRADE = (
+    "Goal restated? PASS\n"
+    "Acceptance criteria present? PASS\n"
+    "Files-in-scope listed? PASS\n"
+    "Budget declared and fits (spec's ## Budget)? PASS\n"
+    "Tier + specialty fit OK (rule 11: power escalate and/or specialty re-route)? PASS\n"
+    "Task small enough for this tier (rule 10)? FAIL\n"
+    "SUGGEST-DOWNGRADE: small — rename-only; local swarm is enough\n"
+)
+
 
 def test_fit_gate_line_finds_token_after_preflight():
     from orchestrate import fit_gate_line
@@ -146,6 +186,13 @@ def test_fit_gate_line_finds_token_after_preflight():
     buried = "\n".join(f"note {i}" for i in range(15))
     buried += "\nSUGGEST-REROUTE: coding-agent — too late\n"
     assert fit_gate_line(buried) is None
+
+
+def test_fit_gate_line_finds_downgrade_token_after_preflight():
+    from orchestrate import fit_gate_line
+
+    line = fit_gate_line(RULE13_THEN_DOWNGRADE)
+    assert line is not None and line.startswith("SUGGEST-DOWNGRADE: small")
 
 
 def test_execute_task_honors_reroute_after_rule13_preflight():
@@ -164,6 +211,25 @@ def test_execute_task_honors_reroute_after_rule13_preflight():
     assert result["status"] == "escalate"
     assert result["attempts"] == 1
     assert "coding-agent" in result["suggestion"]
+    assert fleet.ep.calls == 1
+
+
+def test_execute_task_honors_downgrade_after_rule13_preflight():
+    """Same contract as reroute-after-preflight, but for the power/downgrade token."""
+    from orchestrate import execute_task
+
+    fleet = FakeFleet([RULE13_THEN_DOWNGRADE])
+    result = execute_task(
+        "rename the helper file",
+        "plan",
+        fleet,
+        verify_cmd=None,
+        hold_on_fail=False,
+    )
+
+    assert result["status"] == "escalate"
+    assert result["attempts"] == 1
+    assert "small" in result["suggestion"]
     assert fleet.ep.calls == 1
 
 

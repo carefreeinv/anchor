@@ -5,6 +5,9 @@ Heuristic classification first (free), tiny-model classification as fallback.
 Usage:
   python router.py "rename this variable across the file"      # prints role + endpoint
   python router.py --send "write a haiku about CI"             # actually dispatches
+
+Interactive agents use mythos-core first-line SUGGEST-ESCALATE / SUGGEST-DOWNGRADE
+for fit; this module only classifies fleet roles (not silent model swap).
 """
 from __future__ import annotations
 
