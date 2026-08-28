@@ -29,8 +29,14 @@ class FakeFleet:
         return self.ep
 
 
-GOOD_OK = "did it\n## Result\nDone — success.\n## How to verify\npytest -q\n"
-GOOD_HEDGE = "tweaked\n## Result\nThis should work.\n## How to verify\npytest -q\n"
+GOOD_OK = (
+    "did it\n## Result\nDone — success.\n## How to verify\npytest -q\n"
+    "## Deferred / concerns\nNone.\n"
+)
+GOOD_HEDGE = (
+    "tweaked\n## Result\nThis should work.\n## How to verify\npytest -q\n"
+    "## Deferred / concerns\nNone.\n"
+)
 
 
 def test_two_tasks_two_ledger_records(tmp_path: Path):

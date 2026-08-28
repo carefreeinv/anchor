@@ -6,8 +6,10 @@ from pathlib import Path
 
 from fleet_metrics import (
     FIT_TIER_LADDER,
+    FOOTER_TRUNCATION_MARKER,
     OutcomeRecord,
     append_outcome,
+    extract_footer,
     load_outcomes,
     normalize_fit_tier,
     parse_claimed_status,
@@ -247,3 +249,105 @@ def test_render_human_report_carries_task_and_evidence():
     assert "reasoner" in report
     assert "verify_exit=1" in report
     assert "scope_verdict='fail'" in report
+
+
+# --- extract_footer: the executor -> orchestrator boundary contract ----------
+
+
+CLEAN_FOOTER = (
+    "Did the thing, here is some reasoning the coordinator should never see.\n"
+    "## Result\n"
+    "Implemented the widget.\n"
+    "## How to verify\n"
+    "pytest tests/test_widget.py -q\n"
+    "## Deferred / concerns\n"
+    "None.\n"
+)
+
+
+def test_extract_footer_clean_input():
+    extraction = extract_footer(CLEAN_FOOTER)
+    assert extraction.ok
+    assert not extraction.truncated
+    assert "## Result" in extraction.footer_text
+    assert "Implemented the widget." in extraction.footer_text
+    assert "## How to verify" in extraction.footer_text
+    assert "pytest tests/test_widget.py -q" in extraction.footer_text
+    assert "## Deferred / concerns" in extraction.footer_text
+    assert "None." in extraction.footer_text
+    # The rambling preamble before the first heading never crosses the boundary.
+    assert "reasoning the coordinator" not in extraction.footer_text
+
+
+def test_extract_footer_tolerates_case_and_spacing_drift():
+    sloppy = (
+        "##  result  \n"
+        "ok\n"
+        "##HOW TO VERIFY\n"
+        "n/a\n"
+        "##   Deferred/Concerns\n"
+        "none\n"
+    )
+    extraction = extract_footer(sloppy)
+    assert extraction.ok
+    assert "## Result" in extraction.footer_text
+    assert "## How to verify" in extraction.footer_text
+    assert "## Deferred / concerns" in extraction.footer_text
+
+
+def test_extract_footer_missing_section_is_named():
+    missing_deferred = (
+        "## Result\nok\n"
+        "## How to verify\npytest -q\n"
+    )
+    extraction = extract_footer(missing_deferred)
+    assert not extraction.ok
+    assert extraction.missing == ("Deferred / concerns",)
+
+    missing_all = "I fixed it, trust me."
+    extraction2 = extract_footer(missing_all)
+    assert not extraction2.ok
+    assert extraction2.missing == ("Result", "How to verify", "Deferred / concerns")
+
+
+def test_extract_footer_empty_text_is_missing_all():
+    extraction = extract_footer("")
+    assert not extraction.ok
+    assert extraction.missing == ("Result", "How to verify", "Deferred / concerns")
+
+
+def test_extract_footer_duplicate_heading_last_occurrence_wins():
+    duplicated = (
+        "## Result\n"
+        "draft attempt, ignore this\n"
+        "## How to verify\n"
+        "draft, ignore\n"
+        "## Result\n"
+        "final answer\n"
+        "## How to verify\n"
+        "pytest -q\n"
+        "## Deferred / concerns\n"
+        "none\n"
+    )
+    extraction = extract_footer(duplicated)
+    assert extraction.ok
+    assert "final answer" in extraction.footer_text
+    assert "draft attempt" not in extraction.footer_text
+    assert "draft, ignore" not in extraction.footer_text
+
+
+def test_extract_footer_caps_oversize_output():
+    huge_body = "\n".join(f"line {i}" for i in range(200))
+    oversized = f"## Result\n{huge_body}\n## How to verify\npytest -q\n## Deferred / concerns\nnone\n"
+    extraction = extract_footer(oversized, max_lines=10)
+    assert extraction.ok
+    assert extraction.truncated
+    assert len(extraction.footer_text.splitlines()) <= 11  # cap + marker line
+    assert FOOTER_TRUNCATION_MARKER in extraction.footer_text
+    assert "line 199" not in extraction.footer_text  # the tail never survives
+
+
+def test_extract_footer_under_cap_is_not_truncated():
+    extraction = extract_footer(CLEAN_FOOTER, max_lines=60)
+    assert not extraction.truncated
+    assert FOOTER_TRUNCATION_MARKER not in extraction.footer_text

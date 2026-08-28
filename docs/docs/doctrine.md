@@ -3,7 +3,7 @@ sidebar_position: 3
 sidebar_label: Doctrine
 ---
 
-<!-- synced-from: anchor/ANCHOR.md @ a0629c3e4782374f7444cbddf871a856337779eb -->
+<!-- synced-from: anchor/ANCHOR.md @ c650a3973372dd8299467497c51f82d23ed8df92 -->
 
 # The Doctrine
 
@@ -56,7 +56,7 @@ flowchart TB
   good --> ok["Checkable result"]
 ```
 
-- **Forced structure** — templates with mandatory sections; a model that must fill `## Acceptance criteria` cannot skip thinking about them. Outputs missing the required footer are rejected and retried by the pipeline, not forgiven.
+- **Forced structure** — templates with mandatory sections; a model that must fill `## Acceptance criteria` cannot skip thinking about them. Outputs missing the required footer are rejected and retried by the pipeline, not forgiven. Only that footer crosses back into the coordinator's own context — `fleet_metrics.py`'s `extract_footer` tolerantly pulls `## Result` / `## How to verify` / `## Deferred / concerns` out of an executor's full reply (case/spacing drift, last-occurrence-wins), caps it so a transcript can't be smuggled inside `## Result`, and `orchestrate.py` archives the raw reply to `var/task-transcripts/<task-hash>.log` for post-mortem instead of relaying it further.
 - **One task per fresh context** — context rot hits small models hardest; never run task chains in one conversation.
 - **Declared budget + pre-flight gate** — every task spec's `## Budget` (context window, output ceiling) comes from tooling, not the model's guess; mythos-core rule 13 makes every executor print a fixed 6-item pass/fail block (goal, acceptance criteria, files-in-scope, budget, tier fit, task size) before doing any work, and stop on the first FAIL instead of plowing ahead.
 - **Role separation** — planner → executor → critic as three clean contexts outperforms one long chat, even on the same model. In the orchestrated path the split is harness-enforced by the `scripts/roles.py` capability map (planner writes only `.plans/**`; executor never `.plans/**` or its own spec; critic writes nothing), applied per phase by `orchestrate.py` and by the project-orchestrator MCP server's role-scoped toolsets. Role transitions are logged orchestrator events; single-model sessions keep the discipline by prompt alone.
