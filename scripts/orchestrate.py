@@ -711,7 +711,8 @@ def main() -> None:
     ap.add_argument("--hold-on-fail", action="store_true",
                     help="detached mode: hold failed tasks for later instead of escalating")
     ap.add_argument("--insist", action="store_true",
-                    help="override workers' SUGGEST-ESCALATE / SUGGEST-DOWNGRADE / SUGGEST-REROUTE fit checks and make them proceed")
+                    help="override workers' SUGGEST-ESCALATE / SUGGEST-DOWNGRADE / "
+                         "SUGGEST-REROUTE fit checks and make them proceed")
     ap.add_argument("--scope-spec",
                     help="task-spec markdown with '## Files in scope'; changes outside it "
                          "are rejected before --verify runs")

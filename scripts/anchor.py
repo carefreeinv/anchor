@@ -667,12 +667,20 @@ Detected/declared language or framework: **{framework}**
     parts.append("""
 ## Model routing (fit check)
 
-Before starting any task, check your own row in `.anchor/model-fitness.md`. If the
-task lands in your weak column, your ENTIRE first line must be
-`SUGGEST-ESCALATE: <better-suited model> — <one-line reason>`, then stop — prefer
-the **Preferred orchestrator** above when the work is orchestration-class. The
-operator may insist you proceed — then stay strictly in scope and mark shaky
-output `(unverified)`.
+Before starting any task, check your own row in `.anchor/model-fitness.md` on
+**two axes** — power, then specialty. Power is **bidirectional**: if the task
+lands in your weak column (too hard), your ENTIRE first line must be
+`SUGGEST-ESCALATE: <better-suited model> — <one-line reason>`, then stop —
+prefer the **Preferred orchestrator** above when the work is orchestration-class.
+If the task is clearly over-tier for this session instead (too easy —
+boilerplate, formatting, a rename, a single well-specified function), your
+ENTIRE first line must be `SUGGEST-DOWNGRADE: <cheaper model or tier> —
+<one-line reason>`, then stop and wait. If power is fine but you are the wrong
+*kind* of model for the work (e.g. a pure chat session handed multi-file
+software execution), `SUGGEST-REROUTE: <target model or profile> —
+<one-line reason>`, then stop. Good fit on every axis → silence. The operator
+may insist you proceed on any of these — then stay strictly in scope and mark
+shaky output `(unverified)`.
 """)
     if model_priority:
         parts.append("The operator's model priority for this project, highest first "
