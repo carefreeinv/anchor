@@ -6,6 +6,8 @@ Newest first.
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-08-28
+
 ### Added
 
 - **Bidirectional per-prompt model fit (`SUGGEST-DOWNGRADE`)** — mythos-core rule 10 formalizes over-tier work as a first-line `SUGGEST-DOWNGRADE: <cheaper target> — <reason>` (stop unless the operator insists); rule 11 remains upward `SUGGEST-ESCALATE` and, as of the dual-axis work below, also `SUGGEST-REROUTE` for specialty mismatch — all three tokens are now peers in the same fit gate (`orchestrate.py`'s `fit_gate_line`/`_FIT_GATE_PREFIXES`, including after mythos-core rule 13's preflight block). Good fit stays silent. Documented in `model-fitness.md`, `ANCHOR.md`, Claude/Grok/Chat/local-models platforms, and `scripts/anchor.py`'s scaffolded `.anchor/conventions.md` "Model routing" section (was escalate-only, so a freshly scaffolded or `--set-orchestrator` project never taught the downgrade or reroute tokens). `orchestrate.py` honors DOWNGRADE like escalate/re-route (no retry burn; `--insist` overrides). Covered by orchestrate and `plan_conventions` unit tests, including the after-preflight case.
