@@ -18,3 +18,4 @@ var/
 .env.*
 !.env.example
 
+.aider*
