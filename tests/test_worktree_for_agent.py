@@ -100,6 +100,45 @@ def test_remove_worktree(tmp_path: Path):
     assert get_path(root, "mid-1") is None
 
 
+def test_ensure_worktree_preexisting_unclaimed_branch_still_works(tmp_path: Path):
+    """`feat` already exists but isn't checked out anywhere -> plain checkout
+    succeeds, unchanged from before the fix."""
+    root = _init_repo(tmp_path)
+    _git(root, "branch", "feature/pre-existing")
+    rec = ensure_worktree(root, "agent-a", slug="pre-existing")
+    assert rec.branch == "feature/pre-existing"
+    assert Path(rec.path).is_dir()
+
+
+def test_ensure_worktree_refuses_to_reset_branch_checked_out_elsewhere(tmp_path: Path):
+    """The bug this guards against: `feat` has a real commit and is checked out
+    in another worktree. A second `ensure_worktree` call for the same slug must
+    refuse -- not silently `git checkout -B` it back to `integration`, which
+    would discard the commit. See .plans/bugs/worktree-for-agent-branch-reset."""
+    root = _init_repo(tmp_path)
+    rec_a = ensure_worktree(root, "agent-a", slug="shared-slug")
+    worktree_a = Path(rec_a.path)
+    # A real, unmerged commit only on the feature branch -- this is what a
+    # buggy reset would discard.
+    (worktree_a / "work.txt").write_text("real work\n", encoding="utf-8")
+    _git(worktree_a, "add", "work.txt")
+    _git(worktree_a, "commit", "-m", "real work on the feature branch")
+    tip_before = subprocess.run(
+        ["git", "rev-parse", "feature/shared-slug"],
+        cwd=str(root), capture_output=True, text=True, check=True,
+    ).stdout.strip()
+
+    with pytest.raises(WorktreeError, match="already checked out"):
+        ensure_worktree(root, "agent-b", slug="shared-slug")
+
+    tip_after = subprocess.run(
+        ["git", "rev-parse", "feature/shared-slug"],
+        cwd=str(root), capture_output=True, text=True, check=True,
+    ).stdout.strip()
+    assert tip_after == tip_before, "the branch's commit must survive the refused attempt"
+    assert (worktree_a / "work.txt").is_file(), "worktree A's checkout must be untouched"
+
+
 def test_no_trunk_raises(tmp_path: Path):
     root = tmp_path / "empty"
     root.mkdir()

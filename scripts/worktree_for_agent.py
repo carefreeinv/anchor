@@ -399,7 +399,26 @@ def ensure_worktree(
             check=False,
         )
         if r.returncode != 0:
-            # try create in worktree
+            err = (r.stderr or r.stdout or "").strip()
+            # `feat` is guaranteed to already exist by this point (created just
+            # above, or pre-existing). A plain checkout can only fail here for one
+            # common real-world reason: it's already checked out in another
+            # worktree. Refuse rather than fall through to `git checkout -B`,
+            # which would force-reset `feat` to `integration`'s tip and silently
+            # discard every commit it had — the same failure mode the sibling
+            # `base_branch` fallback above deliberately avoids by creating a
+            # *new* branch name instead of resetting an existing one. See
+            # .plans/bugs/worktree-for-agent-branch-reset(.local).md for the
+            # reproduced data-loss incident this guards against.
+            if "already used by worktree" in err or "already checked out" in err:
+                raise WorktreeError(
+                    f"feature branch {feat!r} is already checked out in another "
+                    f"worktree, so it was left untouched (not reset): {err}. "
+                    f"Free that worktree, run ensure() with a different --slug, "
+                    f"or check out {feat!r} there and continue manually."
+                )
+            # Some other, unconfirmed failure reason — keep the previous
+            # create-in-worktree behavior rather than assuming it's unsafe too.
             r2 = _run(
                 ["git", "checkout", "-B", feat, integration],
                 cwd=path,
@@ -408,7 +427,7 @@ def ensure_worktree(
             if r2.returncode != 0:
                 raise WorktreeError(
                     f"could not checkout feature branch {feat!r} in worktree: "
-                    f"{(r2.stderr or r2.stdout or r.stderr or '').strip()}"
+                    f"{(r2.stderr or r2.stdout or err).strip()}"
                 )
         branch = feat
 
