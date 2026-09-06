@@ -17,6 +17,8 @@
 #                                    Nemotron thinking-off: 0 for greedy)
 #   sampling / sampling_thinking     extra params, e.g. {top_p: 0.95, top_k: 20}
 #   max_context: <n>                 serving context ceiling; completion capped to it
+#   min_completion_tokens: <n>       floor for max_tokens (thinking locals / Ollama)
+#   openai_think: true|false         send body `think` (Ollama); 400 → drop field
 endpoints:
   - name: h100-executor
     tier: executor-heavy
@@ -25,6 +27,7 @@ endpoints:
     quirks:
       think_toggle: qwen3
       strip_think: true
+      min_completion_tokens: 256
       sampling_thinking: {top_p: 0.95, top_k: 20}   # official Qwen3 thinking-mode rec
 
   - name: h100-nemotron

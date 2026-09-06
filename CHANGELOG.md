@@ -6,6 +6,16 @@ Newest first.
 
 ## [Unreleased]
 
+### Fixed
+
+- **Empty OpenAI `content` from thinking Qwen3/Ollama** — `Endpoint.chat` no
+  longer treats HTTP 200 + empty `message.content` as success when the model
+  burned tokens into `reasoning` / hit `finish_reason=length`. New quirks
+  `min_completion_tokens` and `openai_think` (Ollama body `think`, dropped on
+  400), one think-off + higher-budget retry, then `EmptyAssistantText`.
+  `fit_device` emits the safe Qwen3 stanza; `platforms/local-models/qwen3.md`
+  documents the OpenAI path pitfall.
+
 ## [0.2.0] - 2026-08-28
 
 ### Added

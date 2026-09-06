@@ -1,0 +1,20 @@
+{
+  "id": "chatcmpl-fixture-inline",
+  "object": "chat.completion",
+  "model": "qwen3:4b",
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "<think>internal monologue</think>\npong"
+      },
+      "finish_reason": "stop"
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 12,
+    "completion_tokens": 20,
+    "total_tokens": 32
+  }
+}

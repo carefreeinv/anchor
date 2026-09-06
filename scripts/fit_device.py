@@ -132,6 +132,12 @@ def quirks_for(model: Model, context: int) -> dict:
     if model.family == "qwen3":
         q["think_toggle"] = "qwen3"
         q["strip_think"] = True
+        # Ollama OpenAI path often burns a small max_tokens on reasoning and
+        # leaves content=""; floor + optional body `think` (feature-detected).
+        q["min_completion_tokens"] = 256
+        q["openai_think"] = False
+        q["sampling_thinking"] = {"top_p": 0.95, "top_k": 20}
+        q["sampling"] = {"top_p": 0.8}
     elif model.family == "gemma3":
         q["system_role"] = "fold_into_user"
         q["system_suffix"] = GEMMA_GUARDRAIL  # Gemma is agreeable: force BLOCKED over improvising
@@ -182,6 +188,9 @@ def endpoint_stanza(model: Model, backend: str, context: int, name: str | None =
 def _yaml_val(v) -> str:
     if isinstance(v, bool):
         return "true" if v else "false"
+    if isinstance(v, dict):
+        inner = ", ".join(f"{k}: {_yaml_val(val)}" for k, val in v.items())
+        return "{" + inner + "}"
     if isinstance(v, str) and any(c in v for c in " :{}#'\""):
         return "'" + v.replace("'", "''") + "'"
     return str(v)

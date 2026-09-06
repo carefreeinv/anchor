@@ -12,12 +12,28 @@ Qwen3 supports hybrid reasoning. Control per message:
 - Append `/no_think` for executor steps — temp 0.7, top_p 0.8.
 - Do not include reasoning content from previous turns back into context (strip `<think>` blocks in multi-turn use; `.anchor/scripts/` helpers do this).
 
+### OpenAI-compatible pitfall (Ollama and similar)
+
+On some Ollama builds, `/v1/chat/completions` with a small `max_tokens` returns
+HTTP 200 with **`content=""`** while tokens sit in `message.reasoning` and
+`finish_reason=length`. Treat that as a failure, not a successful empty string.
+`anchor_client.Endpoint.chat` floors `max_tokens` via `min_completion_tokens`,
+optionally sends body `think` when `openai_think` is set (drops it on HTTP 400),
+retries once with think-off + a higher budget, then raises `EmptyAssistantText`
+instead of returning `""`. Do **not** paste `reasoning` into user-visible output.
+
+Native Ollama `/api/chat` `think:false` can still put “thinking” into `content`
+on some builds — prefer the OpenAI path through `anchor_client` with the quirks
+below, and keep `/no_think` on executor turns.
+
 Registry mapping for the fleet scripts (`.anchor/scripts/fit_device.py` emits this for you):
 
 ```yaml
 quirks:
   think_toggle: qwen3          # appends /think or /no_think per call
   strip_think: true
+  min_completion_tokens: 256   # avoid reasoning burning a tiny budget
+  openai_think: false          # Ollama body `think`; 400 → feature-detect drop
   sampling_thinking: {top_p: 0.95, top_k: 20}
   sampling: {top_p: 0.8}       # /no_think executor rec (Anchor keeps temp low for determinism)
 ```

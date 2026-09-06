@@ -1,0 +1,21 @@
+{
+  "id": "chatcmpl-fixture-ok",
+  "object": "chat.completion",
+  "model": "qwen3:4b",
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "pong",
+        "reasoning": "Simple ping-pong probe. Answer with pong only."
+      },
+      "finish_reason": "stop"
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 12,
+    "completion_tokens": 80,
+    "total_tokens": 92
+  }
+}

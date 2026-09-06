@@ -1,0 +1,20 @@
+{
+  "id": "chatcmpl-fixture-blank",
+  "object": "chat.completion",
+  "model": "qwen3:4b",
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "   "
+      },
+      "finish_reason": "stop"
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 8,
+    "completion_tokens": 1,
+    "total_tokens": 9
+  }
+}

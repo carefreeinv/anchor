@@ -18,6 +18,11 @@ model-agnostic. Supported quirk keys (set per endpoint in endpoints.yaml):
                                 request (top_p, top_k, ...); temperature wins
   max_context: <n>              serving context ceiling; completion tokens are
                                 capped to it
+  min_completion_tokens: <n>    floor for max_tokens (thinking locals often burn
+                                a small budget on reasoning and leave content="")
+  openai_think: true|false      when the key is present, send OpenAI-body `think`
+                                matching the call's thinking= flag (Ollama). On
+                                HTTP 400, one retry drops the field (feature detect)
   reasoning_effort: low|medium|high|xhigh
                                 Grok-family dial; sent as reasoning_effort on
                                 the OpenAI-compatible request body
@@ -32,6 +37,15 @@ from pathlib import Path
 
 import requests
 import yaml
+
+
+class EmptyAssistantText(RuntimeError):
+    """HTTP 200 but no usable assistant ``content`` (silent empty string).
+
+    Thinking locals (Qwen3 via Ollama) sometimes put tokens only in
+    ``message.reasoning`` / burn ``max_tokens`` on thinking. Callers must not
+    treat that as a successful empty reply — raise instead of returning "".
+    """
 
 
 def project_root_from(start: Path | None = None) -> Path:
@@ -108,7 +122,7 @@ class Endpoint:
 
     def chat(self, messages: list[dict], *, thinking: bool = False,
              temperature: float | None = None, max_tokens: int = 4096,
-             timeout: int = 600) -> str:
+             timeout: int = 600, _budget_retry: bool = False) -> str:
         msgs = [dict(m) for m in messages]
 
         # Registry-driven guardrail line(s) a model needs to behave (Gemma's BLOCKED
@@ -152,6 +166,12 @@ class Endpoint:
         if thinking and temperature <= 0:
             temperature = 0.6
 
+        # Thinking locals often burn a small max_tokens on reasoning and leave
+        # content empty — floor before the context ceiling clamp.
+        floor = self.quirks.get("min_completion_tokens")
+        if floor:
+            max_tokens = max(max_tokens, int(floor))
+
         # An endpoint's max_context is a hard serving ceiling; never request a
         # completion larger than the context that has to hold it.
         ceiling = self.quirks.get("max_context")
@@ -174,18 +194,53 @@ class Endpoint:
         reff = self.quirks.get("reasoning_effort")
         if reff:
             payload["reasoning_effort"] = str(reff).strip().lower()
+        # Ollama OpenAI extension: body `think` mirrors the call flag when the
+        # quirk key is present (value is the registry default hint only).
+        send_think = "openai_think" in self.quirks
+        if send_think:
+            payload["think"] = bool(thinking)
 
-        resp = _post_with_retry(
-            f"{self.base_url.rstrip('/')}/chat/completions",
-            json=payload,
-            headers=headers,
-            timeout=timeout,
-        )
+        url = f"{self.base_url.rstrip('/')}/chat/completions"
+        resp = _post_with_retry(url, json=payload, headers=headers, timeout=timeout)
+        # Feature-detect: non-Ollama servers may 400 on unknown `think`.
+        if send_think and resp.status_code == 400 and "think" in payload:
+            payload = {k: v for k, v in payload.items() if k != "think"}
+            resp = _post_with_retry(url, json=payload, headers=headers, timeout=timeout)
         resp.raise_for_status()
-        text = resp.json()["choices"][0]["message"]["content"] or ""
+        body = resp.json()
+        choice = body["choices"][0]
+        message = choice.get("message") or {}
+        text = message.get("content") or ""
         if self.quirks.get("strip_think") or toggle:
             text = THINK_RE.sub("", text)
-        return text.strip()
+        text = text.strip()
+        if text:
+            return text
+
+        # Empty content after a 200 is never silent success. Prefer one recovery
+        # attempt (think-off + higher budget) over returning chain-of-thought.
+        reasoning = (message.get("reasoning") or message.get("thinking") or "")
+        finish = choice.get("finish_reason")
+        if not _budget_retry:
+            bump = max(max_tokens * 2, int(floor or 0), 256)
+            if ceiling:
+                bump = min(bump, int(ceiling))
+            if bump > max_tokens or thinking:
+                return self.chat(
+                    messages,
+                    thinking=False,
+                    temperature=temperature,
+                    max_tokens=bump,
+                    timeout=timeout,
+                    _budget_retry=True,
+                )
+        detail = f"finish_reason={finish!r}"
+        if reasoning:
+            detail += f", reasoning_chars={len(str(reasoning))}"
+        raise EmptyAssistantText(
+            f"{self.name}: empty assistant content after HTTP 200 ({detail}); "
+            "refusing silent empty string (raise max_tokens / check think-off)"
+        )
 
 
 class Fleet:

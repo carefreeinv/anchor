@@ -1,9 +1,12 @@
+import json
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
 import requests
 from anchor_client import (
     MAX_RETRIES,
+    EmptyAssistantText,
     Endpoint,
     Fleet,
     load_prompt,
@@ -11,12 +14,23 @@ from anchor_client import (
     resolve_doctrine_path,
 )
 
+FIXTURES = Path(__file__).resolve().parent / "fixtures" / "openai_chat"
+
 
 def make_response(content="ok"):
     resp = MagicMock()
     resp.status_code = 200
     resp.raise_for_status.return_value = None
     resp.json.return_value = {"choices": [{"message": {"content": content}}]}
+    return resp
+
+
+def make_response_from_fixture(name: str):
+    data = json.loads((FIXTURES / name).read_text(encoding="utf-8"))
+    resp = MagicMock()
+    resp.status_code = 200
+    resp.raise_for_status.return_value = None
+    resp.json.return_value = data
     return resp
 
 
@@ -341,3 +355,120 @@ def test_endpoint_sends_reasoning_effort_quirk(monkeypatch):
     )
     ep.chat([{"role": "user", "content": "hi"}], max_tokens=16)
     assert captured["json"].get("reasoning_effort") == "xhigh"
+
+
+def test_fixtures_load():
+    for name in (
+        "empty_content_reasoning_length.json",
+        "content_after_reasoning.json",
+        "inline_think_tags.json",
+        "empty_content_no_reasoning.json",
+    ):
+        data = json.loads((FIXTURES / name).read_text(encoding="utf-8"))
+        assert data["choices"][0]["message"] is not None
+
+
+@patch("anchor_client.requests.post")
+def test_empty_content_with_reasoning_retries_then_returns(mock_post):
+    mock_post.side_effect = [
+        make_response_from_fixture("empty_content_reasoning_length.json"),
+        make_response_from_fixture("content_after_reasoning.json"),
+    ]
+    ep = Endpoint(
+        name="qwen-local",
+        tier="swarm",
+        base_url="http://x/v1",
+        model="qwen3:4b",
+        quirks={"think_toggle": "qwen3", "min_completion_tokens": 256},
+    )
+
+    out = ep.chat([{"role": "user", "content": "ping"}], thinking=False, max_tokens=32)
+
+    assert out == "pong"
+    assert mock_post.call_count == 2
+    first = mock_post.call_args_list[0].kwargs["json"]
+    second = mock_post.call_args_list[1].kwargs["json"]
+    assert first["max_tokens"] == 256  # floor applied
+    assert second["max_tokens"] >= 256
+    assert second["messages"][-1]["content"].endswith("/no_think")
+
+
+@patch("anchor_client.requests.post")
+def test_empty_content_after_retry_raises(mock_post):
+    empty = make_response_from_fixture("empty_content_reasoning_length.json")
+    mock_post.side_effect = [empty, empty]
+    ep = Endpoint(
+        name="qwen-local",
+        tier="swarm",
+        base_url="http://x/v1",
+        model="qwen3:4b",
+        quirks={"think_toggle": "qwen3", "min_completion_tokens": 256},
+    )
+
+    with pytest.raises(EmptyAssistantText, match="empty assistant content"):
+        ep.chat([{"role": "user", "content": "ping"}], max_tokens=64)
+
+
+@patch("anchor_client.requests.post")
+def test_blank_content_without_reasoning_raises(mock_post):
+    mock_post.side_effect = [
+        make_response_from_fixture("empty_content_no_reasoning.json"),
+        make_response_from_fixture("empty_content_no_reasoning.json"),
+    ]
+    ep = Endpoint(name="n", tier="swarm", base_url="http://x/v1", model="m")
+
+    with pytest.raises(EmptyAssistantText):
+        ep.chat([{"role": "user", "content": "hi"}], max_tokens=16)
+
+
+@patch("anchor_client.requests.post")
+def test_inline_think_tags_stripped_to_answer(mock_post):
+    mock_post.return_value = make_response_from_fixture("inline_think_tags.json")
+    ep = Endpoint(
+        name="n",
+        tier="swarm",
+        base_url="http://x/v1",
+        model="qwen3",
+        quirks={"think_toggle": "qwen3"},
+    )
+
+    assert ep.chat([{"role": "user", "content": "hi"}]) == "pong"
+
+
+@patch("anchor_client.requests.post")
+def test_openai_think_quirk_sent_and_dropped_on_400(mock_post):
+    bad = MagicMock()
+    bad.status_code = 400
+    bad.raise_for_status.side_effect = requests.exceptions.HTTPError("400")
+    good = make_response("pong")
+    mock_post.side_effect = [bad, good]
+    ep = Endpoint(
+        name="ollama",
+        tier="swarm",
+        base_url="http://x/v1",
+        model="qwen3:4b",
+        quirks={"openai_think": False, "think_toggle": "qwen3"},
+    )
+
+    out = ep.chat([{"role": "user", "content": "hi"}], thinking=False)
+
+    assert out == "pong"
+    assert mock_post.call_count == 2
+    assert mock_post.call_args_list[0].kwargs["json"]["think"] is False
+    assert "think" not in mock_post.call_args_list[1].kwargs["json"]
+
+
+@patch("anchor_client.requests.post")
+def test_min_completion_tokens_floors_max_tokens(mock_post):
+    mock_post.return_value = make_response("pong")
+    ep = Endpoint(
+        name="n",
+        tier="swarm",
+        base_url="http://x/v1",
+        model="qwen3",
+        quirks={"min_completion_tokens": 256},
+    )
+
+    ep.chat([{"role": "user", "content": "hi"}], max_tokens=32)
+
+    assert mock_post.call_args.kwargs["json"]["max_tokens"] == 256

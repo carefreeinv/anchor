@@ -35,7 +35,14 @@ def test_quirks_track_model_family():
     gemma = next(m for m in fit_device.CATALOG if m.family == "gemma3")
     mistral = next(m for m in fit_device.CATALOG if m.family == "mistral")
     deepseek = next(m for m in fit_device.CATALOG if m.family == "deepseek-r1-distill")
-    assert fit_device.quirks_for(qwen, 8192) == {"think_toggle": "qwen3", "strip_think": True, "max_context": 8192}
+    qwen_q = fit_device.quirks_for(qwen, 8192)
+    assert qwen_q["think_toggle"] == "qwen3"
+    assert qwen_q["strip_think"] is True
+    assert qwen_q["min_completion_tokens"] == 256
+    assert qwen_q["openai_think"] is False
+    assert qwen_q["sampling_thinking"] == {"top_p": 0.95, "top_k": 20}
+    assert qwen_q["sampling"] == {"top_p": 0.8}
+    assert qwen_q["max_context"] == 8192
     gemma_q = fit_device.quirks_for(gemma, 32768)
     assert gemma_q["system_role"] == "fold_into_user"
     assert "BLOCKED" in gemma_q["system_suffix"]  # agreeableness guardrail rides along
