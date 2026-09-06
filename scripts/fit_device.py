@@ -28,7 +28,10 @@ import os
 import platform
 import re
 import shutil
+import socket
 import subprocess
+import urllib.error
+import urllib.request
 from pathlib import Path
 
 # Bytes per weight by quantization (empirical GGUF/AWQ/FP8 footprints, incl. embeddings).
@@ -159,14 +162,241 @@ def launch_command(model: Model, backend: str, quant: str, context: int) -> str:
             f"--max-model-len {context}{quant_flag}")
 
 
-def endpoint_stanza(model: Model, backend: str, context: int, name: str | None = None) -> str:
-    port = 8000 if backend == "cuda" else 8080
+# OpenAI-compatible local servers commonly used with personal devices.
+# Prefer Ollama (11434) before llama-server (8080) / vLLM (8000).
+LOCAL_API_PORTS: tuple[int, ...] = (11434, 8080, 8000)
+
+
+def default_gateway_ip() -> str | None:
+    """Best-effort default-gateway IPv4 (WSL → Windows host, typical Linux)."""
+    try:
+        out = _run(["ip", "route", "show", "default"], timeout=3)
+    except Exception:
+        out = ""
+    m = re.search(r"default via (\d+\.\d+\.\d+\.\d+)", out)
+    if m:
+        return m.group(1)
+    # Fallback: parse `ip route` without show default
+    try:
+        out = _run(["ip", "route"], timeout=3)
+    except Exception:
+        return None
+    m = re.search(r"default via (\d+\.\d+\.\d+\.\d+)", out)
+    return m.group(1) if m else None
+
+
+def resolv_nameserver_ips() -> list[str]:
+    """IPv4 nameservers from /etc/resolv.conf (WSL often lists the Windows host)."""
+    path = Path("/etc/resolv.conf")
+    if not path.is_file():
+        return []
+    found: list[str] = []
+    try:
+        text = path.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return []
+    for line in text.splitlines():
+        line = line.strip()
+        if not line.startswith("nameserver"):
+            continue
+        parts = line.split()
+        if len(parts) >= 2 and re.fullmatch(r"\d+\.\d+\.\d+\.\d+", parts[1]):
+            if parts[1] not in found:
+                found.append(parts[1])
+    return found
+
+
+def is_loopback_host(host: str) -> bool:
+    h = (host or "").strip().lower().strip("[]")
+    return h in {"127.0.0.1", "localhost", "::1", "0:0:0:0:0:0:0:1"}
+
+
+def candidate_api_hosts(*, wsl: bool | None = None) -> list[tuple[str, str]]:
+    """Ordered (host, source) candidates for a guest-reachable OpenAI API.
+
+    Order (plan contract): loopback → default-gateway → resolv nameserver.
+    Mirrored-networking localhost is covered by the loopback attempt.
+    """
+    if wsl is None:
+        wsl = detect_wsl()
+    ordered: list[tuple[str, str]] = [("127.0.0.1", "loopback")]
+    seen = {"127.0.0.1", "localhost"}
+    if wsl:
+        gw = default_gateway_ip()
+        if gw and gw not in seen:
+            ordered.append((gw, "default-gateway"))
+            seen.add(gw)
+        for ns in resolv_nameserver_ips():
+            if ns not in seen:
+                ordered.append((ns, "resolv-nameserver"))
+                seen.add(ns)
+    return ordered
+
+
+def openai_base_url(host: str, port: int) -> str:
+    return f"http://{host}:{int(port)}/v1"
+
+
+def http_get_ok(url: str, *, timeout: float = 1.5) -> bool:
+    """True when URL returns HTTP < 500 (connection/refusal → False)."""
+    try:
+        req = urllib.request.Request(url, method="GET", headers={"User-Agent": "anchor-fit-device/1"})
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            return int(getattr(resp, "status", 200) or 200) < 500
+    except (urllib.error.URLError, TimeoutError, socket.timeout, OSError):
+        return False
+
+
+def discover_reachable_openai_base(
+    *,
+    wsl: bool | None = None,
+    ports: tuple[int, ...] | None = None,
+    timeout: float = 1.5,
+    probe_url=None,
+) -> dict | None:
+    """Return the first guest-reachable OpenAI-compatible ``/v1`` base URL.
+
+    Result keys: ``base_url``, ``host``, ``port``, ``source``, ``tried``.
+    ``None`` if nothing answered.
+
+    ``probe_url`` may be a test double: ``callable(url) -> bool`` or
+    ``callable(url, timeout=...) -> bool``.
+    """
+    check = probe_url or http_get_ok
+    port_list = ports or LOCAL_API_PORTS
+    tried: list[dict] = []
+    for host, source in candidate_api_hosts(wsl=wsl):
+        for port in port_list:
+            base = openai_base_url(host, port)
+            probe = base.rstrip("/") + "/models"
+            try:
+                ok = bool(check(probe, timeout=timeout))
+            except TypeError:
+                ok = bool(check(probe))
+            tried.append({"url": probe, "ok": ok, "source": source, "host": host, "port": port})
+            if ok:
+                return {
+                    "base_url": base,
+                    "host": host,
+                    "port": int(port),
+                    "source": source,
+                    "tried": tried,
+                }
+    return None
+
+
+def default_local_port(backend: str, *, prefer_ollama: bool = False) -> int:
+    if prefer_ollama:
+        return 11434
+    return 8000 if backend == "cuda" else 8080
+
+
+def normalize_openai_base_url(url: str) -> str:
+    u = (url or "").strip().rstrip("/")
+    if re.search(r":\d+$", u) and not u.endswith("/v1"):
+        u = u + "/v1"
+    return u
+
+
+def resolve_register_base_url(
+    proposed: str | None,
+    *,
+    wsl: bool | None = None,
+    backend: str = "metal",
+    discover=None,
+    http_ok=None,
+) -> dict:
+    """Pick a guest-reachable base_url for registration / stanza emission.
+
+    Never silently keep a loopback URL when the guest cannot open it and a
+    non-loopback candidate answered. Returns ``base_url``, ``ok``, ``rewrote``,
+    ``reason``, and optional ``discovery``.
+    """
+    discover_fn = discover or discover_reachable_openai_base
+    check = http_ok or http_get_ok
+    wsl_flag = detect_wsl() if wsl is None else wsl
+    prefer_ollama = bool(wsl_flag)
+    hit = discover_fn(wsl=wsl_flag)
+
+    if proposed:
+        proposed = normalize_openai_base_url(proposed)
+        m = re.match(r"^https?://([^/:]+)", proposed)
+        host = m.group(1) if m else ""
+        if is_loopback_host(host):
+            try:
+                loop_ok = bool(check(proposed.rstrip("/") + "/models", timeout=1.5))
+            except TypeError:
+                loop_ok = bool(check(proposed.rstrip("/") + "/models"))
+            if loop_ok:
+                return {
+                    "base_url": proposed,
+                    "ok": True,
+                    "rewrote": False,
+                    "reason": "loopback-reachable",
+                    "discovery": hit,
+                }
+            if hit and not is_loopback_host(str(hit.get("host", ""))):
+                return {
+                    "base_url": hit["base_url"],
+                    "ok": True,
+                    "rewrote": True,
+                    "reason": f"loopback-refused; using {hit['source']}",
+                    "discovery": hit,
+                }
+            return {
+                "base_url": proposed,
+                "ok": False,
+                "rewrote": False,
+                "reason": "loopback-refused; no reachable alternative",
+                "discovery": hit,
+            }
+        try:
+            ok = bool(check(proposed.rstrip("/") + "/models", timeout=1.5))
+        except TypeError:
+            ok = bool(check(proposed.rstrip("/") + "/models"))
+        return {
+            "base_url": proposed,
+            "ok": ok,
+            "rewrote": False,
+            "reason": "proposed-host" if ok else "proposed-host-unreachable",
+            "discovery": hit,
+        }
+
+    if hit:
+        return {
+            "base_url": hit["base_url"],
+            "ok": True,
+            "rewrote": False,
+            "reason": f"discovered:{hit['source']}",
+            "discovery": hit,
+        }
+
+    port = default_local_port(backend, prefer_ollama=prefer_ollama)
+    return {
+        "base_url": openai_base_url("127.0.0.1", port),
+        "ok": False,
+        "rewrote": False,
+        "reason": "no-reachable-api; loopback-fallback",
+        "discovery": None,
+    }
+
+
+def endpoint_stanza(
+    model: Model,
+    backend: str,
+    context: int,
+    name: str | None = None,
+    *,
+    base_url: str | None = None,
+) -> str:
+    port = default_local_port(backend, prefer_ollama=False)
     served = model.hf if backend == "cuda" else model.name
+    url = (base_url or openai_base_url("localhost", port)).rstrip("/")
     quirks = quirks_for(model, context)
     lines = [
         f"  - name: {name or f'{model.name}-local'}",
         f"    tier: {model.tier}",
-        f"    base_url: http://localhost:{port}/v1",
+        f"    base_url: {url}",
         f"    model: {served}",
     ]
     # Flow style for short quirks; block style once guardrail strings appear.
@@ -469,6 +699,10 @@ def probe_device() -> dict:
     if win_host and win_host.get("tools_host"):
         tools.update({f"host_{k}": v for k, v in win_host["tools_host"].items()})
 
+    # Guest-reachable OpenAI API (critical on WSL where Windows Ollama ≠ guest localhost).
+    reg = resolve_register_base_url(None, wsl=wsl, backend=backend)
+    reachable = reg.get("discovery") if reg.get("ok") else None
+
     return {
         "system": system,
         "machine": machine,
@@ -484,6 +718,10 @@ def probe_device() -> dict:
         "windows_host": win_host,
         "recommend_bare_metal": recommend_bare_metal,
         "executor_placement": executor_placement,
+        "reachable_api": reachable,
+        "register_base_url": reg.get("base_url"),
+        "register_ok": bool(reg.get("ok")),
+        "register_reason": reg.get("reason"),
     }
 
 
@@ -532,6 +770,25 @@ def print_probe(probe: dict) -> None:
         print(f"  Usable for model:~{probe['usable_memory_gb']:.1f} GB (conservative fit budget)")
     else:
         print("  Usable for model: unknown — pass --memory manually")
+
+    # Reachable API — never imply guest localhost works when it does not.
+    ra = probe.get("reachable_api")
+    if ra:
+        print(f"  Reachable API:   {ra['base_url']}  (via {ra['source']})")
+    elif probe.get("register_base_url"):
+        status = "OK" if probe.get("register_ok") else "UNVERIFIED / unreachable from guest"
+        print(f"  Reachable API:   {probe['register_base_url']}  ({status})")
+        if probe.get("wsl") and not probe.get("register_ok"):
+            print("  Warn:            guest cannot open a local OpenAI API yet — start "
+                  "Ollama/llama-server on the Windows host (0.0.0.0), then re-run --probe. "
+                  "Do not register dead localhost.")
+    if probe.get("wsl") and ra and ra.get("source") != "loopback":
+        print("  Note:            guest localhost refused (or was skipped); using the "
+              "Windows host address. Gateway IPs can change after `wsl --shutdown` — "
+              "re-probe before rewriting overlays. Optional: mirrored networking so "
+              "localhost works "
+              "(https://learn.microsoft.com/en-us/windows/wsl/networking).")
+
     print("\n  Tools:")
     for name, ok in probe["tools"].items():
         print(f"    {'yes' if ok else 'no ':3}  {name}")
@@ -605,11 +862,26 @@ def print_install_guidance(probe: dict) -> None:
         print("   - Or [llama.cpp Windows releases](https://github.com/ggerganov/llama.cpp/releases)")
         print("2. On Windows, pull/serve the recommended GGUF/small model, e.g. Ollama "
               "`qwen2.5:7b` / Qwen3 small tags, listening on `0.0.0.0:11434` or `:8080`.")
-        print("3. From **WSL**, reach the host (mirrored networking often makes "
-              "`localhost` work; otherwise use the Windows host IP from "
-              "`grep nameserver /etc/resolv.conf`).")
-        print("4. Register in Anchor, e.g. `http://localhost:11434/v1` (Ollama) or "
-              "`http://localhost:8080/v1` (llama-server).")
+        reg_url = probe.get("register_base_url")
+        ra = probe.get("reachable_api")
+        if ra:
+            print(f"3. From **WSL**, this probe already reached **`{ra['base_url']}`** "
+                  f"(via {ra['source']}). Prefer that over guessing localhost.")
+        else:
+            print("3. From **WSL**, probe candidates in order: `127.0.0.1` → default "
+                  "gateway (`ip route`) → `resolv.conf` nameserver. Mirrored networking "
+                  "can make localhost work "
+                  "(https://learn.microsoft.com/en-us/windows/wsl/networking); "
+                  "otherwise use the gateway IP — not a blind `localhost`.")
+        if reg_url and probe.get("register_ok"):
+            print(f"4. Register in Anchor (machine-local overlay): `{reg_url}` — "
+                  "re-run `--probe` after reboot; gateway IPs churn.")
+        elif reg_url:
+            print(f"4. Do **not** register dead localhost. After the host API is up, "
+                  f"re-run `--probe`; suggested fallback was `{reg_url}` "
+                  f"({probe.get('register_reason')}).")
+        else:
+            print("4. Register only a URL `curl` from the guest can hit.")
         print("5. Optional CUDA-in-WSL only if you insist on Linux-side GPU: "
               "[CUDA on WSL](https://docs.nvidia.com/cuda/wsl-user-guide/index.html) — "
               "still usually worse ergonomics than host Ollama/llama.cpp.\n")
@@ -662,8 +934,27 @@ def print_recommendation_report(
             f"The smallest model ({smallest.name}) needs ~{need:.1f}GB — lower --context or free up memory.")
 
     best = fits[0]
+    # Prefer a guest-reachable base_url (WSL→Windows host) over blind localhost.
+    base_url = None
+    if probe.get("register_ok") and probe.get("register_base_url"):
+        base_url = probe["register_base_url"]
+    elif probe.get("reachable_api"):
+        base_url = probe["reachable_api"]["base_url"]
+    elif probe.get("wsl") or str(probe.get("profile") or "").startswith("wsl"):
+        reg = resolve_register_base_url(None, wsl=True, backend=backend)
+        if reg.get("ok"):
+            base_url = reg["base_url"]
+        elif not reg.get("ok") and reg.get("reason", "").startswith("loopback-refused"):
+            # Refuse silent dead localhost in emitted stanza — still print warning.
+            base_url = None
+
     if emit_endpoint:
-        print(endpoint_stanza(best, backend, context, name))
+        if probe.get("wsl") and not base_url and not probe.get("register_ok"):
+            raise SystemExit(
+                "WSL guest has no reachable OpenAI API yet — refusing to emit a "
+                "dead localhost stanza. Start the host server, then re-run "
+                "`fit_device.py --probe --emit-endpoint`.")
+        print(endpoint_stanza(best, backend, context, name, base_url=base_url))
         return
 
     ctx_ceiling = max_context_for(best.params_b, quant, memory_gb)
@@ -674,6 +965,11 @@ def print_recommendation_report(
     if probe.get("recommend_bare_metal"):
         print("**Placement:** serve this model on **Windows bare metal** (host executor); "
               "do not treat WSL cgroup RAM as the ceiling when host RAM is larger.\n")
+    if base_url:
+        print(f"**Reachable API (use this `base_url`):** `{base_url}`\n")
+    elif probe.get("wsl"):
+        print("**Reachable API:** none from this guest yet — do **not** register "
+              "`http://localhost:…` until `--probe` shows a Reachable API line.\n")
     print(f"**Best lean fit:** **{best.name}** ({best.params_b:.0f}B, tier `{best.tier}`) "
           f"— est. ~{est:.1f}GB")
     if best.note:
@@ -695,9 +991,17 @@ def print_recommendation_report(
     print("\n**Launch:**")
     print(f"```bash\n{launch_command(best, backend, quant, context)}\n```")
     print("\n**endpoints.yaml stanza:**")
-    print("```yaml")
-    print(endpoint_stanza(best, backend, context, name))
-    print("```")
+    if probe.get("wsl") and not base_url:
+        print("```text")
+        print("# refused: no guest-reachable API — re-run --probe after host Ollama is up")
+        print("```")
+    else:
+        print("```yaml")
+        print(endpoint_stanza(best, backend, context, name, base_url=base_url))
+        print("```")
+        if base_url and not is_loopback_host(base_url.split("://", 1)[-1].split(":")[0]):
+            print("\n(Machine-local overlay only — do not commit this host gateway IP as "
+                  "fleet-wide truth. Re-probe after `wsl --shutdown` / reboot.)")
     print("\n(Memory is a conservative estimate — confirm with `scripts/benchmark.py`.)")
 
 

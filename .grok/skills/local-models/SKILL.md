@@ -131,8 +131,13 @@ docs) so the client can render clickable links.
 5. **Install on this system** — short procedure for the **detected** profile:
    - **WSL2:** lead with [Ollama for Windows](https://ollama.com/download) or
      Windows llama.cpp on the **host** (probe already used `powershell.exe` —
-     user need not run a PS1 just to get recommendations); then how WSL reaches
-     `localhost` / host IP; WSL-in-guest install only as fallback
+     user need not run a PS1 just to get recommendations). Use the probe’s
+     **Reachable API** line as `base_url` — often the Windows default-gateway
+     IP when guest `localhost:11434` connection-refuses. Do **not** register
+     blind `http://localhost:…` when Reachable API is missing or warns.
+     Optional: [mirrored networking](https://learn.microsoft.com/en-us/windows/wsl/networking)
+     so localhost works; still re-probe after reboot (gateway IPs churn).
+     WSL-in-guest install only as fallback
    - **Apple Silicon:** brew llama.cpp / MLX → serve script
    - **Linux CUDA:** driver + vLLM or llama.cpp CUDA → serve-cuda.sh
    - **Linux CPU:** small GGUF only
@@ -308,7 +313,7 @@ stay machine-local.
 ## Steps
 | # | Task | Touches | Verify by | Route to |
 |---|------|---------|-----------|----------|
-| 1 | Register endpoint: machine-local overlay for localhost, or shared registry only if LAN-reachable | endpoints path | YAML + tier correct; other clones not broken | small |
+| 1 | Register endpoint: machine-local overlay using probe **Reachable API** `base_url` (rewrite/refuse dead guest localhost); shared registry only if LAN-reachable | endpoints path | YAML curls 200 from this guest; other clones not broken | small |
 | 2 | Align quirks with catalog | same | stanza matches probe | small |
 | 3 | Portable conventions/priority notes (user order primary; no over-tier; “when reachable”) | conventions / ~/.config/anchor | priority reviewed | mid |
 | 4 | Smoke local OpenAI-compatible call (lightweight prompt only) | — | short completion OK | small |

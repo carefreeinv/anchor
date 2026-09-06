@@ -28,6 +28,14 @@ python scripts/fit_device.py --list                       # the whole catalog
 
 In a coding agent, prefer **`/local-models`** (same probe + clickable install procedures for WSL/macOS/CUDA).
 
+On **WSL2**, `--probe` prints a **Reachable API** URL after trying guest
+loopback, then the default gateway, then `/etc/resolv.conf` nameserver. Use that
+`base_url` in machine-local overlays — Windows Ollama often answers on the
+gateway IP while guest `localhost:11434` connection-refuses. Re-probe after
+`wsl --shutdown` / reboot (gateway IPs churn). Optional:
+[mirrored networking](https://learn.microsoft.com/en-us/windows/wsl/networking)
+so localhost works.
+
 Memory is a conservative estimate (weights + KV cache + overhead) — a starting point to confirm with `benchmark.py`, not a guarantee. On unified-memory Macs, budget ~25% of total RAM for the OS (a 64GB Mac → `--memory 48`).
 
 ## Setup

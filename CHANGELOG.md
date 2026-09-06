@@ -6,6 +6,16 @@ Newest first.
 
 ## [Unreleased]
 
+### Fixed
+
+- **WSL reachable Ollama/`base_url`** — `fit_device.py --probe` discovers a
+  guest-reachable OpenAI API URL (loopback → default gateway → `resolv.conf`
+  nameserver) and emits that `base_url` instead of blind `http://localhost:…`
+  when Windows Ollama only answers on the host gateway. Refuses
+  `--emit-endpoint` dead-localhost stanzas on WSL when nothing answers.
+  `/local-models` skills + personal-devices / scripts docs note re-probe after
+  reboot and optional mirrored networking.
+
 ## [0.2.0] - 2026-08-28
 
 ### Added
