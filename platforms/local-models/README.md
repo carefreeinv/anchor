@@ -19,3 +19,9 @@ Per-model adaptations of `.anchor/system-prompts/mythos-core.md` for the models 
 | [Llama 3.3 70B](https://huggingface.co/meta-llama/Llama-3.3-70B-Instruct) | `llama33.md` | Generalist executor+critic if you have the VRAM | [HF model card](https://huggingface.co/meta-llama/Llama-3.3-70B-Instruct) |
 
 Whenever these models appear in docs, link the name to the official quick-start URL above so operators can go from “recommended local model” to download/serve in one click.
+
+**Default for wire:** `fit_device.py --probe` prints **Max fit** (largest under
+usable budget) and **Default for wire** (memory-safer pick for Aider / `.env` /
+launcher). Free/available RAM × safety factor drives the wire default when known;
+WSL/iGPU/≤24GB biases the smallest catalog fit under pressure. Opt up to Max fit
+explicitly — never hide that a larger model exists.

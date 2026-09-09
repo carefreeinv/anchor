@@ -91,12 +91,75 @@ def test_probe_device_returns_expected_keys():
     probe = fit_device.probe_device()
     for key in (
         "system", "machine", "wsl", "apple_silicon", "total_ram_gb",
-        "cuda_vram_gb", "usable_memory_gb", "backend", "profile", "tools",
+        "cuda_vram_gb", "usable_memory_gb", "free_memory_gb", "available_memory_gb",
+        "backend", "profile", "tools",
         "recommend_bare_metal", "executor_placement",
     ):
         assert key in probe
     assert probe["backend"] in {"metal", "mlx", "cuda"}
     assert isinstance(probe["tools"], dict)
+
+
+def test_default_wire_prefers_smallest_when_free_unknown_on_wsl_host_cpu():
+    fits = fit_device.fitting_models(8.6, "q4", 8192)
+    assert fits and fits[0].name == "qwen3-8b"
+    wire, pressure = fit_device.default_wire_model(
+        fits, quant="q4", context=8192, profile="wsl-host-cpu", total_ram_gb=16,
+    )
+    assert wire.name == "qwen3-4b"
+    assert pressure == "high"
+
+
+def test_default_wire_uses_max_fit_when_free_ram_healthy():
+    fits = fit_device.fitting_models(48, "q4", 8192)
+    assert fits[0].params_b >= 30
+    wire, pressure = fit_device.default_wire_model(
+        fits,
+        quant="q4",
+        context=8192,
+        free_gb=40.0,
+        profile="apple-silicon",
+        total_ram_gb=64,
+    )
+    assert wire.name == fits[0].name
+    assert pressure == "low"
+
+
+def test_default_wire_high_pressure_when_free_ram_tiny():
+    """LENOVO-class: catalog max is 8B on ~8.6GB usable, but free RAM is <1GB."""
+    fits = fit_device.fitting_models(8.6, "q4", 8192)
+    wire, pressure = fit_device.default_wire_model(
+        fits,
+        quant="q4",
+        context=8192,
+        free_gb=0.8,
+        profile="wsl-host-cpu",
+        total_ram_gb=16,
+    )
+    assert wire.name == "qwen3-4b"
+    assert pressure == "high"
+
+
+def test_print_recommendation_shows_both_answers(capsys):
+    fit_device.print_recommendation_report(
+        {
+            "profile": "wsl-host-cpu",
+            "executor_placement": "windows-host",
+            "recommend_bare_metal": True,
+            "free_memory_gb": 0.8,
+            "available_memory_gb": 0.5,
+            "total_ram_gb": 16,
+        },
+        8.6,
+        "metal",
+        "q4",
+        8192,
+    )
+    out = capsys.readouterr().out
+    assert "Max fit" in out and "qwen3-8b" in out
+    assert "Default for wire" in out and "qwen3-4b" in out
+    assert "memory_pressure=`high`" in out
+    assert "opt-up" in out.lower()
 
 
 def test_official_links_include_https():

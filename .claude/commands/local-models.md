@@ -15,7 +15,8 @@ allowed-tools: Bash(*), Read, Write, Edit
    - machine profile (WSL guest + bare-metal host when probe used `powershell.exe`)
    - **this host only** — other clones of the same repo need their own probe
    - **executor placement** (prefer Windows host when under WSL)
-   - recommended lean models from the fit list (host budget when known)
+   - **Default for wire** (memory-safer) + **Max fit** (ceiling) from
+     `fit_device.py --probe` — wire Aider/`.env` to the default; name opt-up
    - **clickable HTTPS links** (official docs, HF weights, Ollama/llama.cpp)
    - short install procedure **for this OS** (host first on WSL)
    - **config scope**: machine-local vs portable multi-clone project config

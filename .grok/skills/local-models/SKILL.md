@@ -123,11 +123,14 @@ docs) so the client can render clickable links.
 2. **Compatibility** — honest: good / limited (CPU/iGPU) / excellent (CUDA/Metal)
 3. **Executor placement** — if WSL: **prefer Windows bare-metal** model server;
    Anchor stays in WSL and points the **machine-local** registry at the host API
-4. **Recommended models** (lean + popular from the fit list, sized to **host**
-   usable budget when known) — for each:
-   - name, size, Anchor tier
-   - why it fits **here**
-   - links: official quick start + GGUF/HF weights (from probe output)
+4. **Recommended models** — report **both** answers from `fit_device.py --probe`:
+   - **Default for wire** (memory-safer) — what Aider / `.env` / launcher should
+     get unless the operator opts up (uses free/available RAM × safety factor;
+     WSL/iGPU/≤24GB class biases smallest when free is unknown/tight)
+   - **Max fit** (capability ceiling) — largest catalog entry under usable budget;
+     name the one explicit opt-up action (confirm / env / `--8b`-style flag)
+   - For each: name, size, Anchor tier, why it fits **here**, links (quick start
+     + GGUF/HF from probe). Never hide that a larger max-fit exists.
 5. **Install on this system** — short procedure for the **detected** profile:
    - **WSL2:** lead with [Ollama for Windows](https://ollama.com/download) or
      Windows llama.cpp on the **host** (probe already used `powershell.exe` —

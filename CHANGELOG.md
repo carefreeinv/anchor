@@ -6,6 +6,15 @@ Newest first.
 
 ## [Unreleased]
 
+### Added
+
+- **`fit_device.py` Default for wire vs Max fit** — `--probe` reports a
+  memory-safer **Default for wire** (Aider / `.env` / launcher) alongside **Max
+  fit** (capability ceiling). Uses free/available RAM × safety factor when known;
+  WSL/iGPU/≤24GB profiles bias the smallest catalog fit under pressure (LENOVO
+  16GB class: 8B max, 4B default). `--emit-endpoint` emits the wire default.
+  Documented in `/local-models` and tooling scripts.
+
 ### Fixed
 
 - **Empty OpenAI `content` from thinking Qwen3/Ollama** — `Endpoint.chat` no

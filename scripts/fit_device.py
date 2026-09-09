@@ -12,12 +12,18 @@ Memory is a rough estimate (weights + KV cache + runtime overhead), deliberately
 conservative — treat it as a starting point and confirm with `benchmark.py`, not
 as a guarantee. Bigger-but-tighter fits are flagged, not hidden.
 
+``--probe`` reports two answers: **Max fit** (largest catalog entry under the
+usable budget — capability ceiling) and **Default for wire** (memory-safer
+pick for Aider / ``.env`` / launcher defaults, using free/available RAM when
+known). Personal-device profiles under pressure default to the smallest fit
+unless free RAM clearly supports the max.
+
 Usage:
   python fit_device.py --memory 48                    # 64GB Mac Mini (~48GB usable), Metal
   python fit_device.py --memory 16 --backend mlx
   python fit_device.py --memory 24 --backend cuda     # single RTX 4090
   python fit_device.py --memory 48 --context 32768    # size for a longer context
-  python fit_device.py --memory 48 --emit-endpoint    # print only the endpoints.yaml stanza
+  python fit_device.py --memory 48 --emit-endpoint    # stanza for Default for wire
   python fit_device.py --probe                         # detect OS/RAM/GPU and recommend
   python fit_device.py --list                          # show the whole model catalog
 """
@@ -48,6 +54,18 @@ RUNTIME_OVERHEAD_GB = 1.0
 
 # Backend -> default quant it serves best.
 BACKEND_DEFAULT_QUANT = {"metal": "q4", "mlx": "q4", "cuda": "q4"}
+
+# Free/available RAM × this factor = runtime wire budget (leave headroom for OS/IDE).
+WIRE_SAFETY_FACTOR = 0.60
+
+# Profiles that bias Default for wire toward the smallest catalog fit when free
+# RAM is unknown or tight (WSL/iGPU/CPU laptops — the LENOVO 16GB class).
+PRESSURE_PRONE_PROFILES = frozenset({
+    "wsl-host-cpu",
+    "wsl-cpu",
+    "linux-cpu",
+    "unknown",
+})
 
 
 class Model:
@@ -201,6 +219,71 @@ def fitting_models(memory_gb: float, quant: str, context: int) -> list[Model]:
     """Catalog entries that fit, largest (most capable) first."""
     fits = [m for m in CATALOG if estimate_memory_gb(m.params_b, quant, context) <= memory_gb]
     return sorted(fits, key=lambda m: m.params_b, reverse=True)
+
+
+def detect_available_memory_gb() -> float | None:
+    """Guest free/available RAM in GB (Linux MemAvailable; best-effort elsewhere)."""
+    try:
+        text = Path("/proc/meminfo").read_text(encoding="utf-8")
+        m = re.search(r"MemAvailable:\s+(\d+)\s+kB", text)
+        if m:
+            return int(m.group(1)) / (1024 * 1024)
+        m = re.search(r"MemFree:\s+(\d+)\s+kB", text)
+        if m:
+            return int(m.group(1)) / (1024 * 1024)
+    except OSError:
+        pass
+    return None
+
+
+def default_wire_model(
+    fits: list[Model],
+    *,
+    quant: str,
+    context: int,
+    free_gb: float | None = None,
+    available_gb: float | None = None,
+    profile: str | None = None,
+    total_ram_gb: float | None = None,
+    safety_factor: float = WIRE_SAFETY_FACTOR,
+) -> tuple[Model, str]:
+    """Pick the memory-safer default for config files + a pressure label.
+
+    Returns ``(model, pressure)`` where ``pressure`` is ``\"low\"`` or ``\"high\"``.
+
+    * **Max fit** remains ``fits[0]`` (largest under the usable/catalog budget).
+    * **Default for wire** prefers a model whose estimate fits
+      ``free_or_available * safety_factor`` when that figure is known.
+    * If free/available is unknown, pressure-prone profiles (WSL CPU/iGPU, linux
+      CPU, unified ≤24GB) get the **smallest** fit; otherwise max fit.
+    """
+    if not fits:
+        raise ValueError("fits must be non-empty")
+    max_fit = fits[0]
+    smallest = min(fits, key=lambda m: m.params_b)
+    profile = profile or ""
+    pressure_prone = (
+        profile in PRESSURE_PRONE_PROFILES
+        or (total_ram_gb is not None and total_ram_gb <= 24)
+        or ("igpu" in profile)
+    )
+
+    runtime_src = available_gb if available_gb is not None else free_gb
+    if runtime_src is not None:
+        budget = float(runtime_src) * float(safety_factor)
+        runtime_fits = [
+            m for m in fits
+            if estimate_memory_gb(m.params_b, quant, context) <= budget
+        ]
+        if runtime_fits and max_fit in runtime_fits:
+            return max_fit, "low"
+        if runtime_fits:
+            return min(runtime_fits, key=lambda m: m.params_b), "high"
+        return smallest, "high"
+
+    if pressure_prone:
+        return smallest, "high"
+    return max_fit, "low"
 
 
 def print_catalog() -> None:
@@ -479,6 +562,19 @@ def probe_device() -> dict:
     if win_host and win_host.get("tools_host"):
         tools.update({f"host_{k}": v for k, v in win_host["tools_host"].items()})
 
+    guest_available = detect_available_memory_gb()
+    host_free = None
+    if win_host and win_host.get("free_ram_gb") is not None:
+        try:
+            host_free = float(win_host["free_ram_gb"])
+        except (TypeError, ValueError):
+            host_free = None
+    # Prefer host free when recommending a Windows-host executor; else guest MemAvailable.
+    free_memory_gb = host_free if (recommend_bare_metal and host_free is not None) else (
+        host_free if host_free is not None else guest_available
+    )
+    available_memory_gb = guest_available
+
     return {
         "system": system,
         "machine": machine,
@@ -488,6 +584,8 @@ def probe_device() -> dict:
         "total_ram_gb": round(total_ram, 1) if total_ram else None,
         "cuda_vram_gb": round(cuda_vram, 1) if cuda_vram else None,
         "usable_memory_gb": round(usable, 1) if usable else None,
+        "free_memory_gb": round(free_memory_gb, 1) if free_memory_gb is not None else None,
+        "available_memory_gb": round(available_memory_gb, 1) if available_memory_gb is not None else None,
         "backend": backend,
         "profile": profile,
         "tools": tools,
@@ -542,6 +640,12 @@ def print_probe(probe: dict) -> None:
         print(f"  Usable for model:~{probe['usable_memory_gb']:.1f} GB (conservative fit budget)")
     else:
         print("  Usable for model: unknown — pass --memory manually")
+    if probe.get("free_memory_gb") is not None:
+        print(f"  Free / runtime:  ~{probe['free_memory_gb']:.1f} GB "
+              f"(wire budget ×{WIRE_SAFETY_FACTOR:.2f})")
+    elif probe.get("available_memory_gb") is not None:
+        print(f"  MemAvailable:    ~{probe['available_memory_gb']:.1f} GB "
+              f"(wire budget ×{WIRE_SAFETY_FACTOR:.2f})")
     print("\n  Tools:")
     for name, ok in probe["tools"].items():
         print(f"    {'yes' if ok else 'no ':3}  {name}")
@@ -671,42 +775,65 @@ def print_recommendation_report(
             f"Nothing in the catalog fits {memory_gb:.0f}GB at {quant}/{context} context. "
             f"The smallest model ({smallest.name}) needs ~{need:.1f}GB — lower --context or free up memory.")
 
-    best = fits[0]
+    max_fit = fits[0]
+    wire, pressure = default_wire_model(
+        fits,
+        quant=quant,
+        context=context,
+        free_gb=probe.get("free_memory_gb"),
+        available_gb=probe.get("available_memory_gb"),
+        profile=probe.get("profile"),
+        total_ram_gb=probe.get("total_ram_gb"),
+    )
     if emit_endpoint:
-        print(endpoint_stanza(best, backend, context, name))
+        # Autowire / config writers use the memory-safer default, not max fit.
+        print(endpoint_stanza(wire, backend, context, name))
         return
 
-    ctx_ceiling = max_context_for(best.params_b, quant, memory_gb)
-    est = estimate_memory_gb(best.params_b, quant, context)
+    ctx_ceiling = max_context_for(max_fit.params_b, quant, memory_gb)
+    est_max = estimate_memory_gb(max_fit.params_b, quant, context)
+    est_wire = estimate_memory_gb(wire.params_b, quant, context)
     place = probe.get("executor_placement") or "local"
     print(f"\n## Fit ({memory_gb:.0f}GB usable, backend={backend}, quant={quant}, "
           f"context={context}, executor={place})\n")
     if probe.get("recommend_bare_metal"):
         print("**Placement:** serve this model on **Windows bare metal** (host executor); "
               "do not treat WSL cgroup RAM as the ceiling when host RAM is larger.\n")
-    print(f"**Best lean fit:** **{best.name}** ({best.params_b:.0f}B, tier `{best.tier}`) "
-          f"— est. ~{est:.1f}GB")
-    if best.note:
-        print(f"- note: {best.note}")
+    print(f"**Max fit** (capability ceiling): **{max_fit.name}** "
+          f"({max_fit.params_b:.0f}B, tier `{max_fit.tier}`) — est. ~{est_max:.1f}GB")
+    if max_fit.note:
+        print(f"- note: {max_fit.note}")
+    print(f"**Default for wire** (Aider / `.env` / launcher): **{wire.name}** "
+          f"({wire.params_b:.0f}B, tier `{wire.tier}`) — est. ~{est_wire:.1f}GB "
+          f"— memory_pressure=`{pressure}`")
+    if wire.name != max_fit.name:
+        print(f"- opt-up: pass an explicit model / confirm to use **{max_fit.name}** "
+              f"when free RAM allows (e.g. `AIDER_MODEL` / `--8b` style flags)")
+    if wire.note and wire.name != max_fit.name:
+        print(f"- note: {wire.note}")
     if ctx_ceiling > context:
         print(f"- headroom: up to ~{ctx_ceiling} context on {memory_gb:.0f}GB")
     elif ctx_ceiling and ctx_ceiling < context:
         print(f"- tight: {context} context may be over budget; ~{ctx_ceiling} is safer")
 
-    print("\n**Links (weights + official docs):**")
-    for label, url in official_links(best):
+    print("\n**Links (weights + official docs) — default for wire:**")
+    for label, url in official_links(wire):
         print(f"- [{label}]({url})")
+    if wire.name != max_fit.name:
+        print("\n**Links — max fit (opt-up):**")
+        for label, url in official_links(max_fit):
+            print(f"- [{label}]({url})")
 
     print("\n**Also fits (smaller / swarm-friendly):**")
     for m in fits[1:5]:
         print(f"- **{m.name}** ({m.params_b:.0f}B, `{m.tier}`) — "
               f"[GGUF](https://huggingface.co/{m.gguf})")
 
-    print("\n**Launch:**")
-    print(f"```bash\n{launch_command(best, backend, quant, context)}\n```")
-    print("\n**endpoints.yaml stanza:**")
+    print("\n**Launch (default for wire):**")
+    print(f"```bash\n{launch_command(wire, backend, quant, context)}\n```")
+    print("\n**endpoints.yaml stanza (default for wire):**")
     print("```yaml")
-    print(endpoint_stanza(best, backend, context, name))
+    print(endpoint_stanza(wire, backend, context, name))
     print("```")
     print("\n(Memory is a conservative estimate — confirm with `scripts/benchmark.py`.)")
 
