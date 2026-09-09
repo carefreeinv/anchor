@@ -6,6 +6,15 @@ Newest first.
 
 ## [Unreleased]
 
+### Added
+
+- **`aider_repo_map_preflight.py`** — one actionable warning when git HEAD/index
+  still lists paths deleted on disk (Aider maps `HEAD`∪index; `git add -u` alone
+  does not quiet repo-map floods). Optional confirmed `--write-aiderignore` /
+  `--stage` (never auto-commits). Documented in
+  `platforms/aider/REPO_MAP_PREFLIGHT.md` (network-lunar `.md`→`.mdx` class) and
+  `/local-models`. Shipped via `FLEET_FILES`.
+
 ### Fixed
 
 - **Empty OpenAI `content` from thinking Qwen3/Ollama** — `Endpoint.chat` no

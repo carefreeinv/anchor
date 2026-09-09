@@ -3,7 +3,7 @@ sidebar_position: 4
 sidebar_label: Local Models
 ---
 
-<!-- synced-from: platforms/local-models/README.md @ 91b07e86a6c4223e50249ad4b2dbdd892e09ade1 -->
+<!-- synced-from: platforms/local-models/README.md @ db89d0ddc15a91f315cd4c6eb6d57a82c59d83ff -->
 
 # Local Models
 
@@ -30,6 +30,12 @@ Each model name links to its **official quick start** (download / serve / chat t
 | [**Llama 3.3 70B**](https://huggingface.co/meta-llama/Llama-3.3-70B-Instruct) | none — the boring reliable one | generalist executor+critic if you have ~40GB VRAM | [HF model card](https://huggingface.co/meta-llama/Llama-3.3-70B-Instruct) |
 
 The quirks are encoded in `scripts/endpoints.yaml` (`quirks:` block) and applied automatically by `anchor_client.py`, so orchestration code never special-cases models. Hardware-specific serve helpers: [personal devices](/hardware/personal-devices/mac-mini), [H100](/hardware/h100).
+
+**Aider:** before the first chat in a dirty migration worktree, run
+`python scripts/aider_repo_map_preflight.py` (`platforms/aider/REPO_MAP_PREFLIGHT.md`).
+Aider’s repo-map follows roughly `HEAD` ∪ index — deleted-on-disk paths still in
+HEAD flood “Repo-map can't include …” warnings; staging alone does not clear them
+until commit or `.aiderignore`.
 
 ## Tracked plans and coordination
 

@@ -19,3 +19,10 @@ Per-model adaptations of `.anchor/system-prompts/mythos-core.md` for the models 
 | [Llama 3.3 70B](https://huggingface.co/meta-llama/Llama-3.3-70B-Instruct) | `llama33.md` | Generalist executor+critic if you have the VRAM | [HF model card](https://huggingface.co/meta-llama/Llama-3.3-70B-Instruct) |
 
 Whenever these models appear in docs, link the name to the official quick-start URL above so operators can go from “recommended local model” to download/serve in one click.
+
+**Aider + local models:** before the first `aider` chat in a dirty migration
+worktree, run `python scripts/aider_repo_map_preflight.py` (see
+`platforms/aider/REPO_MAP_PREFLIGHT.md`). Aider’s repo-map follows roughly
+`HEAD` ∪ index — deleted-on-disk paths still in HEAD produce one “Repo-map can't
+include …” line each; staging alone does not clear them until commit or
+`.aiderignore`.
