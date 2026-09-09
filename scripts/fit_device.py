@@ -133,9 +133,10 @@ def quirks_for(model: Model, context: int) -> dict:
         q["think_toggle"] = "qwen3"
         q["strip_think"] = True
         # Ollama OpenAI path often burns a small max_tokens on reasoning and
-        # leaves content=""; floor + optional body `think` (feature-detected).
+        # leaves content=""; floor is portable. Do NOT emit openai_think —
+        # key presence makes Endpoint.chat send body `think` on every call,
+        # which 400s on llama.cpp / MLX / vLLM. Opt in only for Ollama.
         q["min_completion_tokens"] = 256
-        q["openai_think"] = False
         q["sampling_thinking"] = {"top_p": 0.95, "top_k": 20}
         q["sampling"] = {"top_p": 0.8}
     elif model.family == "gemma3":

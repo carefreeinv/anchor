@@ -18,7 +18,6 @@ On some Ollama builds, `/v1/chat/completions` with a small `max_tokens` returns
 HTTP 200 with **`content=""`** while tokens sit in `message.reasoning` and
 `finish_reason=length`. Treat that as a failure, not a successful empty string.
 `anchor_client.Endpoint.chat` floors `max_tokens` via `min_completion_tokens`,
-optionally sends body `think` when `openai_think` is set (drops it on HTTP 400),
 retries once with think-off + a higher budget, then raises `EmptyAssistantText`
 instead of returning `""`. Do **not** paste `reasoning` into user-visible output.
 
@@ -33,10 +32,15 @@ quirks:
   think_toggle: qwen3          # appends /think or /no_think per call
   strip_think: true
   min_completion_tokens: 256   # avoid reasoning burning a tiny budget
-  openai_think: false          # Ollama body `think`; 400 → feature-detect drop
   sampling_thinking: {top_p: 0.95, top_k: 20}
   sampling: {top_p: 0.8}       # /no_think executor rec (Anchor keeps temp low for determinism)
 ```
+
+**Ollama-only opt-in:** add `openai_think: false` (or `true`) to an Ollama
+endpoint when you want the OpenAI-body `think` field. Key **presence** (not the
+bool) makes `Endpoint.chat` send it; on HTTP 400 the client drops the field and
+caches that the endpoint rejects it so later calls skip re-probing. Do **not**
+set this on llama.cpp / MLX / vLLM registries — they pay a 400+retry tax.
 
 `anchor_client.py` refuses greedy decoding whenever thinking is on, so the repetition-loop failure can't be triggered from the pipeline.
 

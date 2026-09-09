@@ -20,9 +20,10 @@ model-agnostic. Supported quirk keys (set per endpoint in endpoints.yaml):
                                 capped to it
   min_completion_tokens: <n>    floor for max_tokens (thinking locals often burn
                                 a small budget on reasoning and leave content="")
-  openai_think: true|false      when the key is present, send OpenAI-body `think`
-                                matching the call's thinking= flag (Ollama). On
-                                HTTP 400, one retry drops the field (feature detect)
+  openai_think: true|false      Ollama opt-in only — when the key is present,
+                                send OpenAI-body `think` matching thinking=.
+                                On HTTP 400, drop the field and cache on the
+                                Endpoint so later calls skip re-probing
   reasoning_effort: low|medium|high|xhigh
                                 Grok-family dial; sent as reasoning_effort on
                                 the OpenAI-compatible request body
@@ -119,6 +120,8 @@ class Endpoint:
     base_url: str
     model: str
     quirks: dict = field(default_factory=dict)
+    # Set after a 400 on body `think` so later calls (and budget retries) skip it.
+    _think_unsupported: bool = field(default=False, init=False, repr=False)
 
     def chat(self, messages: list[dict], *, thinking: bool = False,
              temperature: float | None = None, max_tokens: int = 4096,
@@ -195,8 +198,9 @@ class Endpoint:
         if reff:
             payload["reasoning_effort"] = str(reff).strip().lower()
         # Ollama OpenAI extension: body `think` mirrors the call flag when the
-        # quirk key is present (value is the registry default hint only).
-        send_think = "openai_think" in self.quirks
+        # quirk key is present (Ollama opt-in). Skip once a prior 400 cached
+        # that this endpoint rejects the field.
+        send_think = "openai_think" in self.quirks and not self._think_unsupported
         if send_think:
             payload["think"] = bool(thinking)
 
@@ -204,6 +208,7 @@ class Endpoint:
         resp = _post_with_retry(url, json=payload, headers=headers, timeout=timeout)
         # Feature-detect: non-Ollama servers may 400 on unknown `think`.
         if send_think and resp.status_code == 400 and "think" in payload:
+            self._think_unsupported = True
             payload = {k: v for k, v in payload.items() if k != "think"}
             resp = _post_with_retry(url, json=payload, headers=headers, timeout=timeout)
         resp.raise_for_status()

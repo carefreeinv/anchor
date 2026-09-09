@@ -456,6 +456,29 @@ def test_openai_think_quirk_sent_and_dropped_on_400(mock_post):
     assert mock_post.call_count == 2
     assert mock_post.call_args_list[0].kwargs["json"]["think"] is False
     assert "think" not in mock_post.call_args_list[1].kwargs["json"]
+    assert ep._think_unsupported is True
+
+
+@patch("anchor_client.requests.post")
+def test_openai_think_cached_skip_after_400(mock_post):
+    """After a think 400, later calls must not re-probe the field."""
+    bad = MagicMock()
+    bad.status_code = 400
+    bad.raise_for_status.side_effect = requests.exceptions.HTTPError("400")
+    good = make_response("pong")
+    mock_post.side_effect = [bad, good, good]
+    ep = Endpoint(
+        name="ollama",
+        tier="swarm",
+        base_url="http://x/v1",
+        model="qwen3:4b",
+        quirks={"openai_think": False},
+    )
+
+    assert ep.chat([{"role": "user", "content": "a"}]) == "pong"
+    assert ep.chat([{"role": "user", "content": "b"}]) == "pong"
+    assert mock_post.call_count == 3  # 400+retry, then one clean call
+    assert "think" not in mock_post.call_args_list[2].kwargs["json"]
 
 
 @patch("anchor_client.requests.post")

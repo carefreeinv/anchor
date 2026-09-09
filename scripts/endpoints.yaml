@@ -18,7 +18,7 @@
 #   sampling / sampling_thinking     extra params, e.g. {top_p: 0.95, top_k: 20}
 #   max_context: <n>                 serving context ceiling; completion capped to it
 #   min_completion_tokens: <n>       floor for max_tokens (thinking locals / Ollama)
-#   openai_think: true|false         send body `think` (Ollama); 400 → drop field
+#   openai_think: true|false         Ollama opt-in only; 400 → drop + cache skip
 endpoints:
   - name: h100-executor
     tier: executor-heavy

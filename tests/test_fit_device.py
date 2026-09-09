@@ -39,7 +39,8 @@ def test_quirks_track_model_family():
     assert qwen_q["think_toggle"] == "qwen3"
     assert qwen_q["strip_think"] is True
     assert qwen_q["min_completion_tokens"] == 256
-    assert qwen_q["openai_think"] is False
+    # openai_think is Ollama-only opt-in; key presence would tax non-Ollama backends.
+    assert "openai_think" not in qwen_q
     assert qwen_q["sampling_thinking"] == {"top_p": 0.95, "top_k": 20}
     assert qwen_q["sampling"] == {"top_p": 0.8}
     assert qwen_q["max_context"] == 8192
