@@ -13,6 +13,14 @@ Newest first.
   a tracked `.aider.conf.yml.example` (`read: AIDER.md`). No slash-command
   runtime is assumed; other Anchor commands point back to a Claude Code/Grok
   Build session. Documented in `docs/docs/platforms/aider.md`.
+- **NVIDIA Build inference preference** — `scripts/nvidia_build_probe.py`
+  detects whether NVIDIA's hosted Build API (`integrate.api.nvidia.com/v1`,
+  keyed via `NVIDIA_API_KEY`/`NGC_API_KEY`) is configured and reachable, and
+  computes a preference rule: prefer Build over local inference when live,
+  unless the operator explicitly opted for local. Never crashes or falls
+  back loudly on a missing/invalid key. Documented at
+  `platforms/nvidia-build/BUILD.md`, cross-linked from and distinguished
+  clearly against self-hosted NIM (`platforms/nvidia-nim/NEMOTRON.md`).
 - **`fit_device.py` Default for wire vs Max fit** — `--probe` reports a
   memory-safer **Default for wire** (Aider / `.env` / launcher) alongside **Max
   fit** (capability ceiling). Uses free/available RAM × safety factor when known;

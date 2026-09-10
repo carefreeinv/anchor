@@ -3,9 +3,13 @@ sidebar_position: 3
 sidebar_label: NVIDIA NIM / Nemotron
 ---
 
-<!-- synced-from: platforms/nvidia-nim/NEMOTRON.md @ 03919d58bcc9569122969c5de40963019064d992 -->
+<!-- synced-from: platforms/nvidia-nim/NEMOTRON.md @ 69eb58c46455ea9588312ef7adea792055dab7c5 -->
 
 # NVIDIA NIM / Nemotron
+
+This is **self-hosted** — a NIM container you run yourself. For NVIDIA's
+*hosted* developer API (no container, keyed per-operator from
+build.nvidia.com), see [NVIDIA Build](/platforms/nvidia-build) instead.
 
 NIM containers expose an OpenAI-compatible API, so all Anchor tooling works unchanged.
 
