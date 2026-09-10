@@ -81,7 +81,7 @@ anchor --platform claude --dry-run                          # preview findings o
 anchor --platform claude --yes                              # write without confirmation prompt
 ```
 
-Platform keys: `claude`, `grok`, `nemotron`, `local:<model>` (`qwen3`, `gemma3`, `mistral-small`, `deepseek-r1-distill`, `llama33`), `chat`. Add `--fleet` to also copy orchestrator/fleet tooling under **`.anchor/scripts/`** and **`.anchor/mcp/`** (never project-root `scripts/` or `mcp/`).
+Platform keys: `claude`, `grok`, `nemotron`, `aider`, `local:<model>` (`qwen3`, `gemma3`, `mistral-small`, `deepseek-r1-distill`, `llama33`), `chat`. Add `--fleet` to also copy orchestrator/fleet tooling under **`.anchor/scripts/`** and **`.anchor/mcp/`** (never project-root `scripts/` or `mcp/`).
 
 **Scaffold layout:**
 

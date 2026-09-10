@@ -248,6 +248,13 @@ PLATFORMS: dict[str, dict] = {
         "label": "NVIDIA NIM / Nemotron",
         "files": [("platforms/nvidia-nim/NEMOTRON.md", "NEMOTRON.md")],
     },
+    "aider": {
+        "label": "Aider (drone harness — queen-bee plans, Aider runs /work)",
+        "files": [
+            ("platforms/aider/AIDER.md", "AIDER.md"),
+            ("platforms/aider/.aider.conf.yml.example", ".aider.conf.yml.example"),
+        ],
+    },
     "local": {
         "label": "Local models (Qwen3, Gemma 3, Mistral Small, DeepSeek-R1 distill, Llama 3.3)",
         "files": [("platforms/local-models/README.md", "platforms/local-models/README.md")],

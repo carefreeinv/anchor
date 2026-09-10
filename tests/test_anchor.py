@@ -32,6 +32,28 @@ def test_resolve_selection_local_with_valid_submodel():
     assert anchor.LOCAL_MODEL_FILES["qwen3"] in srcs
 
 
+def test_resolve_selection_aider_returns_brief_and_conf_example():
+    pairs = anchor.resolve_selection(["aider"])
+    assert pairs == anchor.PLATFORMS["aider"]["files"]
+    dests = {dest for _, dest in pairs}
+    assert "AIDER.md" in dests
+    assert ".aider.conf.yml.example" in dests
+
+
+def test_plan_copy_scaffolds_aider_brief_and_plans_tree(tmp_path):
+    plan = anchor.plan_copy(tmp_path, ["aider"], want_fleet=False)
+    dests = {str(dest.relative_to(tmp_path)) for _, dest in plan}
+    srcs = {str(src.relative_to(anchor.REPO_ROOT)) for src, _ in plan}
+    assert "AIDER.md" in dests
+    assert ".aider.conf.yml.example" in dests
+    assert "platforms/aider/AIDER.md" in srcs
+    # Aider is a drone: it still needs the .plans/ tree, but no Claude/Grok
+    # slash-command files (it has no slash-command runtime — see AIDER.md C2).
+    assert ".plans/bugs/.gitkeep" in dests
+    assert not any(d.startswith(".claude/") for d in dests)
+    assert not any(d.startswith(".grok/") for d in dests)
+
+
 def test_plan_copy_dedupes_same_destination(tmp_path):
     # claude + chat share the CORE_FILES; the same dest must not appear twice.
     plan = anchor.plan_copy(tmp_path, ["claude", "chat"], want_fleet=False)

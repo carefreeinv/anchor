@@ -43,6 +43,7 @@ SYNC_MAP: dict[object, str] = {
     "platforms/nvidia-nim/NEMOTRON.md": "docs/docs/platforms/nvidia-nim.md",
     "platforms/local-models/README.md": "docs/docs/platforms/local-models.md",
     "platforms/chat/CHAT.md": "docs/docs/platforms/chat.md",
+    "platforms/aider/AIDER.md": "docs/docs/platforms/aider.md",
     # The install command on this page is copied from all three server READMEs.
     # Registering only one would give partial coverage that reads as complete —
     # and an unbounded `pip install "mcp[cli]"` drifting back in is exactly the

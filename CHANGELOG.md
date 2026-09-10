@@ -8,6 +8,11 @@ Newest first.
 
 ### Added
 
+- **`aider` platform** — `anchor --platform aider` scaffolds `AIDER.md` (drone
+  brief: queen-bee plans, Aider runs `/work` only — no draft/review/merge) and
+  a tracked `.aider.conf.yml.example` (`read: AIDER.md`). No slash-command
+  runtime is assumed; other Anchor commands point back to a Claude Code/Grok
+  Build session. Documented in `docs/docs/platforms/aider.md`.
 - **`fit_device.py` Default for wire vs Max fit** — `--probe` reports a
   memory-safer **Default for wire** (Aider / `.env` / launcher) alongside **Max
   fit** (capability ceiling). Uses free/available RAM × safety factor when known;
