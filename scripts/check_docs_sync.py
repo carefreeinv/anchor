@@ -41,6 +41,7 @@ SYNC_MAP: dict[object, str] = {
     "platforms/claude-code/CLAUDE.md": "docs/docs/platforms/claude-code.md",
     "platforms/grok-build/GROK.md": "docs/docs/platforms/grok-build.md",
     "platforms/nvidia-nim/NEMOTRON.md": "docs/docs/platforms/nvidia-nim.md",
+    "platforms/nvidia-build/BUILD.md": "docs/docs/platforms/nvidia-build.md",
     "platforms/local-models/README.md": "docs/docs/platforms/local-models.md",
     "platforms/chat/CHAT.md": "docs/docs/platforms/chat.md",
     # The install command on this page is copied from all three server READMEs.

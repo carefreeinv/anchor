@@ -1,7 +1,10 @@
 # Anchor discipline for NVIDIA NIM / Nemotron
 
 <!-- For Nemotron models served as NIM microservices (OpenAI-compatible on :8000/v1).
-     Applies to Llama-Nemotron variants (Nano/Super/Ultra) and Nemotron-H family. -->
+     Applies to Llama-Nemotron variants (Nano/Super/Ultra) and Nemotron-H family.
+     This is SELF-HOSTED — a container you run yourself. For NVIDIA's *hosted*
+     developer API (no container, keyed per-operator from build.nvidia.com),
+     see platforms/nvidia-build/BUILD.md instead. Don't conflate the two. -->
 
 ## Serving
 
