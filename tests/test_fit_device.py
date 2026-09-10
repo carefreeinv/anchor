@@ -100,6 +100,40 @@ def test_probe_device_returns_expected_keys():
     assert isinstance(probe["tools"], dict)
 
 
+def test_probe_device_free_memory_sources_host_free_on_wsl_host(monkeypatch):
+    """WSL + reachable Windows host: free_memory_gb must come from the HOST
+    (constrained-guest reality is exactly what recommend_bare_metal exists to
+    surface), never silently fall back to the guest's own MemAvailable."""
+    monkeypatch.setattr(fit_device, "detect_wsl", lambda: True)
+    monkeypatch.setattr(fit_device, "detect_apple_silicon", lambda: False)
+    monkeypatch.setattr(fit_device, "detect_total_ram_gb", lambda: 13.8)
+    monkeypatch.setattr(fit_device, "detect_cuda_vram_gb", lambda: None)
+    monkeypatch.setattr(fit_device, "detect_available_memory_gb", lambda: 0.3)
+    monkeypatch.setattr(
+        fit_device, "probe_windows_host",
+        lambda: {"total_ram_gb": 15.7, "free_ram_gb": 6.5, "has_nvidia": False},
+    )
+    probe = fit_device.probe_device()
+    assert probe["recommend_bare_metal"] is True
+    assert probe["free_memory_gb"] == 6.5
+    assert probe["available_memory_gb"] == 0.3
+
+
+def test_probe_device_free_memory_falls_back_to_guest_available_without_host(monkeypatch):
+    """No Windows host reachable (plain WSL guest or bare Linux): free_memory_gb
+    must come from the guest's own MemAvailable, not a stale/absent host value."""
+    monkeypatch.setattr(fit_device, "detect_wsl", lambda: True)
+    monkeypatch.setattr(fit_device, "detect_apple_silicon", lambda: False)
+    monkeypatch.setattr(fit_device, "detect_total_ram_gb", lambda: 13.8)
+    monkeypatch.setattr(fit_device, "detect_cuda_vram_gb", lambda: None)
+    monkeypatch.setattr(fit_device, "detect_available_memory_gb", lambda: 0.7)
+    monkeypatch.setattr(fit_device, "probe_windows_host", lambda: None)
+    probe = fit_device.probe_device()
+    assert probe["recommend_bare_metal"] is True  # wsl-cpu still prefers host if reachable later
+    assert probe["free_memory_gb"] == 0.7
+    assert probe["available_memory_gb"] == 0.7
+
+
 def test_default_wire_prefers_smallest_when_free_unknown_on_wsl_host_cpu():
     fits = fit_device.fitting_models(8.6, "q4", 8192)
     assert fits and fits[0].name == "qwen3-8b"

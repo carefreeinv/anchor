@@ -570,9 +570,7 @@ def probe_device() -> dict:
         except (TypeError, ValueError):
             host_free = None
     # Prefer host free when recommending a Windows-host executor; else guest MemAvailable.
-    free_memory_gb = host_free if (recommend_bare_metal and host_free is not None) else (
-        host_free if host_free is not None else guest_available
-    )
+    free_memory_gb = host_free if (recommend_bare_metal and host_free is not None) else guest_available
     available_memory_gb = guest_available
 
     return {
