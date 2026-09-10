@@ -252,6 +252,7 @@ PLATFORMS: dict[str, dict] = {
         "label": "Aider (drone harness — queen-bee plans, Aider runs /work)",
         "files": [
             ("platforms/aider/AIDER.md", "AIDER.md"),
+            ("platforms/aider/skills-index.md", "platforms/aider/skills-index.md"),
             ("platforms/aider/.aider.conf.yml.example", ".aider.conf.yml.example"),
         ],
     },

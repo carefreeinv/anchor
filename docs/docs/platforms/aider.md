@@ -34,14 +34,21 @@ Anchor-shaped, the brief points them back to a queen-bee session instead.
 anchor <project-dir> --platform aider
 ```
 
-writes `AIDER.md` to the project root plus a tracked
-`.aider.conf.yml.example` (never `.aider.conf.yml` itself — host-specific
-values like `OLLAMA_API_BASE` stay in `.env`, gitignored). Copy the example to
-`.aider.conf.yml` and Aider loads the brief into every session:
+writes `AIDER.md` and `platforms/aider/skills-index.md` to the project root
+plus a tracked `.aider.conf.yml.example` (never `.aider.conf.yml` itself —
+host-specific values like `OLLAMA_API_BASE` stay in `.env`, gitignored). Copy
+the example to `.aider.conf.yml` and Aider loads both into every session:
 
 ```yaml
-read: AIDER.md
+read:
+  - AIDER.md
+  - platforms/aider/skills-index.md
 ```
+
+`skills-index.md` is the roster: `/work` is the only Anchor skill Aider runs
+in v1, and it lists everything else (`/draft`, `/review`, `/audit`, …) as
+queen-bee-only, so a drone session points the operator back to Claude Code or
+Grok Build instead of guessing at an unimplemented skill.
 
 ## Memory-safe local default
 

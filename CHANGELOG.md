@@ -13,6 +13,11 @@ Newest first.
   a tracked `.aider.conf.yml.example` (`read: AIDER.md`). No slash-command
   runtime is assumed; other Anchor commands point back to a Claude Code/Grok
   Build session. Documented in `docs/docs/platforms/aider.md`.
+- **`aider` skills index** — scaffold also writes `platforms/aider/skills-index.md`
+  (loaded via the same `read:` list), a roster naming `/work` as the only
+  skill Aider runs and every other Anchor command as queen-bee-only, so a
+  drone session points the operator back to Claude Code/Grok Build instead of
+  guessing at an unimplemented skill.
 - **NVIDIA Build inference preference** — `scripts/nvidia_build_probe.py`
   detects whether NVIDIA's hosted Build API (`integrate.api.nvidia.com/v1`,
   keyed via `NVIDIA_API_KEY`/`NGC_API_KEY`) is configured and reachable, and
