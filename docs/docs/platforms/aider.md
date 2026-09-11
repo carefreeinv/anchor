@@ -50,6 +50,34 @@ in v1, and it lists everything else (`/draft`, `/review`, `/audit`, …) as
 queen-bee-only, so a drone session points the operator back to Claude Code or
 Grok Build instead of guessing at an unimplemented skill.
 
+## Swarm profile: Qwen3 ≤8B and similar
+
+`AIDER.md` and `skills-index.md` are sized for a mid-class model. A ≤8B local
+model (the typical swarm-local default) runs out of context budget reasoning
+about the full brief the same way it can run out of budget on a plain
+`hello` — see [Local Models](/platforms/local-models) for the live canary.
+For that profile, copy `platforms/aider/.aider.conf.swarm.yml.example` to
+`.aider.conf.yml` instead of the default example:
+
+```yaml
+read:
+  - platforms/aider/work-drone.md
+edit-format: diff
+map-tokens: 1024
+timeout: 60
+stream: false
+```
+
+It loads only `work-drone.md` — a script-first `work` card scoped to what a
+small model can reliably follow (run `plan_fit.py` / `work_once.py` rather
+than reasoning about plan lanes by hand) — in place of the fuller `AIDER.md`
+and `skills-index.md`.
+
+**Type `work`, not `/work`.** Aider treats any message starting with `/` as
+one of its own built-in commands, so a bare `/work` never reaches the model —
+Aider answers `Invalid command: work` itself. Type the word `work` with no
+leading slash (or embed it mid-sentence).
+
 ## Memory-safe local default
 
 `AIDER.md` points at the fleet probe (`fit_device.py --probe`) so a drone

@@ -7,17 +7,35 @@
      when `/work` is typed). This file is the roster: which Anchor skills
      Aider actually runs, and where everything else lives. -->
 
+**Invocation note (verified live, Aider 0.86.2, 2026-09-11):** Aider treats
+any message that *starts* with `/` as one of its own built-in commands and
+never passes it to you — a bare `/work` gets `Invalid command: work` from
+Aider itself and you never see it. The operator has to type the word **`work`**
+with no leading slash (or embed it mid-sentence). Every `/work` reference
+below names the procedure, not a literal message to expect verbatim.
+
 ## Implemented here
 
 | Command | Behavior |
 |---------|----------|
-| `/work` | Follow the `/work` procedure in `AIDER.md`. Optional slug: `/work <slug>`. Optional `/work --list`: report ready plans (path, Priority, Value) without claiming or executing one. |
+| `work` | Follow the `/work` procedure in `AIDER.md`. Optional slug: `work <slug>`. Optional `work --list`: report ready plans (path, Priority, Value) without claiming or executing one. |
 
 That is the only skill this brief implements. It mirrors the canonical work
 skill (`.claude/commands/work.md` / `.grok/skills/work/SKILL.md`): same lane
 rules, same lease/claim, same finish-to-`review-needed/`-and-stop with no
 merge. If a ready plan needs judgment this brief doesn't cover, stop and say
 so rather than guessing — don't improvise a third version of `/work`.
+
+**Small / swarm-local models (Qwen3 ≤8B and similar): do not follow the
+`work` procedure above from memory.** `AIDER.md`'s version is sized for a
+mid-class model; a ≤8B model runs out of budget reasoning about it the same
+way it ran out of budget on a plain `hello` (see `platforms/local-models/qwen3.md`'s
+canary note). Use `platforms/aider/.aider.conf.swarm.yml.example` instead of
+the default conf — it loads only `platforms/aider/work-drone.md`, a
+script-first `work` card scoped to ≤8B, in place of this index and the fuller
+`AIDER.md`. If you are already running with the default (non-swarm) conf and
+detect you're a small model struggling with `work`, say so and point the
+operator at the swarm conf rather than pushing through.
 
 ## Not implemented here — cloud/queen-bee only
 

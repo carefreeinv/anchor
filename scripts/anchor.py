@@ -253,7 +253,12 @@ PLATFORMS: dict[str, dict] = {
         "files": [
             ("platforms/aider/AIDER.md", "AIDER.md"),
             ("platforms/aider/skills-index.md", "platforms/aider/skills-index.md"),
+            ("platforms/aider/work-drone.md", "platforms/aider/work-drone.md"),
             ("platforms/aider/.aider.conf.yml.example", ".aider.conf.yml.example"),
+            (
+                "platforms/aider/.aider.conf.swarm.yml.example",
+                "platforms/aider/.aider.conf.swarm.yml.example",
+            ),
         ],
     },
     "local": {

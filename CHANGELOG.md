@@ -18,6 +18,16 @@ Newest first.
   skill Aider runs and every other Anchor command as queen-bee-only, so a
   drone session points the operator back to Claude Code/Grok Build instead of
   guessing at an unimplemented skill.
+- **`aider` swarm profile (Qwen3 ≤8B)** — scaffold also writes
+  `platforms/aider/work-drone.md` (a ≤1-screen, script-first `work` card:
+  claim via `work_once.py`/`plan_fit.py`, execute Steps, finish to
+  `review-needed/`, never merge) and `platforms/aider/.aider.conf.swarm.yml.example`
+  (thin `read:` = drone card only, `edit-format: diff`, `map-tokens: 1024`,
+  `timeout: 60`, `stream: false` — verified live against Aider 0.86.2).
+  `skills-index.md` now tells small/swarm models to use the card instead of
+  the fuller `AIDER.md` procedure. Also documents, in both files: Aider
+  intercepts any message starting with `/` as its own built-in command, so a
+  bare `/work` never reaches the model — type `work` with no leading slash.
 - **NVIDIA Build inference preference** — `scripts/nvidia_build_probe.py`
   detects whether NVIDIA's hosted Build API (`integrate.api.nvidia.com/v1`,
   keyed via `NVIDIA_API_KEY`/`NGC_API_KEY`) is configured and reachable, and

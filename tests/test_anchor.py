@@ -38,7 +38,9 @@ def test_resolve_selection_aider_returns_brief_and_conf_example():
     dests = {dest for _, dest in pairs}
     assert "AIDER.md" in dests
     assert "platforms/aider/skills-index.md" in dests
+    assert "platforms/aider/work-drone.md" in dests
     assert ".aider.conf.yml.example" in dests
+    assert "platforms/aider/.aider.conf.swarm.yml.example" in dests
 
 
 def test_plan_copy_scaffolds_aider_brief_and_plans_tree(tmp_path):
@@ -47,9 +49,12 @@ def test_plan_copy_scaffolds_aider_brief_and_plans_tree(tmp_path):
     srcs = {str(src.relative_to(anchor.REPO_ROOT)) for src, _ in plan}
     assert "AIDER.md" in dests
     assert "platforms/aider/skills-index.md" in dests
+    assert "platforms/aider/work-drone.md" in dests
     assert ".aider.conf.yml.example" in dests
+    assert "platforms/aider/.aider.conf.swarm.yml.example" in dests
     assert "platforms/aider/AIDER.md" in srcs
     assert "platforms/aider/skills-index.md" in srcs
+    assert "platforms/aider/work-drone.md" in srcs
     # Aider is a drone: it still needs the .plans/ tree, but no Claude/Grok
     # slash-command files (it has no slash-command runtime — see AIDER.md C2).
     assert ".plans/bugs/.gitkeep" in dests
