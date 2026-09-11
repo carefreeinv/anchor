@@ -28,6 +28,15 @@ Newest first.
   the fuller `AIDER.md` procedure. Also documents, in both files: Aider
   intercepts any message starting with `/` as its own built-in command, so a
   bare `/work` never reaches the model — type `work` with no leading slash.
+- **Local drone doctrine + recipe** — `docs/docs/skills/local-models.md` now
+  states the queen-bee/drone split (any local model is an executor, never a
+  planner) and adds a machine-local drone recipe: a gitignored
+  `var/endpoints.local.yaml` entry for this host's reachable local endpoint,
+  claimed one-shot with `work_once.py --endpoint … --registry
+  var/endpoints.local.yaml` or watched durably with `fleet_watch.py --emit
+  systemd --worker …,registry=var/endpoints.local.yaml` — never the shared
+  `scripts/endpoints.yaml`. `AIDER.md` and its docs mirror cross-link the same
+  recipe as the unattended twin to interactive Aider `/work`.
 - **NVIDIA Build inference preference** — `scripts/nvidia_build_probe.py`
   detects whether NVIDIA's hosted Build API (`integrate.api.nvidia.com/v1`,
   keyed via `NVIDIA_API_KEY`/`NGC_API_KEY`) is configured and reachable, and

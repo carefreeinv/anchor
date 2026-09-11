@@ -86,3 +86,12 @@ If `OLLAMA_API_BASE` / `AIDER_MODEL` point at `localhost` and calls fail on
 WSL2, the Ollama server is usually reachable via the Windows host, not the WSL
 guest's own loopback — see the fleet probe's `Bare metal:` / `Executor place:`
 lines above for the address to use instead of guessing.
+
+## Unattended twin
+
+This file covers interactive Aider sessions only. The same reachable Ollama
+URL also works headless via `work_once.py`/`fleet_watch.py` — a machine-local
+`endpoints.yaml` entry (e.g. `var/endpoints.local.yaml`, never the shared
+`scripts/endpoints.yaml`) using this host's URL under a shared name like
+`laptop-swarm` — for unattended plan-claiming without an Aider session
+running. See [Local Models](/skills/local-models)'s drone recipe.

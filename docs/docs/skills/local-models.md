@@ -51,6 +51,62 @@ python scripts/fit_device.py --list
 | Grok Build | `.grok/skills/local-models/SKILL.md` |
 | Claude Code | `.claude/commands/local-models.md` |
 
+## Queen-bee plans, drone executes
+
+A local model this skill just wired up is a **drone**, not a planner:
+
+- **Queen-bee** (a cloud/frontier session, or a human) writes plans into
+  `.plans/drafts/` and promotes them to `.plans/bugs/` or `.plans/features/`.
+- **Drone** (the local model, via `/work` in an agentic harness like Aider, or
+  headless via `work_once.py`/`fleet_watch.py`) only claims and executes an
+  already-ready plan — it never drafts, promotes, reviews, or merges.
+
+If the local model's backlog is empty, that's the correct idle state — a
+drone does not invent work. See [`/work`](/skills/work) and
+[Fleet workers](/tooling/fleet-workers) for the full contract; the
+[Aider platform](/platforms/aider) page shows the same split for an
+interactive local-model harness.
+
+## Drone recipe: this machine, unattended
+
+Once `/local-models` has confirmed a reachable local endpoint (Ollama,
+llama.cpp, …), point `work_once.py` — the same headless picker
+[Fleet workers](/tooling/fleet-workers) documents generically — at a
+**machine-local** registry rather than the shared `scripts/endpoints.yaml`:
+per [Fleet workers](/tooling/fleet-workers)'s multi-machine rule, a laptop's
+`base_url` (an Ollama gateway IP, a `localhost` port) is host-specific and
+must never be committed as project-wide fleet truth.
+
+```bash
+# var/endpoints.local.yaml (gitignored) — one entry, this host's reachable URL
+cat > var/endpoints.local.yaml <<'YAML'
+endpoints:
+  - name: laptop-swarm
+    tier: swarm
+    base_url: http://<reachable-ollama-url>/v1   # from /local-models' probe
+    model: qwen3:4b
+    quirks: {think_toggle: qwen3, strip_think: true, min_completion_tokens: 256}
+YAML
+
+# Inspect, then claim one fit-appropriate ready plan (never merges):
+python scripts/work_once.py --list --endpoint laptop-swarm --registry var/endpoints.local.yaml
+python scripts/work_once.py --once --endpoint laptop-swarm --registry var/endpoints.local.yaml --agent-id laptop-swarm-1
+```
+
+For a reboot-persistent poller instead of a one-shot claim, hand the same
+registry/endpoint name to [`/fleet-watch`](/skills/fleet-watch) — the
+`--worker` spec takes a `registry=` key so the generated systemd unit points
+at your machine-local file, not the shared `scripts/endpoints.yaml` default:
+
+```bash
+python scripts/fleet_watch.py --project . --emit systemd \
+  --worker tier=small,agent=laptop-swarm-1,interval=10m,endpoint=laptop-swarm,registry=var/endpoints.local.yaml
+```
+
+See [Fleet workers](/tooling/fleet-workers) for the full systemd/cron
+recipes; this page only adds the machine-local-registry step specific to a
+drone running on the box `/local-models` just probed.
+
 ## Related
 
 - [Personal devices](/hardware/personal-devices)

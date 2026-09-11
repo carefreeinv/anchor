@@ -3,7 +3,7 @@ sidebar_position: 6
 sidebar_label: Aider
 ---
 
-<!-- synced-from: platforms/aider/AIDER.md @ ac45c7625b6df94b68bcdda4170ae664944ed9f4 -->
+<!-- synced-from: platforms/aider/AIDER.md @ b02012754013a9b3ce362a09a0fed6fe145caf0d -->
 
 # Aider
 
@@ -84,6 +84,15 @@ leading slash (or embed it mid-sentence).
 picks the **Default for wire** model — the memory-safer fit under real free-RAM
 pressure — rather than the largest model that only theoretically fits the
 box's total RAM. See [Local Models](/platforms/local-models).
+
+## Unattended twin
+
+This page covers interactive Aider sessions only. The same reachable Ollama
+URL also works headless via `work_once.py`/`fleet_watch.py` — a
+machine-local `endpoints.yaml` entry (e.g. `var/endpoints.local.yaml`, never
+the shared `scripts/endpoints.yaml`) using this host's URL under a shared
+name like `laptop-swarm` — for unattended plan-claiming without an Aider
+session running. See [Local Models](/skills/local-models)'s drone recipe.
 
 ## Tracked plans
 
