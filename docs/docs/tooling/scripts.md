@@ -51,6 +51,40 @@ python plan_fit.py --tier mid --profile coding-agent --json
 python plan_fit.py --tier small --next             # path only, for scripting
 ```
 
+## release_progress.py
+
+Reports per-**release** completion by scanning plans — never a static member
+list. A release groups plans via a self-declaring pointer: any plan may carry
+an optional `- **Release:** <slug>` header naming a
+`.plans/.releases/<slug>.md` file, which holds only release-level metadata
+(`Status`, optional `Target`) and never enumerates members, since a release's
+membership grows over time. `--list` prints one line per release
+(`slug  status  completed/total complete (N remaining)`); `--status <slug>`
+gives the member breakdown; `--json` for tooling. A plan pointing at an
+undefined release slug is reported as `unknown-release`, never silently
+dropped or counted toward a phantom "complete" release.
+
+```bash
+python scripts/release_progress.py --list
+python scripts/release_progress.py --status local-inference-optimizations
+python scripts/release_progress.py --json
+```
+
+Two explicit writes, both narrow: `--mark-ready <slug>` flips a release's
+`Status:` to `ready` (called by `/work`/`/review` after asking their
+once-only "this release is fully complete — prepare it?" prompt, on any
+answer — never automatically). The `--list`/`--status`/`--json` paths also
+run an automatic, prompt-free **reopen** pass by default (`--no-reconcile` to
+skip it): a `ready` release that gained a new incomplete member — a fresh
+plan pointed at it, or one bounced back out of `completed/` — flips back to
+`open` so the completion prompt can fire again once it's genuinely done.
+
+`plan_select.py`'s ready-lane picker consults the same completion data as a
+**soft** tiebreak: a ready plan in the release closest to 100% complete sorts
+earlier than one in a barely-started release or no release at all — but only
+among plans that already share the same `Priority` and `Value`. It can never
+promote a `P2` plan ahead of a `P1`, or `medium` ahead of `high`.
+
 ## plan_parse.py
 
 Mechanical (no-LLM) plan parsing + triage primitives shared by `plan_select.py`, `plan_fit.py`, and daemon entrypoints. `strip_code_fences(text)` blanks fenced code block bodies before any header regex runs, so a plan that quotes an example header inside a fence (a doc walkthrough, `anchor/templates/plan.md` itself) is never read as the plan's own field. `safe_read_text(path)` never raises — a corrupt or unreadable `.local.md` returns `(None, reason)` instead of crash-looping a daemon poll. `triage_plan(record, worker)` is the three-way accept/skip/reject verdict a daemon wants: **reject** (unreadable, missing `## Goal`, human Assignee, unmet deps, underqualified — never eligible for this worker, full stop), **skip** (overqualified, or leased by another agent — eligible for someone else), **take** (good/unknown fit, deps met, agent-assignable). This is a strict superset of `plan_fit.py`'s existing binary take/skip CLI output, which is unchanged.

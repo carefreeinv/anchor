@@ -115,6 +115,17 @@ and integration→mainline rows).
 Find a root with `.plans/` (CWD, then git root). Print the absolute path.
 If missing: explain and stop.
 
+**Release completion check** (interactive sessions only — same gating as
+`/work`'s culmination question; skip on unattended runs):
+`python scripts/release_progress.py --list --root .`. For each release
+reported `Status: open` with every member plan in `completed/` (no
+`unknown-release` orphans), ask **once**: *"Release `<slug>` is fully
+complete — prepare it for deployment? `/release` does the tagging; never
+auto-run here."* On **any** answer, run
+`python scripts/release_progress.py --mark-ready <slug> --root .` so the
+question isn't asked again next time. This check never changes or blocks mode
+selection below — it's a side question, then continue normally.
+
 ## 2. Select mode and target
 
 Parse flags: `--list`, `--skip-ai`, `--no-launch`, `--promote`, `--no-promote`,

@@ -13,20 +13,29 @@ def _plan(
     title: str = "t",
     priority: str | None = None,
     assignee: str | None = None,
+    release: str | None = None,
 ) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     prio_line = f"- **Priority:** {priority}\n" if priority is not None else ""
     pref_line = f"- **Preferred models:** {preferred}\n" if preferred is not None else ""
     asg_line = f"- **Assignee:** {assignee}\n" if assignee is not None else ""
+    rel_line = f"- **Release:** {release}\n" if release is not None else ""
     path.write_text(
         f"# Plan: {title}\n\n"
         f"- **Value:** {value}\n"
         f"{prio_line}"
         f"{pref_line}"
-        f"{asg_line}\n"
+        f"{asg_line}"
+        f"{rel_line}\n"
         "## Goal\ng\n\n## Steps\n| 1 | x |\n\n## Done when\n- [ ] ok\n",
         encoding="utf-8",
     )
+
+
+def _release_file(plans: Path, slug: str, *, status: str = "open") -> None:
+    path = plans / ".releases" / f"{slug}.md"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(f"# Release: {slug}\n\n- **Status:** {status}\n", encoding="utf-8")
 
 
 def _tree(tmp_path: Path) -> Path:
@@ -441,3 +450,88 @@ def test_fenced_example_header_does_not_leak_into_real_fields(tmp_path):
     assert rec.preferred == "small"
     assert rec.agent_assignable is True
     assert rec.fit is Fit.GOOD
+
+
+def test_release_affinity_breaks_tie_within_same_priority_and_value(tmp_path):
+    """Two P2/medium plans, one tagged into a 90%-complete release, one
+    untagged -> the tagged one sorts first (soft tiebreak, see plan_sort_key)."""
+    plans = _tree(tmp_path)
+    _release_file(plans, "near-done", status="open")
+    # 9/10 members already completed -> 90% complete.
+    for i in range(9):
+        _plan(plans / "completed" / f"done{i}.md", release="near-done")
+    _plan(plans / "features" / "aaa-untagged.md", value="medium", priority="P2", preferred="mid")
+    _plan(
+        plans / "features" / "zzz-tagged.md",
+        value="medium",
+        priority="P2",
+        preferred="mid",
+        release="near-done",
+    )
+    worker = Worker("test", "mid")
+    recs = inventory_ready(plans, worker)
+    rels = [r.rel for r in recs]
+    assert rels.index("features/zzz-tagged.md") < rels.index("features/aaa-untagged.md")
+
+
+def test_release_affinity_never_crosses_priority_boundary(tmp_path):
+    """A P1 plan with no Release: still beats a P2 plan in a 100%-complete
+    release -- the tiebreak only applies within the same lane+priority+value."""
+    plans = _tree(tmp_path)
+    _release_file(plans, "all-done", status="open")
+    _plan(plans / "completed" / "done0.md", release="all-done")
+    _plan(
+        plans / "features" / "p2-complete-release.md",
+        value="high",
+        priority="P2",
+        preferred="mid",
+        release="all-done",
+    )
+    _plan(
+        plans / "features" / "p1-no-release.md",
+        value="high",
+        priority="P1",
+        preferred="mid",
+    )
+    worker = Worker("test", "mid")
+    recs = inventory_ready(plans, worker)
+    assert recs[0].rel == "features/p1-no-release.md"
+
+
+def test_release_affinity_absent_reproduces_identical_ordering(tmp_path):
+    """No .plans/.releases/ files and no plan Release: headers at all ->
+    ordering is unchanged from before this tiebreak existed."""
+    plans = _tree(tmp_path)
+    _plan(plans / "features" / "low.md", value="low", preferred="mid")
+    _plan(plans / "features" / "high.md", value="high", preferred="mid")
+    _plan(plans / "bugs" / "zzz.md", value="low", preferred="mid")
+    worker = Worker("test", "mid")
+    recs = inventory_ready(plans, worker)
+    assert [r.rel for r in recs] == [
+        "bugs/zzz.md",
+        "features/high.md",
+        "features/low.md",
+    ]
+
+
+def test_barely_started_release_does_not_beat_untagged_plan(tmp_path):
+    """A release only 10% complete stays worse than the neutral bias an
+    untagged plan gets -- this is a soft nudge toward *close-to-done*
+    releases, not "any tagged plan wins.\""""
+    plans = _tree(tmp_path)
+    _release_file(plans, "barely-started", status="open")
+    _plan(plans / "completed" / "done0.md", release="barely-started")
+    for i in range(9):
+        _plan(plans / "features" / f"pending{i}.md", release="barely-started", value="medium", priority="P3")
+    _plan(
+        plans / "features" / "zzz-tagged.md",
+        value="medium",
+        priority="P2",
+        preferred="mid",
+        release="barely-started",
+    )
+    _plan(plans / "features" / "aaa-untagged.md", value="medium", priority="P2", preferred="mid")
+    worker = Worker("test", "mid")
+    recs = inventory_ready(plans, worker)
+    p2 = [r.rel for r in recs if r.rel in {"features/zzz-tagged.md", "features/aaa-untagged.md"}]
+    assert p2 == ["features/aaa-untagged.md", "features/zzz-tagged.md"]

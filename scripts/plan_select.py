@@ -130,6 +130,31 @@ DEPENDS_BULLET_RE = re.compile(
     re.MULTILINE,
 )
 TITLE_RE = re.compile(r"^#\s+(.+)$", re.MULTILINE)
+# Optional `- **Release:** <slug>` header — points a plan at a
+# `.plans/.releases/<slug>.md` file (see release_progress.py / .plans/README.md
+# "## Releases"). The release file never lists members; this is the only
+# direction membership is stored, so both plan_select.py's tiebreak and
+# release_progress.py's completion scan share this one parser.
+RELEASE_RE = re.compile(r"^\s*-\s*\*\*Release:\*\*\s*(\S+)", re.MULTILINE | re.IGNORECASE)
+# A real release slug looks like a filename stem (word chars, dots, hyphens).
+# Guards against an unrelated pre-existing convention some plans use — citing
+# a product release announcement as `- **Release:** [Introducing Foo](url) —
+# ...` in prose. A bracket/paren/space means "not a slug," not "not tagged."
+_RELEASE_SLUG_SHAPE_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
+_RELEASE_NONE_TOKENS = frozenset({"none", "n/a", "-", "nil", "null"})
+
+
+def parse_release_field(text: str) -> str | None:
+    """The plan-header ``Release:`` value, or ``None`` when absent/none/not slug-shaped."""
+    m = RELEASE_RE.search(text)
+    if not m:
+        return None
+    raw = m.group(1).strip().strip("`")
+    if not raw or raw.lower() in _RELEASE_NONE_TOKENS:
+        return None
+    if not _RELEASE_SLUG_SHAPE_RE.match(raw):
+        return None
+    return raw
 # Lanes where a dependency slug still counts as unfinished work
 OPEN_LANES = (
     "drafts",
@@ -180,6 +205,7 @@ class PlanRecord:
     agent_assignable: bool = True  # False when assigned to a named person
     parse_error: str | None = None  # set when the file could not be read at all
     has_goal: bool = True  # False when ## Goal is missing/empty (daemon triage: reject)
+    release: str | None = None  # optional Release: header value (see release_progress.py)
 
     @property
     def ready(self) -> bool:
@@ -788,25 +814,65 @@ def _record_from_path(
         assignee=parse_assignee(text),
         agent_assignable=is_agent_assignable(text),
         has_goal=has_goal_section(text),
+        release=parse_release_field(text),
     )
 
 
-def plan_sort_key(r: PlanRecord) -> tuple:
-    """Ready-lane ordering key: lane → priority → value → oldest → filename.
+# Bias applied to a plan with no Release: header, or one whose release has no
+# real completion data (unknown-release / zero members) — see plan_sort_key.
+NEUTRAL_RELEASE_BIAS = 0.5
+
+
+def plan_sort_key(r: PlanRecord, release_bias: dict[str, float] | None = None) -> tuple:
+    """Ready-lane ordering key: lane → priority → value → release affinity →
+    oldest → filename.
 
     Bugs (lane 0) always precede features (lane 1) — priority never lets a
     feature jump a ready bug. Within a lane: ``P1`` before ``P2`` before ``P3``
     (default ``P2``), then ``high`` before ``medium`` before ``low`` (default
-    ``medium``), then oldest first (file mtime), with filename as final tiebreak.
+    ``medium``). ``release_bias`` (release slug → completion fraction, from
+    ``release_progress.py``) is optional and, when given, breaks ties **only**
+    within the same lane+priority+value: a plan whose release is closer to
+    100% complete sorts earlier than one in a barely-started release or no
+    release at all (``NEUTRAL_RELEASE_BIAS``). It can never move a plan across
+    a priority or value boundary — that is the hard bound this tiebreak must
+    never cross. Final tiebreaks: oldest file mtime, then filename.
+
+    Omitting ``release_bias`` (the default) reproduces the exact ordering from
+    before this term existed — every record gets the same neutral value, so
+    relative order is unchanged.
     """
     lane_i = 0 if r.lane == "bugs" else 1
     pri_i = PRIORITY_RANK.get(r.priority, PRIORITY_RANK[DEFAULT_PRIORITY])
     val_i = VALUE_RANK.get(r.value, VALUE_RANK["medium"])
+    bias = NEUTRAL_RELEASE_BIAS
+    if release_bias and r.release and r.release in release_bias:
+        bias = 1.0 - release_bias[r.release]
     try:
         mtime = r.path.stat().st_mtime
     except OSError:
         mtime = 0.0
-    return (lane_i, pri_i, val_i, mtime, r.path.name.lower())
+    return (lane_i, pri_i, val_i, bias, mtime, r.path.name.lower())
+
+
+def _release_completion_map(plans_root: Path) -> dict[str, float]:
+    """release slug -> completion fraction, for plan_sort_key's soft tiebreak.
+
+    Local import: release_progress.py imports *from* this module (plan_slug,
+    plans_root_for, parse_release_field, …), so importing it back here at
+    module load time would cycle. Deferring the import here mirrors the
+    existing plan_lease pattern in inventory_in_progress. Any release with
+    zero members is omitted — plan_sort_key's default (NEUTRAL_RELEASE_BIAS)
+    already covers "no real completion data" correctly.
+    """
+    from release_progress import scan_releases
+
+    releases = scan_releases(plans_root)
+    return {
+        slug: info.completed / info.total
+        for slug, info in releases.items()
+        if info.total > 0
+    }
 
 
 def inventory_ready(plans_root: Path, worker: Worker | None = None) -> list[PlanRecord]:
@@ -825,7 +891,8 @@ def inventory_ready(plans_root: Path, worker: Worker | None = None) -> list[Plan
                 continue
             records.append(_record_from_path(path, lane, w, plans_root=plans_root))
 
-    records.sort(key=plan_sort_key)
+    release_bias = _release_completion_map(plans_root)
+    records.sort(key=lambda r: plan_sort_key(r, release_bias))
     return records
 
 

@@ -364,6 +364,19 @@ the queue moving. Small models do not grab architecture plans to "try hard."
 - Inventory: your `in-progress/` (if any), then ready `bugs/`, `features/`.
   **Ignore** foreign `in-progress/` files. Skim headers for Priority, Value, and
   Preferred models only (not Status/Lane).
+- **Release completion check** (interactive sessions only — same gating as
+  the culmination question §6; skip entirely on unattended/`work_once.py`/
+  fleet runs): `python scripts/release_progress.py --list --root .`. For each
+  release reported `Status: open` with every member plan in `completed/` (no
+  `unknown-release` orphans), ask **once**: *"Release `<slug>` is fully
+  complete — prepare it for deployment? `/release` does the tagging; never
+  auto-run here."* On **any** answer, run
+  `python scripts/release_progress.py --mark-ready <slug> --root .` so the
+  question isn't asked again next time — re-opening (a plan bounced back out
+  of `completed/`, or a new plan later pointing at the same release) is the
+  only thing that should trigger it again, and that happens naturally because
+  `completed == total` stops holding. This check never blocks or changes plan
+  selection below — it's a side question, then continue normally.
 
 ### 2. Parse arguments
 

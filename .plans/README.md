@@ -173,6 +173,7 @@ blocker is cleared.
 - **Preferred models:** <names and/or tiers>
 - **Assignee:** ai                   # optional; default ai. A name/username/email (or `human`) = a person completes it, agents auto-skip claiming
 - **Depends on:** <slug-a, slug-b | none>
+- **Release:** <release-slug>        # optional; see ## Releases below
 
 ## Goal
 ...
@@ -197,6 +198,40 @@ propose Depends on when discussing a plan.
 Body sections match `anchor/templates/plan.md`. **Preferred models** uses tiers
 `small | mid | reasoner | frontier` and/or concrete names so `/work` can leave
 work for cheaper or stronger models.
+
+## Releases
+
+A plan may optionally point at a named **release** via its own header:
+
+```markdown
+- **Release:** v0.3.0   # slug matches a .plans/.releases/<slug>.md file
+```
+
+The release file under **`.plans/.releases/<slug>.md`** holds only
+release-level metadata — status and an optional target version — **never**
+a list of member plans:
+
+```markdown
+# Release: v0.3.0 — <name>
+
+- **Status:** open   # open | ready | shipped
+- **Target:** v0.3.0 # optional; matches /tag scheme if used
+```
+
+Membership always flows **plan → release**, computed by scanning every
+plan's `Release:` field — never the other way around. This matters because
+a release's membership grows over time: a new plan joining an existing
+release only needs its own `Release:` line set, never a second file edited.
+Unlike `.leases/`, **`.releases/` is tracked** (not gitignored) — it's a
+durable planning decision, not ephemeral claim state.
+
+`/work` gives ready plans in the release closest to complete a **soft**
+tiebreak — inserted only between `Priority`/`Value` and the existing
+oldest-mtime tiebreak, so it can never promote a lower-priority or
+lower-value plan ahead of a higher one. When every plan pointing at an
+`open` release has reached `completed/`, `/work` or `/review` asks once
+whether to prepare it (hands off to `/release` — never runs it
+automatically), then marks the release `ready` so it doesn't ask again.
 
 ## Cross-model handoff
 

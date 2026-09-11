@@ -8,6 +8,18 @@ Newest first.
 
 ### Added
 
+- **Release grouping for `.plans/`** — a plan may carry an optional
+  `- **Release:** <slug>` header pointing at a `.plans/.releases/<slug>.md`
+  file (`Status`/`Target` metadata only, never a member list — membership is
+  always computed by scanning plans, so a growing release needs no second
+  file edited). New `scripts/release_progress.py` reports per-release
+  completion (`--list`, `--status`, `--json`) and orphan `unknown-release`
+  references. `plan_select.py`'s ready-lane picker gives a **soft** tiebreak
+  to the release closest to complete — strictly within the same
+  Priority+Value, never across it. `/work` and `/review` (both platform
+  surfaces) ask **once**, interactively, when a release's every member plan
+  reaches `completed/`, offering to hand off to `/release` — never auto-run.
+  Documented in `.plans/README.md` and `docs/docs/tooling/scripts.md`.
 - **`aider` platform** — `anchor --platform aider` scaffolds `AIDER.md` (drone
   brief: queen-bee plans, Aider runs `/work` only — no draft/review/merge) and
   a tracked `.aider.conf.yml.example` (`read: AIDER.md`). No slash-command
