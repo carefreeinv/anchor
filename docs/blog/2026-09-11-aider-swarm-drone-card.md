@@ -18,7 +18,7 @@ invoked.
 
 ## A ≤1-screen card, not a bigger prompt
 
-`platforms/aider/work-drone.md` is 60 lines: pick and claim a ready plan by
+`platforms/aider/work-drone.md` is 68 lines: pick and claim a ready plan by
 running `work_once.py`/`plan_fit.py` (never by reasoning about `.plans/`
 lanes by hand), execute the claimed plan's Steps one row at a time, finish to
 `.plans/review-needed/`, never merge. It pairs with a new
