@@ -72,10 +72,12 @@ interactive local-model harness.
 Once `/local-models` has confirmed a reachable local endpoint (Ollama,
 llama.cpp, …), point `work_once.py` — the same headless picker
 [Fleet workers](/tooling/fleet-workers) documents generically — at a
-**machine-local** registry rather than the shared `scripts/endpoints.yaml`:
-per [Fleet workers](/tooling/fleet-workers)'s multi-machine rule, a laptop's
+**machine-local** registry rather than the shared `scripts/endpoints.yaml`.
+This follows `/local-models`' own multi-machine hard rule: a laptop's
 `base_url` (an Ollama gateway IP, a `localhost` port) is host-specific and
-must never be committed as project-wide fleet truth.
+must never be committed as project-wide fleet truth — prefer a gitignored
+overlay; a shared registry entry is only for LAN/API hosts every clone can
+actually reach.
 
 ```bash
 # var/endpoints.local.yaml (gitignored) — one entry, this host's reachable URL
