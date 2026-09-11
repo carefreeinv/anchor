@@ -27,11 +27,12 @@ Spec sheets do not answer “what can *this* box run?” This skill probes hardw
 
 1. **Machine profile** — guest OS + WSL?; on WSL, **host** RAM/CPU/GPU via `powershell.exe`  
 2. **Executor placement** — prefer **Windows bare-metal** model server when under WSL  
-3. **Best lean fit** (sized to host budget when known) + smaller options  
-4. **Links** — model quick starts + weight repos  
-5. **Install path** — host [Ollama for Windows](https://ollama.com/download) / llama.cpp first; in-WSL only as fallback  
-6. **Optional draft** — after the report, the agent asks only whether to create a plan (yes/no); it always writes under **`./.plans/drafts/`** with an auto slug (`local-executor-<model>`); install work is under **`## Prerequisites`**, not main Steps  
-7. **Routing** — reconfiguration respects the operator’s **model-priority** list first; lightweight locals only do lightweight work; if the host can run heavy local models, those locals are preferred for heavy inference **when** they appear appropriately in (or are inserted consistently with) that priority order
+3. **Reachable API** — guest-proven `base_url` (loopback → default gateway → `resolv.conf` nameserver); never register dead WSL `localhost` when the host API only answers on the gateway IP  
+4. **Best lean fit** (sized to host budget when known) + smaller options  
+5. **Links** — model quick starts + weight repos  
+6. **Install path** — host [Ollama for Windows](https://ollama.com/download) / llama.cpp first; in-WSL only as fallback; re-probe after reboot (gateway IPs churn); optional [mirrored networking](https://learn.microsoft.com/en-us/windows/wsl/networking)  
+7. **Optional draft** — after the report, the agent asks only whether to create a plan (yes/no); it always writes under **`./.plans/drafts/`** with an auto slug (`local-executor-<model>`); install work is under **`## Prerequisites`**, not main Steps  
+8. **Routing** — reconfiguration respects the operator’s **model-priority** list first; lightweight locals only do lightweight work; if the host can run heavy local models, those locals are preferred for heavy inference **when** they appear appropriately in (or are inserted consistently with) that priority order
 
 ## CLI (no agent)
 

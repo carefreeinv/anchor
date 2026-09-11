@@ -17,14 +17,19 @@ allowed-tools: Bash(*), Read, Write, Edit
    - **executor placement** (prefer Windows host when under WSL)
    - **Default for wire** (memory-safer) + **Max fit** (ceiling) from
      `fit_device.py --probe` — wire Aider/`.env` to the default; name opt-up
+   - **Reachable API** `base_url` from the probe (loopback → gateway →
+     `resolv.conf`); never register dead WSL `localhost` when only the host
+     gateway answers
+   - recommended lean models from the fit list (host budget when known)
    - **clickable HTTPS links** (official docs, HF weights, Ollama/llama.cpp)
-   - short install procedure **for this OS** (host first on WSL)
+   - short install procedure **for this OS** (host first on WSL; re-probe after
+     reboot — gateway IPs churn)
    - **config scope**: machine-local vs portable multi-clone project config
 4. Do **not** download multi‑GB models or `pip install vllm` without confirmation.
-5. **Multi-machine hard rule:** never commit this host’s localhost fit as project
-   law; prefer `~/.config/anchor` + gitignored overlays for host-only endpoints;
-   shared registry only for LAN/API hosts other clones can reach; re-probe on
-   every machine after clone.
+5. **Multi-machine hard rule:** never commit this host’s localhost / gateway-IP
+   fit as project law; prefer `~/.config/anchor` + gitignored overlays for
+   host-only endpoints; shared registry only for LAN/API hosts other clones can
+   reach; re-probe on every machine after clone.
 6. **Before ending:**
    - **In Anchor checkout:** ask whether to update operator defaults
      (`./config.sh` / `/config`) and/or create a `.local.md` draft for this

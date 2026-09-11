@@ -76,6 +76,15 @@ def test_endpoint_stanza_uses_cuda_port_and_hf_model():
     assert "localhost:8080" in metal and "model: qwen3-14b" in metal
 
 
+def test_endpoint_stanza_accepts_explicit_base_url():
+    m = next(x for x in fit_device.CATALOG if x.name == "qwen3-14b")
+    stanza = fit_device.endpoint_stanza(
+        m, "metal", 8192, base_url="http://172.26.0.1:11434/v1"
+    )
+    assert "base_url: http://172.26.0.1:11434/v1" in stanza
+    assert "localhost" not in stanza
+
+
 def test_endpoint_stanza_with_guardrail_is_valid_yaml():
     import yaml
 
@@ -94,6 +103,7 @@ def test_probe_device_returns_expected_keys():
         "cuda_vram_gb", "usable_memory_gb", "free_memory_gb", "available_memory_gb",
         "backend", "profile", "tools",
         "recommend_bare_metal", "executor_placement",
+        "reachable_api", "register_base_url", "register_ok", "register_reason",
     ):
         assert key in probe
     assert probe["backend"] in {"metal", "mlx", "cuda"}
@@ -194,6 +204,80 @@ def test_print_recommendation_shows_both_answers(capsys):
     assert "Default for wire" in out and "qwen3-4b" in out
     assert "memory_pressure=`high`" in out
     assert "opt-up" in out.lower()
+
+
+def test_discover_picks_gateway_when_loopback_refuses(monkeypatch):
+    """2026-09-06 WSL matrix: localhost refused, default gateway Ollama OK."""
+    monkeypatch.setattr(fit_device, "candidate_api_hosts", lambda wsl=None: [
+        ("127.0.0.1", "loopback"),
+        ("172.26.0.1", "default-gateway"),
+        ("10.255.255.254", "resolv-nameserver"),
+    ])
+
+    def fake_probe(url, timeout=1.5):
+        return "172.26.0.1:11434" in url
+
+    hit = fit_device.discover_reachable_openai_base(wsl=True, probe_url=fake_probe)
+    assert hit is not None
+    assert hit["base_url"] == "http://172.26.0.1:11434/v1"
+    assert hit["source"] == "default-gateway"
+    assert hit["tried"][0]["ok"] is False  # loopback first attempt failed
+
+
+def test_discover_prefers_loopback_when_it_answers(monkeypatch):
+    monkeypatch.setattr(fit_device, "candidate_api_hosts", lambda wsl=None: [
+        ("127.0.0.1", "loopback"),
+        ("172.26.0.1", "default-gateway"),
+    ])
+
+    def fake_probe(url, timeout=1.5):
+        return "127.0.0.1:11434" in url
+
+    hit = fit_device.discover_reachable_openai_base(wsl=True, probe_url=fake_probe)
+    assert hit["source"] == "loopback"
+    assert hit["base_url"] == "http://127.0.0.1:11434/v1"
+
+
+def test_resolve_rewrites_dead_localhost_to_gateway(monkeypatch):
+    monkeypatch.setattr(
+        fit_device,
+        "discover_reachable_openai_base",
+        lambda **kwargs: {
+            "base_url": "http://172.26.0.1:11434/v1",
+            "host": "172.26.0.1",
+            "port": 11434,
+            "source": "default-gateway",
+            "tried": [],
+        },
+    )
+
+    def fake_http(url, timeout=1.5):
+        return "172.26.0.1" in url
+
+    out = fit_device.resolve_register_base_url(
+        "http://127.0.0.1:11434/v1",
+        wsl=True,
+        http_ok=fake_http,
+    )
+    assert out["ok"] is True
+    assert out["rewrote"] is True
+    assert out["base_url"] == "http://172.26.0.1:11434/v1"
+
+
+def test_resolve_refuses_dead_localhost_without_alternative(monkeypatch):
+    monkeypatch.setattr(fit_device, "discover_reachable_openai_base", lambda **kwargs: None)
+
+    def fake_http(url, timeout=1.5):
+        return False
+
+    out = fit_device.resolve_register_base_url(
+        "http://localhost:11434/v1",
+        wsl=True,
+        http_ok=fake_http,
+    )
+    assert out["ok"] is False
+    assert out["rewrote"] is False
+    assert "loopback-refused" in out["reason"]
 
 
 def test_official_links_include_https():
