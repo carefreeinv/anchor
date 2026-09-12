@@ -54,6 +54,14 @@ Newest first.
 
 ### Fixed
 
+- **`AIDER.md`'s `/work` trigger never reached the model** — Aider treats any
+  message starting with `/` as one of its own built-in commands and replies
+  `Invalid command: work` without ever calling the LLM, so a bare `/work` as
+  the brief instructed was silently swallowed by Aider itself, for every
+  model size. `AIDER.md` and its docs mirror (`docs/docs/platforms/aider.md`)
+  now say to type the word `work`, no leading slash — verified live against
+  Aider 0.86.2 (bare `/work` still intercepted, unchanged; `work`/`work --list`
+  reaches the model).
 - **Empty OpenAI `content` from thinking Qwen3/Ollama** — `Endpoint.chat` no
   longer treats HTTP 200 + empty `message.content` as success when the model
   burned tokens into `reasoning` / hit `finish_reason=length`. Portable fix:
