@@ -8,6 +8,18 @@ Newest first.
 
 ### Added
 
+- **`/review --batch [N]`** — opt-in batch mode reviews up to `N` (default 3)
+  top-priority `review-needed/` plans in one invocation. Every plan still
+  gets its own full pipeline and its own required, never-inferred survey —
+  batching removes re-typing `/review` between items, not per-plan sign-off.
+  An appropriateness check excludes (falls back to single-item review) a
+  `## Handoff` hold note, a large diff (>8 files or ±300 lines net vs
+  integration), or two candidates sharing a touched path (reusing
+  `/work --batch`'s `batch_dispatch.py` overlap definition rather than a
+  second one). Refuses to combine with `--skip-ai`; promotion review stays
+  single-decision, untouched by this flag. Documented in both `/review`
+  surfaces (Claude + Grok) and `docs/docs/skills/review.md`.
+
 - **`/local-models` confirmed-stack autowire** — `scripts/local_models_autowire.py`
   detects when a project's local model stack is actually confirmed (guest-reachable
   API **and** that API serves the Default-for-wire model, not just "responds") and,
