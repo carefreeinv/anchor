@@ -146,6 +146,7 @@ FLEET_FILES: list[str] = [
     "scripts/scope_gate.py",
     "scripts/roles.py",
     "scripts/worktree_for_agent.py",
+    "scripts/batch_dispatch.py",
     "scripts/fleet_watch.py",
     "scripts/prompt_tuner.py",
     "scripts/router.py",
