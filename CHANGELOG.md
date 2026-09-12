@@ -14,9 +14,10 @@ Newest first.
   batching removes re-typing `/review` between items, not per-plan sign-off.
   An appropriateness check excludes (falls back to single-item review) a
   `## Handoff` hold note, a large diff (>8 files or ±300 lines net vs
-  integration), or two candidates sharing a touched path (reusing
-  `/work --batch`'s `batch_dispatch.py` overlap definition rather than a
-  second one). Refuses to combine with `--skip-ai`; promotion review stays
+  integration), or two candidates sharing a touched path (the same overlap
+  rule `/work --batch`'s `batch_dispatch.py` applies for parallel execution,
+  restated in prose so this check is self-contained). Refuses to combine
+  with `--skip-ai`; promotion review stays
   single-decision, untouched by this flag. Documented in both `/review`
   surfaces (Claude + Grok) and `docs/docs/skills/review.md`.
 

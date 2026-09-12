@@ -186,13 +186,18 @@ a concrete reason:**
   reason `held for testing`.
 - **Large diff:** `git diff --shortstat` vs integration exceeds **8 files**
   or **±300 lines** net → excluded, reason `large diff — review single-item`.
-- **Interdependent with another candidate:** both plans' Steps `Touches`
-  columns / `## Likely touch points` share a path under the same overlap
-  definition `scripts/batch_dispatch.py` already implements for `/work
-  --batch` (exact-path match, or one entry naming a directory containing the
-  other's file) — reuse `batch_dispatch.parse_touch_points` /
-  `touch_points_overlap`, do not fork a second definition. Both excluded,
-  reason `interdependent with <other slug> — review in dependency order`.
+- **Interdependent with another candidate:** two candidates conflict if any
+  entry in one plan's Steps `Touches` columns / `## Likely touch points`
+  either exactly matches an entry in the other's, or names a directory that
+  contains one of the other's file entries (symbol suffixes like
+  `: func()` stripped before comparing — the file is the unit of conflict,
+  not the symbol). This is the same overlap rule `/work --batch`'s
+  `scripts/batch_dispatch.py` applies for parallel *execution* — restated
+  here in prose so this check is self-contained and doesn't depend on that
+  script existing or being merged; if both ever need to change, keep them in
+  sync deliberately rather than assuming one implies the other. Both
+  excluded, reason `interdependent with <other slug> — review in dependency
+  order`.
 - Fewer than **2** eligible candidates after filtering → refuse to batch;
   fall back to single-item mode with a one-line reason.
 

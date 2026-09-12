@@ -35,8 +35,8 @@ single-item review) when it:
 - carries a `## Handoff` **hold** note,
 - has a large diff (more than 8 files, or ±300 lines net), or
 - shares a touched path with another candidate in the same batch — the same
-  conflict check `/work --batch`'s `batch_dispatch.py` already computes for
-  parallel *execution*, reused here rather than reimplemented for review.
+  overlap rule `/work --batch`'s `batch_dispatch.py` applies for parallel
+  *execution*, restated in prose here so the check stands on its own.
 
 `--batch` refuses to combine with `--skip-ai` — skipping the fresh-context
 critic across several plans at once is exactly the rubber-stamp risk this

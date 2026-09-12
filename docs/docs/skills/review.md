@@ -61,11 +61,13 @@ earlier items. Before the loop starts, `/review` shows the whole batch
 
 A candidate is excluded from the batch (falls back to single-item review)
 when it: carries a `## Handoff` **hold** note, has a large diff (>8 files or
-±300 lines net), or shares a touched path with another candidate (same
-overlap check `/work --batch`'s `batch_dispatch.py` already uses) — batching
-two plans that would conflict at merge time, or rushing a human through a
-big diff back-to-back with others, defeats the point of a careful review.
-Fewer than 2 eligible plans after filtering means nothing to batch.
+±300 lines net), or shares a touched path with another candidate — an exact
+match, or one plan naming a directory containing the other's file (the same
+overlap rule `/work --batch`'s `batch_dispatch.py` applies for parallel
+execution, restated in prose here so this check stands on its own) —
+batching two plans that would conflict at merge time, or rushing a human
+through a big diff back-to-back with others, defeats the point of a careful
+review. Fewer than 2 eligible plans after filtering means nothing to batch.
 
 `--batch` refuses to combine with `--skip-ai` (skipping the fresh-context
 critic across several plans at once is exactly the rubber-stamp risk this
