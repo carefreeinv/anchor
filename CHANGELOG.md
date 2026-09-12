@@ -8,6 +8,15 @@ Newest first.
 
 ### Added
 
+- **`/work --batch [N]`** — `scripts/batch_dispatch.py` selects up to `N`
+  (default 10) ready plans whose `## Likely touch points` don't overlap, then
+  claims + creates a dedicated worktree for each (reusing existing
+  Priority/Value/fit/Depends-on rules unchanged), so an operator or
+  orchestrating session can hand each prepared plan to its own parallel
+  executor session. Never spawns an agent itself — selection + preparation
+  only. A plan with no touch-point data is excluded from batch selection and
+  still runs through ordinary serial `/work`. Documented in
+  `docs/docs/tooling/scripts.md`, both `/work` surfaces (Claude + Grok).
 - **`## Likely touch points` on plans** — `/draft` now populates an optional,
   advisory-only "Likely touch points" section (file + function/class,
   deduped, whole-plan) right after a plan's header bullets, so an executor

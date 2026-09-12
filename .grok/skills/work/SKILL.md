@@ -38,6 +38,7 @@ file. Ignore those fields if present; do not write them.
 | `/work --no-fit-check <slug>` | Execute that plan even if Preferred models say otherwise |
 | `/work <slug>` | Match `slug.md` or `slug.local.md` under ready lanes |
 | `/work .plans/features/foo.md` | Execute that path if it is a ready-lane file |
+| `/work --batch [N]` | Select + prepare up to `N` (default 10) mutually non-conflicting ready plans for **parallel** dispatch; does not execute any of them itself — see "Batch dispatch" below |
 
 `$ARGUMENTS` is everything after `/work`. Parse flags and the optional target from it.
 
@@ -613,6 +614,42 @@ missing). Optional `--slug` checks out `feature/<slug>` inside the worktree.
    - **Never** commit on `main`/`master`/`dev`/`develop`. Merging happens only as
      §6 describes: operator asked, operator answered, gate passed. Unattended runs
      hand off to **`/review`** instead.
+
+## Batch dispatch (`--batch`)
+
+`/work --batch [N]` (default `N=10`) hands off to `scripts/batch_dispatch.py`
+to select **up to N** ready plans whose declared `## Likely touch points` (see
+`plan-touch-map`) don't overlap, then claims + creates a dedicated worktree
+for each one — so up to N *separate* executor sessions can run them in
+parallel with a low a-priori chance of merge conflicts or shared-file races.
+
+**This never spawns, launches, or runs an agent itself.** Anchor doesn't run
+its own agents: the command's entire output is a prepared batch — for each
+selected plan, its (now-claimed) path, its dedicated worktree path, its
+feature branch, and the agent-id whose lease owns it. An operator, or an
+orchestrating session's own subagent/Task mechanism, is what actually runs K
+parallel executor sessions against that prepared batch — one per entry,
+each `cd`'d into its own worktree.
+
+```bash
+python scripts/batch_dispatch.py --root <repo> --max 10 --tier <yours> --claim
+```
+
+Omit `--claim` first to preview the selection (which plans would be picked,
+which are skipped as conflicting, which are excluded for having no touch-map
+data) before committing to claims + worktrees. A plan with **no** `## Likely
+touch points` data is excluded from the batch entirely — conservative by
+design; it can still run through ordinary serial `/work`.
+
+**Partial success is normal**, not a failure: if claiming one plan races
+another agent between selection and claim, the batch reports the rest as
+successfully prepared plus one skip-with-reason, rather than aborting.
+
+This is orthogonal to **parallel review**: `/review`'s "one decision per
+invocation" rule is unchanged by this flag; a batch-dispatch of *execution*
+across several worktrees has no bearing on how each finished plan is later
+reviewed one at a time (see `review-batch-queue` for that separate,
+review-side story — this flag does not touch `/review`'s doctrine).
 
 ## Out of scope
 
