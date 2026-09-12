@@ -8,6 +8,14 @@ Newest first.
 
 ### Added
 
+- **`## Likely touch points` on plans** — `/draft` now populates an optional,
+  advisory-only "Likely touch points" section (file + function/class,
+  deduped, whole-plan) right after a plan's header bullets, so an executor
+  sees roughly where to look before reading the rest of the plan. Never
+  authoritative and never enforced — the per-step Steps `Touches` column and
+  a task spec's scope-gate-checked `## Files in scope` are unchanged.
+  Documented in `anchor/templates/plan.md`, `.plans/README.md`, both
+  `/draft` surfaces (Claude + Grok), and `docs/docs/skills/draft.md`.
 - **`aider` platform** — `anchor --platform aider` scaffolds `AIDER.md` (drone
   brief: queen-bee plans, Aider runs `/work` only — no draft/review/merge) and
   a tracked `.aider.conf.yml.example` (`read: AIDER.md`). No slash-command

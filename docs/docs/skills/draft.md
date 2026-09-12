@@ -79,6 +79,8 @@ Fill `.anchor/templates/plan.md` (Preferred models + Depends on after inventory)
 
 Populate `## Progress` **last**, after `## Steps` and `## Done when` exist: one `- [ ] Step N: <short label>` bullet per Steps-table row, plus a trailing `- [ ] Done when holds` bullet, all `[ ]` at draft time. Advisory only — `/work` keeps it in sync as execution proceeds; optional and never retrofitted on plans that predate it.
 
+Populate `## Likely touch points` **last too**, once `## Context read` and `## Steps` have surfaced real files/symbols: a short, deduped, whole-plan list (file, and a function/class name when known) so a lesser executor sees roughly where to look before reading the rest of the plan. Advisory/best-effort only — never invent a plausible file/symbol; write "not applicable" for a genuinely exploratory plan. Never changes what's enforced: the per-step `Touches` column and a task spec's `## Files in scope` (scope-gate-checked) stay authoritative.
+
 ### Promote
 User passes `--promote <slug>` (or `promote <slug>`). Agent reads the plan and chooses:
 

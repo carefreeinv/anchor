@@ -174,6 +174,9 @@ blocker is cleared.
 - **Assignee:** ai                   # optional; default ai. A name/username/email (or `human`) = a person completes it, agents auto-skip claiming
 - **Depends on:** <slug-a, slug-b | none>
 
+## Likely touch points          # optional, advisory/best-effort only — not enforced
+- path/to/file.ext: function_or_class()   # why an executor would touch it
+
 ## Goal
 ...
 ```
