@@ -8,6 +8,16 @@ Newest first.
 
 ### Added
 
+- **`/local-models` confirmed-stack autowire** — `scripts/local_models_autowire.py`
+  detects when a project's local model stack is actually confirmed (guest-reachable
+  API **and** that API serves the Default-for-wire model, not just "responds") and,
+  on operator confirm, writes a machine-local `var/endpoints.local.yaml` overlay,
+  the gitignored `.env` (reusing `write_aider_env.py`), an idempotent conventions
+  note, and — when `aider` is on `$PATH` — `.aider.conf.yml` plus a portable
+  launcher (`hardware/personal-devices/configs/aider-ollama-launcher.sh`).
+  Detection never writes; only an explicit yes does. Never installs Ollama or
+  pulls weights. Documented in `docs/docs/skills/local-models.md` and both
+  `/local-models` surfaces (Claude + Grok).
 - **`## Likely touch points` on plans** — `/draft` now populates an optional,
   advisory-only "Likely touch points" section (file + function/class,
   deduped, whole-plan) right after a plan's header bullets, so an executor

@@ -233,6 +233,46 @@ assuming every clone can run the same local.
 6. State this policy in the report and in any draft (`## Routing policy` /
    multi-machine note).
 
+### 5c. Confirmed-stack autowire (project context only)
+
+Between the report and the follow-up offer, in a **scaffolded project** (not
+the Anchor checkout itself — C4), check for a **confirmed** stack:
+
+```bash
+python3 scripts/local_models_autowire.py --detect      # or .anchor/scripts/…
+```
+
+**Confirmed** means both hard gates hold — reachability alone is not enough:
+
+1. a guest-reachable OpenAI-compatible API answered (the probe's own
+   Reachable API check), **and**
+2. that API's `/models` actually **lists** the Default-for-wire model id —
+   not just "responds." An unmapped/undetected model id means **not
+   confirmed**, even if the API is reachable.
+
+`aider` on `$PATH` is optional — it gates only the `.aider.conf.yml`/launcher
+part of the write set, not the endpoints/`.env` part.
+
+**If confirmed:** ask **"Wire this project?" (Y/N)** — separate from, and
+before, the draft offer in step 6B (a confirmed stack needs no plan/human
+follow-through; an unconfirmed one still gets the draft path). On yes:
+
+```bash
+python3 scripts/local_models_autowire.py --project <project> --write
+```
+
+Writes, all idempotent (C5) and machine-local only (C2): a `var/endpoints.local.yaml`
+overlay (memory-safer **Default for wire** model, never Max fit — C3b), the
+gitignored `.env` via `write_aider_env.py` (`aider-wsl-ollama-api-base-env`'s
+own contract — reused, not reforked), an idempotent conventions note (only
+appended if the project already has a conventions file — never invents one),
+and — only when `aider` is on `$PATH` — `.aider.conf.yml` plus a copied
+portable launcher (`scripts/aider-ollama.sh`).
+
+**If declined, or gates not confirmed:** write nothing; fall through to the
+step 6B draft offer as before. Never installs Ollama or pulls weights here —
+detection is read-only; only an explicit "yes" writes anything (C1).
+
 ### 6. Offer follow-up (required close)
 
 After the report (and **before** ending the turn), offer the right follow-up for
@@ -257,7 +297,10 @@ host’s VRAM.
 
 #### B. In a scaffolded project — portable intent + machine-local wire-up
 
-Ask whether to create a **draft** under **`./.plans/drafts/`** that:
+If step 5c already confirmed the stack and wired it on a "yes," skip this —
+the project is wired, not merely drafted. Otherwise (not confirmed, or the
+operator declined 5c's wire offer), ask whether to create a **draft** under
+**`./.plans/drafts/`** that:
 
 - Installs/serves the model on **this** host (Prerequisites)
 - Registers a **machine-local** endpoint (gitignored overlay preferred for

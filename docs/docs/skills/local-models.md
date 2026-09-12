@@ -63,6 +63,33 @@ ensures `.gitignore` covers `.env`/`.env.*` so the machine-local value is
 never committed. Never installs or configures Aider itself — only wires the
 endpoint an already-configured Aider project needs to reach it.
 
+## Confirmed-stack autowire
+
+In a **scaffolded project** (not the Anchor checkout itself), `/local-models`
+checks for a **confirmed** stack after the report — reachable **and** the
+API actually serves the Default-for-wire model, not just "responds":
+
+```bash
+python scripts/local_models_autowire.py --detect   # or .anchor/scripts/…
+```
+
+If confirmed, the skill asks **"Wire this project?"**. On yes:
+
+```bash
+python scripts/local_models_autowire.py --project <project> --write
+```
+
+Writes, all idempotent and machine-local only: a `var/endpoints.local.yaml`
+overlay (Default-for-wire model, never Max fit), the gitignored `.env` (via
+`write_aider_env.py`, above), an idempotent conventions note (only if the
+project already has a conventions file), and — only when `aider` is on
+`$PATH` — `.aider.conf.yml` plus a copied portable launcher
+(`scripts/aider-ollama.sh`, from `hardware/personal-devices/configs/`).
+Detection never writes anything; only an explicit "yes" does. Never installs
+Ollama or pulls model weights — detected-existing stacks only. Autowire when
+already serving beats the slower `/local-models-config` → `/local-models-ensure`
+declare/converge path for projects that just need "use what's already up."
+
 ## CLI (no agent)
 
 ```bash
