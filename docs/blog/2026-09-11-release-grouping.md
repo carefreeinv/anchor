@@ -55,7 +55,7 @@ done.
 
 ```bash
 python scripts/release_progress.py --list
-local-inference-optimizations    open     12/17 complete (5 remaining)
+v0.3.0                            open     12/17 complete (5 remaining)
 ```
 
 `--status <slug>` gives the member breakdown; `--json` for tooling. A plan
