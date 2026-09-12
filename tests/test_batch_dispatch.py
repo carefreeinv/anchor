@@ -177,3 +177,28 @@ def test_prepare_batch_partial_success_on_claim_race(tmp_path):
     assert by_slug["plan1"].ok is True
     assert by_slug["plan2"].ok is False
     assert "claim failed" in by_slug["plan2"].error
+
+
+# --- fit filter (C3: same gate solo /work applies) -----------------------
+
+def test_select_batch_excludes_underqualified_fit_plan(tmp_path):
+    plans = _tree(tmp_path)
+    _plan(plans / "features/goodfit.md", touch_points=["scripts/a.py"], preferred="mid")
+    _plan(plans / "features/toohard.md", touch_points=["scripts/b.py"], preferred="frontier")
+    worker = Worker(name="some-mid-model", tier="mid")
+
+    result = bd.select_batch(plans, tmp_path, worker, max_n=10)
+
+    selected_slugs = [c.record.slug for c in result.selected]
+    assert "goodfit" in selected_slugs
+    assert "toohard" not in selected_slugs
+
+
+def test_select_batch_no_fit_check_includes_underqualified_plan(tmp_path):
+    plans = _tree(tmp_path)
+    _plan(plans / "features/toohard.md", touch_points=["scripts/b.py"], preferred="frontier")
+    worker = Worker(name="some-mid-model", tier="mid")
+
+    result = bd.select_batch(plans, tmp_path, worker, max_n=10, no_fit_check=True)
+
+    assert [c.record.slug for c in result.selected] == ["toohard"]

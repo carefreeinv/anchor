@@ -38,6 +38,7 @@ from pathlib import Path
 from plan_lease import ClaimError, claim_and_move
 from plan_parse import safe_read_text, strip_code_fences
 from plan_select import (
+    Fit,
     PlanRecord,
     Worker,
     inventory_ready,
@@ -179,13 +180,18 @@ def select_batch(
     worker: Worker,
     *,
     max_n: int = 10,
+    no_fit_check: bool = False,
 ) -> SelectionResult:
     """Pick up to ``max_n`` mutually non-conflicting ready plans.
 
-    Reuses ``plan_select.inventory_ready`` unchanged for Priority → Value →
-    fit → Depends-on filtering (C3) — this function only adds the touch-point
-    conflict filter on top. Greedy: walk the existing priority order, keep a
-    plan iff it conflicts with none of the plans already selected.
+    Reuses ``plan_select.inventory_ready`` for the ready-plan pool and its
+    Priority → Value → oldest-mtime ordering — this function adds the
+    touch-point conflict filter, and (unless ``no_fit_check``) the same
+    fit gate solo ``/work`` applies (C3): a plan whose fit for ``worker`` is
+    not ``GOOD``/``UNKNOWN`` is excluded from the batch exactly as a solo
+    session would skip it, mirroring ``plan_select.select_one``'s own gate.
+    Greedy: walk the existing priority order, keep a plan iff it conflicts
+    with none of the plans already selected.
     """
     records = inventory_ready(plans_root, worker)
     # inventory_ready already sorts by plan_sort_key; walk in that order.
@@ -196,6 +202,8 @@ def select_batch(
             continue  # C3: unmet Depends on excluded same as solo /work
         if not rec.agent_assignable:
             continue  # C3: human-assigned plans excluded same as solo /work
+        if not no_fit_check and rec.fit not in (Fit.GOOD, Fit.UNKNOWN):
+            continue  # C3: poor fit excluded same as solo /work
         tps = touch_points_for_plan(rec.path, project_root)
         if not tps:
             excluded_no_touch_map.append(rec)
@@ -302,10 +310,11 @@ def _main(argv: list[str] | None = None) -> int:
         return 2
 
     worker = worker_with_effort(args.model or args.tier, args.tier, args.effort)
-    if args.no_fit_check:
-        worker = Worker(name="unknown", tier="mid")  # matches nothing → Fit.UNKNOWN, always eligible
 
-    result = select_batch(plans_root, project_root, worker, max_n=max(1, args.max))
+    result = select_batch(
+        plans_root, project_root, worker,
+        max_n=max(1, args.max), no_fit_check=args.no_fit_check,
+    )
 
     prep: list[PrepResult] = []
     if args.claim:
