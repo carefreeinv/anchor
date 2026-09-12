@@ -62,6 +62,15 @@ Newest first.
 
 ### Fixed
 
+- **Bare `aider` connection-refused on WSL against host Ollama** — Aider reads
+  `OLLAMA_API_BASE` from a repo-root `.env`, but nothing wrote a
+  guest-reachable value there, so a plain `aider` invocation failed with
+  `OllamaError: … Connection refused` even when the host Ollama was healthy.
+  New `scripts/write_aider_env.py` reuses `fit_device.py`'s reachable-`base_url`
+  discovery and writes it into a gitignored `.env` (idempotent — refreshes only
+  that line after a reboot/gateway change; also ensures `.gitignore` covers
+  `.env`). Documented in `docs/docs/skills/local-models.md` and both
+  `/local-models` surfaces (Claude + Grok).
 - **`AIDER.md`'s `/work` trigger never reached the model** — Aider treats any
   message starting with `/` as one of its own built-in commands and replies
   `Invalid command: work` without ever calling the LLM, so a bare `/work` as

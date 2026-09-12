@@ -151,6 +151,7 @@ FLEET_FILES: list[str] = [
     "scripts/router.py",
     "scripts/benchmark.py",
     "scripts/fit_device.py",
+    "scripts/write_aider_env.py",
     "scripts/endpoints.yaml",
     "scripts/requirements.txt",
     "mcp/anchor-prompts/server.py",

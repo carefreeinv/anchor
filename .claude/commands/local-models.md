@@ -16,7 +16,10 @@ allowed-tools: Bash(*), Read, Write, Edit
    - **this host only** — other clones of the same repo need their own probe
    - **executor placement** (prefer Windows host when under WSL)
    - **Default for wire** (memory-safer) + **Max fit** (ceiling) from
-     `fit_device.py --probe` — wire Aider/`.env` to the default; name opt-up
+     `fit_device.py --probe` — on WSL/Aider projects, offer
+     `write_aider_env.py --root <project>` to wire the reachable base into a
+     gitignored `.env` (bare `aider` else Connection-refuses against guest
+     `localhost`); name opt-up
    - **Reachable API** `base_url` from the probe (loopback → gateway →
      `resolv.conf`); never register dead WSL `localhost` when only the host
      gateway answers

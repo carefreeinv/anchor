@@ -126,7 +126,11 @@ docs) so the client can render clickable links.
 4. **Recommended models** — report **both** answers from `fit_device.py --probe`:
    - **Default for wire** (memory-safer) — what Aider / `.env` / launcher should
      get unless the operator opts up (uses free/available RAM × safety factor;
-     WSL/iGPU/≤24GB class biases smallest when free is unknown/tight)
+     WSL/iGPU/≤24GB class biases smallest when free is unknown/tight). On a
+     project with Aider (`.aider.conf.yml` or an `ollama_*` model detected),
+     offer `python scripts/write_aider_env.py --root <project>` to write the
+     probe's reachable `base_url` into a gitignored `.env` — bare `aider`
+     otherwise Connection-refuses against guest `localhost` on WSL.
    - **Max fit** (capability ceiling) — largest catalog entry under usable budget;
      name the one explicit opt-up action (confirm / env / `--8b`-style flag)
    - For each: name, size, Anchor tier, why it fits **here**, links (quick start
