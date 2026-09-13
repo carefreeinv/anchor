@@ -38,14 +38,20 @@ the empty-queue promotion path.
 | `/review --promote` | Force **promotion** mode (refuses if not ahead); ignore plan pick |
 | `/review --no-promote` | Empty queue → stop without offering promotion |
 | `/review --push` | After a **successful local merge**, also offer/confirm `git push` of the updated branch(es) |
+| `/review --batch [N]` | **Opt-in** batch mode: review up to `N` (default 3) top-priority `review-needed/` plans in one invocation, each with its own full pipeline and its own required survey — see "Batch mode" below. Refuses to combine with `--skip-ai`. |
 
 Flags may combine with a slug: `/review --no-launch my-slug`.
 
 ## Hard rules
 
-1. **One decision per invocation.** Either one plan review **or** one promotion
-   review — never both, never auto-start the next plan. Footer may note remaining
-   queue count only.
+1. **One decision per invocation — unless the human opted into `--batch` for
+   this invocation.** Bare `/review` (and every other flag) keeps this exact
+   behavior unchanged: either one plan review **or** one promotion review,
+   never both, never auto-start the next plan; footer may note remaining
+   queue count only. `--batch [N]` is the one explicit exception: it repeats
+   the full per-plan pipeline (including a **required, never-inferred survey
+   per plan** — see "Batch mode" below) up to `N` times in one invocation.
+   Promotion review is never batched, even with `--batch` set — see Batch mode.
 2. **Pipeline order** (plan mode):
 
    ```text
@@ -109,7 +115,12 @@ If missing: explain and stop.
 ## 2. Select mode and target
 
 Parse flags: `--list`, `--skip-ai`, `--no-launch`, `--promote`, `--no-promote`,
-`--push`, optional slug.
+`--push`, `--batch [N]`, optional slug.
+
+**`--batch [N]`:** refuses if combined with `--skip-ai` (usage error — state
+why, stop) or with a slug/`--promote` (batch mode picks its own set; a named
+target is a single-plan session). Otherwise see **Batch mode** below instead
+of the single-pick steps that follow.
 
 **`--list`:** list each `review-needed/*.{md,local.md}` (skip `.gitkeep`): path,
 Priority, Value, Goal one-liner, whether `feature/<slug>` exists. Also print one
@@ -148,6 +159,72 @@ command (`/work`, `/draft`, …). Plan mode.
    one-liner; stop.
 
 A named slug or `--promote` is already an explicit direction — no ask.
+
+## Batch mode (`--batch [N]`, opt-in)
+
+**Never the default.** Batch mode chains **N complete, independent** review
+cycles in one invocation — it does not introduce a batched AI verdict or a
+batched merge. Never applies to promotion review: `--batch` on an empty
+`review-needed/` queue falls through to bare promotion mode exactly as
+`/review` does today (single decision).
+
+**1. Build the candidate pool.** Same Priority → Value → oldest-mtime order
+the single-item picker already uses — no second ranking scheme.
+
+**2. Appropriateness check — refuse per-candidate, not the whole batch, with
+a concrete reason:**
+
+- **Hold note:** a candidate's `## Handoff` section starts `hold —` → excluded,
+  reason `held for testing`.
+- **Large diff:** `git diff --shortstat` vs integration exceeds **8 files**
+  or **±300 lines** net → excluded, reason `large diff — review single-item`.
+- **Interdependent with another candidate:** two candidates conflict if any
+  entry in one plan's Steps `Touches` columns / `## Likely touch points`
+  either exactly matches an entry in the other's, or names a directory that
+  contains one of the other's file entries (symbol suffixes like
+  `: func()` stripped before comparing — the file is the unit of conflict,
+  not the symbol). This is the same overlap rule `/work --batch`'s
+  `scripts/batch_dispatch.py` applies for parallel *execution* — restated
+  here in prose so this check is self-contained and doesn't depend on that
+  script existing or being merged; if both ever need to change, keep them in
+  sync deliberately rather than assuming one implies the other. Both
+  excluded, reason `interdependent with <other slug> — review in dependency
+  order`.
+- Fewer than **2** eligible candidates after filtering → refuse to batch;
+  fall back to single-item mode with a one-line reason.
+
+**3. Cap:** take the top `N` eligible candidates (default **3**) by the same
+ordering. `N` above the default is allowed only when the human passed it
+explicitly — never auto-raised.
+
+**4. Present the queue overview before starting** — every plan the batch
+will cover (slug · Priority · Value · one-line Goal), plus every excluded
+candidate and its reason. The human sees the whole batch before the first
+survey question, not one item at a time.
+
+**5. Run the existing per-plan pipeline once per candidate, in order,
+unchanged in shape:**
+
+```text
+select (from the pre-batch snapshot) → checkout (if safe) → evidence
+  → fresh-context AI critic (never shared context with a sibling item)
+  → present package → survey (Approve / Needs Work / Skip / Defer)
+  → follow-ups → merge (Approve only) → lane move → next item
+```
+
+The survey is **required per item, never skipped, never inferred** from
+earlier items in the same batch — "the last two were Approve" is not a
+reason to stop asking. Each item's fresh-context critic runs independently;
+no shared context between siblings (Anchor self-review rule, same as
+single-item mode).
+
+**6. Abort mid-batch is always available.** The human may stop after any
+item's survey. Already-completed items' merges/lane-moves stand (each was
+independently confirmed); remaining items return to `review-needed/`
+untouched — report which items landed and which didn't.
+
+**7. Footer** notes the batch outcome per item (Approved+merged / Needs
+Work / Skipped / Deferred), not just a single decision line.
 
 ## 3. Load plan (plan mode)
 
@@ -445,7 +522,9 @@ after a plan Approve in the same invocation (human re-runs `/review`).
 - Executing plan Steps (`/work`)
 - Promoting drafts (`/draft --promote`)
 - Merging without survey Approve/Promote
-- Reviewing more than one plan per invocation
+- Reviewing more than one plan per invocation, **unless** the human opted
+  into `--batch [N]` for this invocation (see "Batch mode") — every item in
+  a batch still gets its own full pipeline and its own required survey
 - AI auto-Approve without human survey
 - Moving Needs Work into `in-progress/`
 - Force-push, `--no-verify`, deleting feature branches by default
