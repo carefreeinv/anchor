@@ -364,19 +364,12 @@ the queue moving. Small models do not grab architecture plans to "try hard."
 - Inventory: your `in-progress/` (if any), then ready `bugs/`, `features/`.
   **Ignore** foreign `in-progress/` files. Skim headers for Priority, Value, and
   Preferred models only (not Status/Lane).
-- **Release completion check** (interactive sessions only — same gating as
-  the culmination question §6; skip entirely on unattended/`work_once.py`/
-  fleet runs): `python scripts/release_progress.py --list --root .`. For each
-  release reported `Status: open` with every member plan in `completed/` (no
-  `unknown-release` orphans), ask **once**: *"Release `<slug>` is fully
-  complete — prepare it for deployment? `/release` does the tagging; never
-  auto-run here."* On **any** answer, run
-  `python scripts/release_progress.py --mark-ready <slug> --root .` so the
-  question isn't asked again next time — re-opening (a plan bounced back out
-  of `completed/`, or a new plan later pointing at the same release) is the
-  only thing that should trigger it again, and that happens naturally because
-  `completed == total` stops holding. This check never blocks or changes plan
-  selection below — it's a side question, then continue normally.
+- **Release completion check** (interactive only; skip on unattended/`work_once.py`/
+  fleet runs, same gating as §6's culmination question):
+  `python scripts/release_progress.py --list --root .`. A `Status: open` release with
+  all members in `completed/` → ask **once** whether to prepare it for deployment,
+  then `--mark-ready <slug>` on any answer. Never auto-run `/release`, never let it
+  change plan selection. Detail: `docs/docs/tooling/scripts.md`.
 
 ### 2. Parse arguments
 

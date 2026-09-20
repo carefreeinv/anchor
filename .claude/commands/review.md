@@ -106,16 +106,12 @@ Optional ahead advisory: `python scripts/pending_merges.py`.
 Find a root with `.plans/` (CWD, then git root). Print the absolute path.
 If missing: explain and stop.
 
-**Release completion check** (interactive sessions only — same gating as
-`/work`'s culmination question; skip on unattended runs):
-`python scripts/release_progress.py --list --root .`. For each release
-reported `Status: open` with every member plan in `completed/` (no
-`unknown-release` orphans), ask **once**: *"Release `<slug>` is fully
-complete — prepare it for deployment? `/release` does the tagging; never
-auto-run here."* On **any** answer, run
-`python scripts/release_progress.py --mark-ready <slug> --root .` so the
-question isn't asked again next time. This check never changes or blocks mode
-selection below — it's a side question, then continue normally.
+**Release completion check** (interactive only; skip on unattended runs, same
+gating as `/work`'s culmination question):
+`python scripts/release_progress.py --list --root .`. A `Status: open` release with
+all members in `completed/` → ask **once** whether to prepare it for deployment,
+then `--mark-ready <slug>` on any answer. Never auto-run `/release`, never let it
+change mode selection. Detail: `docs/docs/tooling/scripts.md`.
 
 ## 2. Select mode and target
 

@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from release_progress import scan_releases, parse_release_field
+from release_progress import parse_release_field, scan_releases
 
 
 def _plan(path: Path, *, release: str | None = None, title: str = "t") -> None:
