@@ -94,6 +94,21 @@ Newest first.
 
 ### Fixed
 
+- **Aider's machine-local files are no longer offered for staging** — a project
+  scaffolded with `anchor --platform aider` now ignores `.aider.conf.yml`,
+  `.aider.model.settings.yml` and Aider's session artifacts
+  (`.aider.chat.history.md`, `.aider.input.history`, `.aider.llm.history`,
+  `.aider.tags.cache.v*/`). The ignore list has a single definition in
+  `scripts/write_aider_env.py`, beside the existing `.env` contract, and is
+  ensured on scaffold, backfilled by `anchor <project-dir> --upgrade` for
+  projects created before the rules existed, and applied by
+  `local_models_autowire.py` before it writes `.aider.conf.yml`. The config
+  entries are root-anchored so the `.example` files Anchor ships stay tracked;
+  an existing `.aider*` catch-all is treated as coverage rather than stacked on.
+  Anchor's own `.gitignore` swaps that catch-all for the root-anchored rules,
+  which no longer shadow `platforms/aider/.aider.conf*.yml.example` or a
+  generated `.aiderignore`.
+
 - **CI's Lint job is green again** — `ruff check .` had been failing on every
   branch for two unrelated findings, so a red Lint result carried no signal.
   `scripts/fit_device.py` dropped the redundant `socket.timeout` from

@@ -288,6 +288,10 @@ def write_project_stack(
     _, _, env_action = write_aider_env.write_env_file(project_dir, ollama_base, dry_run=dry_run)
     results["env"] = env_action
     results["env_gitignore"] = write_aider_env.ensure_env_gitignored(project_dir, dry_run=dry_run)
+    # The write set below drops machine-local Aider config into the project
+    # root; ignore it (and Aider's session artifacts) before it can be staged.
+    results["aider_gitignore"] = write_aider_env.ensure_aider_gitignored(
+        project_dir, dry_run=dry_run)
 
     results["conventions"] = write_conventions_note(project_dir, stack, dry_run=dry_run)
 

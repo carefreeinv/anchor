@@ -40,6 +40,22 @@ OLLAMA_DUMMY_OPENAI_KEY = "ollama"
 ENV_GITIGNORE_COMMENT = "# Anchor-managed: local Ollama endpoint for bare `aider` (never commit)"
 ENV_GITIGNORE_ENTRIES = (".env", ".env.*", "!.env.example")
 
+# Aider's own machine-local files. `.aider.conf.yml` / `.aider.model.settings.yml`
+# are written per host (model tag, num_ctx, reasoning toggle) and the history /
+# cache files are session noise — none of it belongs in a shared repo, and the
+# `.example` files the scaffold ships stay tracked because the root-anchored
+# `/` patterns can't match them. Session artifacts are left unanchored: Aider
+# writes them beside whichever directory it is launched from.
+AIDER_GITIGNORE_COMMENT = "# Anchor-managed: machine-local Aider config + session artifacts (never commit)"
+AIDER_GITIGNORE_ENTRIES = (
+    "/.aider.conf.yml",
+    "/.aider.model.settings.yml",
+    ".aider.chat.history.md",
+    ".aider.input.history",
+    ".aider.llm.history",
+    ".aider.tags.cache.v*/",
+)
+
 
 def strip_v1_suffix(base_url: str) -> str:
     """``http://host:port/v1`` -> ``http://host:port`` (Ollama's own API, not
@@ -122,27 +138,77 @@ def _gitignore_covers_env(text: str) -> bool:
     return False
 
 
-def ensure_env_gitignored(project_dir: Path, *, dry_run: bool = False) -> str:
-    """Ensure project root ``.gitignore`` covers ``.env``. Returns an action
-    label: ``created`` | ``updated`` | ``unchanged`` | ``would-update``."""
+def _append_gitignore_block(project_dir: Path, comment: str, entries: tuple[str, ...],
+                            *, dry_run: bool) -> str:
+    """Append ``comment`` + ``entries`` to the project root ``.gitignore``.
+
+    Returns an action label: ``created`` | ``updated`` | ``would-create`` |
+    ``would-update``. Callers decide what is already covered — this only writes.
+    """
     gi = project_dir / ".gitignore"
+    block = comment + "\n" + "\n".join(entries) + "\n"
     if gi.is_file():
-        text = gi.read_text(encoding="utf-8")
-        if _gitignore_covers_env(text):
-            return "unchanged"
         if dry_run:
             return "would-update"
+        text = gi.read_text(encoding="utf-8")
         if text and not text.endswith("\n"):
             text += "\n"
         if text and not text.endswith("\n\n"):
             text += "\n"
-        text += ENV_GITIGNORE_COMMENT + "\n" + "\n".join(ENV_GITIGNORE_ENTRIES) + "\n"
-        gi.write_text(text, encoding="utf-8")
+        gi.write_text(text + block, encoding="utf-8")
         return "updated"
     if dry_run:
         return "would-create"
-    gi.write_text(ENV_GITIGNORE_COMMENT + "\n" + "\n".join(ENV_GITIGNORE_ENTRIES) + "\n", encoding="utf-8")
+    gi.write_text(block, encoding="utf-8")
     return "created"
+
+
+def ensure_env_gitignored(project_dir: Path, *, dry_run: bool = False) -> str:
+    """Ensure project root ``.gitignore`` covers ``.env``. Returns an action
+    label: ``created`` | ``updated`` | ``unchanged`` | ``would-update``."""
+    gi = project_dir / ".gitignore"
+    if gi.is_file() and _gitignore_covers_env(gi.read_text(encoding="utf-8")):
+        return "unchanged"
+    return _append_gitignore_block(project_dir, ENV_GITIGNORE_COMMENT,
+                                   ENV_GITIGNORE_ENTRIES, dry_run=dry_run)
+
+
+# Aider offers to append a catch-all `.aider*` to `.gitignore` on first run in a
+# repo. It is broader than Anchor's list (it would also swallow a project's
+# `.aider.conf.yml.example`), but it does cover every entry below — so treat it
+# as coverage rather than stacking a second, redundant block underneath it.
+AIDER_CATCHALL_ENTRIES = frozenset({".aider*", "/.aider*", ".aider**", "/.aider**"})
+
+
+def _missing_aider_entries(text: str) -> tuple[str, ...]:
+    """Which AIDER_GITIGNORE_ENTRIES the given .gitignore text does not already
+    carry. An entry counts as present whether or not it is root-anchored, so a
+    project that hand-wrote ``.aider.conf.yml`` is not given a duplicate."""
+    present = {line.strip() for line in text.splitlines()
+               if line.strip() and not line.strip().startswith("#")}
+    if present & AIDER_CATCHALL_ENTRIES:
+        return ()
+    unanchored = {e.lstrip("/") for e in present}
+    return tuple(e for e in AIDER_GITIGNORE_ENTRIES if e.lstrip("/") not in unanchored)
+
+
+def ensure_aider_gitignored(project_dir: Path, *, dry_run: bool = False) -> str:
+    """Ensure project root ``.gitignore`` covers Aider's machine-local config
+    and session artifacts. Returns an action label: ``created`` | ``updated`` |
+    ``unchanged`` | ``would-create`` | ``would-update``.
+
+    Only the missing entries are appended, so re-running after a partial
+    hand-written block does not duplicate lines.
+    """
+    gi = project_dir / ".gitignore"
+    if gi.is_file():
+        missing = _missing_aider_entries(gi.read_text(encoding="utf-8"))
+        if not missing:
+            return "unchanged"
+    else:
+        missing = AIDER_GITIGNORE_ENTRIES
+    return _append_gitignore_block(project_dir, AIDER_GITIGNORE_COMMENT, missing,
+                                   dry_run=dry_run)
 
 
 def _main(argv: list[str] | None = None) -> int:
@@ -176,6 +242,8 @@ def _main(argv: list[str] | None = None) -> int:
     if not args.no_gitignore:
         gi_action = ensure_env_gitignored(project_dir, dry_run=args.dry_run)
         print(f"gitignore: {gi_action} ({project_dir / '.gitignore'})")
+        aider_action = ensure_aider_gitignored(project_dir, dry_run=args.dry_run)
+        print(f"gitignore (aider local files): {aider_action}")
 
     return 0
 
