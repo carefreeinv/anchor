@@ -42,7 +42,6 @@ from plan_select import (
     PlanRecord,
     Worker,
     inventory_ready,
-    plan_sort_key,
     plans_root_for,
     worker_with_effort,
 )

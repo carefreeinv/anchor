@@ -34,7 +34,6 @@ import os
 import platform
 import re
 import shutil
-import socket
 import subprocess
 import urllib.error
 import urllib.request
@@ -268,7 +267,7 @@ def http_get_ok(url: str, *, timeout: float = 1.5) -> bool:
         req = urllib.request.Request(url, method="GET", headers={"User-Agent": "anchor-fit-device/1"})
         with urllib.request.urlopen(req, timeout=timeout) as resp:
             return int(getattr(resp, "status", 200) or 200) < 500
-    except (urllib.error.URLError, TimeoutError, socket.timeout, OSError):
+    except (urllib.error.URLError, TimeoutError, OSError):
         return False
 
 

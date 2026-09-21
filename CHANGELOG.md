@@ -94,6 +94,16 @@ Newest first.
 
 ### Fixed
 
+- **CI's Lint job is green again** — `ruff check .` had been failing on every
+  branch for two unrelated findings, so a red Lint result carried no signal.
+  `scripts/fit_device.py` dropped the redundant `socket.timeout` from
+  `http_get_ok`'s `except` tuple (since Python 3.10 it *is* `TimeoutError`,
+  already listed) along with its now-unused `import socket`, and
+  `scripts/batch_dispatch.py` dropped a dead `plan_sort_key` import
+  (`inventory_ready` already sorts). No behavior change: the probe still
+  returns `False` rather than raising on a refused connection, and batch
+  ordering is unchanged.
+
 - **Bare `aider` connection-refused on WSL against host Ollama** — Aider reads
   `OLLAMA_API_BASE` from a repo-root `.env`, but nothing wrote a
   guest-reachable value there, so a plain `aider` invocation failed with
