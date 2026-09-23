@@ -27,6 +27,7 @@ Plans are git-tracked markdown under the **`.plans/`** dotdir. Do not gitignore 
 | `/work <slug>` | Match `slug.md` or `slug.local.md` under ready lanes |
 | `/work .plans/features/foo.md` | Execute that path if it is a ready-lane file |
 | `/work in-progress/<slug>.md` | Explicit named resume of **your own** in-progress work (leased or your just-expired lease) |
+| `/work --batch [N]` | **Opt-in**: select and prepare up to `N` (default 10) non-conflicting ready plans for *separate* parallel sessions — never runs them |
 
 ## Lanes
 
@@ -137,6 +138,35 @@ flowchart LR
 Mid-session stop: leave the file in **`in-progress/`** with a short `## Progress` note. Other agents must ignore it. Half-baked → `ambiguous/`; stuck → `blocked/` or return to ready. When Done when holds → `review-needed/` by default; the human then runs [**`/review`**](/skills/review) (AI critic + survey) to **Approve** (merges `feature/<slug>` → dev, then → `completed/`), Needs Work → `bugs|features/`, or Skip. The one exception is the culmination question above: if the operator answers **merge to `dev` now** and the scoped gate passes, the plan goes straight to `completed/` with a `## Handoff` note. Agents never archive to `completed/` on their own judgment, and never merge unasked.
 
 **`## Progress` checklist (optional, template-recommended):** a `- [ ] Step N: <label>` bullet per Steps-table row plus a trailing `- [ ] Done when holds` bullet, populated by `/draft` after Steps/Done when exist. `/work` checks off a Step bullet once its Verify by passes and `Done when holds` at finish; "resume from the first incomplete step" means the first unchecked bullet. Advisory only, never enforced — most valuable for a human-assigned plan spanning multiple sessions.
+
+## Batch dispatch (`--batch [N]`)
+
+An explicit opt-in that prepares work for **parallel execution**. It hands off
+to `scripts/batch_dispatch.py`, which selects up to `N` ready plans (default
+10) whose declared `## Likely touch points` don't overlap, then claims each and
+creates a dedicated worktree for it — so up to `N` *separate* executor sessions
+can run them with a low a-priori chance of merge conflicts or shared-file races.
+
+**It never spawns, launches, or runs an agent.** Anchor doesn't run its own
+agents. The output is a list of prepared plans — path, worktree, feature
+branch, agent-id — that an operator or an orchestrating session hands to
+separate sessions. Without `--claim` it only previews.
+
+A plan that declares no touch points is excluded from the batch rather than
+guessed at; it still runs fine through ordinary serial `/work`. Lane priority,
+`Depends on`, assignee and model-fit rules are unchanged — batching adds the
+conflict filter on top of the normal picker.
+
+```bash
+python scripts/batch_dispatch.py --root . --max 10 --tier mid          # preview
+python scripts/batch_dispatch.py --root . --max 5 --claim --agent-prefix batch
+```
+
+Flags: `--root --max --tier --model --effort --no-fit-check --claim
+--agent-prefix --json`.
+
+This is orthogonal to review. `/review` has its own opt-in `--batch` flag for
+chaining sign-off cycles; neither changes the other's doctrine.
 
 ## Install (platform wiring)
 

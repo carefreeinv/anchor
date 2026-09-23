@@ -175,11 +175,11 @@ def test_stamp_writes_a_comment_for_every_source(mock_hash, tmp_path, monkeypatc
     assert check_docs_sync.check() == []
 
 
-def test_the_eight_one_to_one_pairs_are_still_registered():
+def test_the_one_to_one_pairs_are_still_registered():
     # Kills "delete an entry from SYNC_MAP": dropping a page leaves it unguarded
     # while the checker still reports OK, one page quieter than before. The plan
     # constraint is that the pre-existing 1:1 entries survive the many-source
-    # change untouched.
+    # change untouched. New 1:1 pairs are expected to be added here as they ship.
     from check_docs_sync import SYNC_MAP, _sources
 
     one_to_one = {
@@ -192,7 +192,9 @@ def test_the_eight_one_to_one_pairs_are_still_registered():
         "platforms/claude-code/CLAUDE.md": "docs/docs/platforms/claude-code.md",
         "platforms/grok-build/GROK.md": "docs/docs/platforms/grok-build.md",
         "platforms/nvidia-nim/NEMOTRON.md": "docs/docs/platforms/nvidia-nim.md",
+        "platforms/nvidia-build/BUILD.md": "docs/docs/platforms/nvidia-build.md",
         "platforms/local-models/README.md": "docs/docs/platforms/local-models.md",
         "platforms/chat/CHAT.md": "docs/docs/platforms/chat.md",
+        "platforms/aider/AIDER.md": "docs/docs/platforms/aider.md",
     }
     assert one_to_one == expected

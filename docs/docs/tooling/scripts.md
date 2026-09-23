@@ -88,6 +88,27 @@ python scripts/plan_board.py --include-parked --no-color
 
 Column color accents: green (Completed), yellow (Review Needed), orange (In Progress), red (everything else) — an accent only, never the sole signal; column names stay authoritative under `--no-color` or on non-TTY output (auto-disabled).
 
+## batch_dispatch.py
+
+Selection + preparation for **parallel** `/work` (`/work --batch [N]`, default
+`N=10`): picks up to `N` ready plans whose declared `## Likely touch points`
+don't overlap, then claims each and creates its own worktree via
+`worktree_for_agent.py` — reusing `plan_select.py`'s existing Priority →
+Value → fit → Depends-on rules unchanged. A plan with no touch-point data is
+excluded from the batch (it still runs through ordinary serial `/work`).
+**Never spawns an agent itself** — its output is a prepared batch (plan path,
+worktree path, feature branch, agent-id per entry) for an operator or
+orchestrating session to hand to K separate executor sessions.
+
+```bash
+python scripts/batch_dispatch.py --root . --max 10 --tier mid            # preview only
+python scripts/batch_dispatch.py --root . --max 10 --tier mid --claim    # claim + worktree the batch
+```
+
+Partial success is normal: a claim race on one plan (another agent grabbed it
+between selection and claim) reports the rest of the batch as prepared, not an
+all-or-nothing abort.
+
 ## fleet_watch.py
 
 Implementation behind the [**`/fleet-watch`**](/skills/fleet-watch) skill (prefer the skill in an agent). Direct CLI for automation/CI: `--project`, `--status`, `--list` / `--once`, `--emit systemd|cron`, `--install-user` (systemd **user** timers; reboot-safe with `loginctl enable-linger $USER`). See [Fleet workers](/tooling/fleet-workers) for the pull model.
@@ -153,7 +174,7 @@ python fit_device.py --memory 48 --backend metal
 python fit_device.py --list
 ```
 
-`--probe` prints machine facts, **markdown-friendly install links** (WSL, CUDA, llama.cpp, Ollama, vLLM, MLX), then the best lean catalog fit with HF weight links and an `endpoints.yaml` stanza. On **WSL**, it also queries the **Windows host** via `powershell.exe` (RAM/CPU/GPUs) so recommendations use bare-metal capacity and prefer a **host** model executor. Manual `--memory` / `--backend` still work. Memory is a conservative weights+KV+overhead estimate — confirm with `benchmark.py`. Agent UX: [**`/local-models`**](/skills/local-models).
+`--probe` prints machine facts, **markdown-friendly install links** (WSL, CUDA, llama.cpp, Ollama, vLLM, MLX), then **two** fit answers: **Max fit** (largest under the usable budget) and **Default for wire** (memory-safer pick for Aider / `.env` / launcher, using free/available RAM when known; WSL/iGPU/≤24GB biases smallest under pressure). `--emit-endpoint` emits the **default-for-wire** stanza using a **Reachable API** `base_url` — discovered by probing guest loopback → default gateway → `resolv.conf` nameserver, so stanzas do not blindly use dead `localhost` when Ollama only answers on the Windows host. On **WSL**, it also queries the **Windows host** via `powershell.exe` (RAM/CPU/GPUs) so recommendations use bare-metal capacity and prefer a **host** model executor. Manual `--memory` / `--backend` still work. Memory is a conservative weights+KV+overhead estimate — confirm with `benchmark.py`. Agent UX: [**`/local-models`**](/skills/local-models).
 
 ## aider_repo_map_preflight.py
 

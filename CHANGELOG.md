@@ -8,6 +8,96 @@ Newest first.
 
 ### Added
 
+- **`/work --batch` is documented on the published skill page** —
+  `docs/docs/skills/work.md` now covers the flag its Claude and Grok surfaces
+  already shipped: what `scripts/batch_dispatch.py` selects, that it never
+  spawns an agent, that a plan without touch points is excluded, and its real
+  flag list. `/review --batch` was already mirrored; `/work --batch` was not.
+
+- **`/review --batch [N]`** — opt-in batch mode reviews up to `N` (default 3)
+  top-priority `review-needed/` plans in one invocation. Every plan still
+  gets its own full pipeline and its own required, never-inferred survey —
+  batching removes re-typing `/review` between items, not per-plan sign-off.
+  An appropriateness check excludes (falls back to single-item review) a
+  `## Handoff` hold note, a large diff (>8 files or ±300 lines net vs
+  integration), or two candidates sharing a touched path (the same overlap
+  rule `/work --batch`'s `batch_dispatch.py` applies for parallel execution,
+  restated in prose so this check is self-contained). Refuses to combine
+  with `--skip-ai`; promotion review stays
+  single-decision, untouched by this flag. Documented in both `/review`
+  surfaces (Claude + Grok) and `docs/docs/skills/review.md`.
+
+- **`/local-models` confirmed-stack autowire** — `scripts/local_models_autowire.py`
+  detects when a project's local model stack is actually confirmed (guest-reachable
+  API **and** that API serves the Default-for-wire model, not just "responds") and,
+  on operator confirm, writes a machine-local `var/endpoints.local.yaml` overlay,
+  the gitignored `.env` (reusing `write_aider_env.py`), an idempotent conventions
+  note, and — when `aider` is on `$PATH` — `.aider.conf.yml` plus a portable
+  launcher (`hardware/personal-devices/configs/aider-ollama-launcher.sh`).
+  Detection never writes; only an explicit yes does. Never installs Ollama or
+  pulls weights. Documented in `docs/docs/skills/local-models.md` and both
+  `/local-models` surfaces (Claude + Grok).
+- **`/work --batch [N]`** — `scripts/batch_dispatch.py` selects up to `N`
+  (default 10) ready plans whose `## Likely touch points` don't overlap, then
+  claims + creates a dedicated worktree for each (reusing existing
+  Priority/Value/fit/Depends-on rules unchanged), so an operator or
+  orchestrating session can hand each prepared plan to its own parallel
+  executor session. Never spawns an agent itself — selection + preparation
+  only. A plan with no touch-point data is excluded from batch selection and
+  still runs through ordinary serial `/work`. Documented in
+  `docs/docs/tooling/scripts.md`, both `/work` surfaces (Claude + Grok).
+- **`## Likely touch points` on plans** — `/draft` now populates an optional,
+  advisory-only "Likely touch points" section (file + function/class,
+  deduped, whole-plan) right after a plan's header bullets, so an executor
+  sees roughly where to look before reading the rest of the plan. Never
+  authoritative and never enforced — the per-step Steps `Touches` column and
+  a task spec's scope-gate-checked `## Files in scope` are unchanged.
+  Documented in `anchor/templates/plan.md`, `.plans/README.md`, both
+  `/draft` surfaces (Claude + Grok), and `docs/docs/skills/draft.md`.
+- **`aider` platform** — `anchor --platform aider` scaffolds `AIDER.md` (drone
+  brief: queen-bee plans, Aider runs `/work` only — no draft/review/merge) and
+  a tracked `.aider.conf.yml.example` (`read: AIDER.md`). No slash-command
+  runtime is assumed; other Anchor commands point back to a Claude Code/Grok
+  Build session. Documented in `docs/docs/platforms/aider.md`.
+- **`aider` skills index** — scaffold also writes `platforms/aider/skills-index.md`
+  (loaded via the same `read:` list), a roster naming `/work` as the only
+  skill Aider runs and every other Anchor command as queen-bee-only, so a
+  drone session points the operator back to Claude Code/Grok Build instead of
+  guessing at an unimplemented skill.
+- **`aider` swarm profile (Qwen3 ≤8B)** — scaffold also writes
+  `platforms/aider/work-drone.md` (a ≤1-screen, script-first `work` card:
+  claim via `work_once.py`/`plan_fit.py`, execute Steps, finish to
+  `review-needed/`, never merge) and `platforms/aider/.aider.conf.swarm.yml.example`
+  (thin `read:` = drone card only, `edit-format: diff`, `map-tokens: 1024`,
+  `timeout: 60`, `stream: false` — verified live against Aider 0.86.2).
+  `skills-index.md` now tells small/swarm models to use the card instead of
+  the fuller `AIDER.md` procedure. Also documents, in both files: Aider
+  intercepts any message starting with `/` as its own built-in command, so a
+  bare `/work` never reaches the model — type `work` with no leading slash.
+- **Local drone doctrine + recipe** — `docs/docs/skills/local-models.md` now
+  states the queen-bee/drone split (any local model is an executor, never a
+  planner) and adds a machine-local drone recipe: a gitignored
+  `var/endpoints.local.yaml` entry for this host's reachable local endpoint,
+  claimed one-shot with `work_once.py --endpoint … --registry
+  var/endpoints.local.yaml` or watched durably with `fleet_watch.py --emit
+  systemd --worker …,registry=var/endpoints.local.yaml` — never the shared
+  `scripts/endpoints.yaml`. `AIDER.md` and its docs mirror cross-link the same
+  recipe as the unattended twin to interactive Aider `/work`.
+- **NVIDIA Build inference preference** — `scripts/nvidia_build_probe.py`
+  detects whether NVIDIA's hosted Build API (`integrate.api.nvidia.com/v1`,
+  keyed via `NVIDIA_API_KEY`/`NGC_API_KEY`) is configured and reachable, and
+  computes a preference rule: prefer Build over local inference when live,
+  unless the operator explicitly opted for local. Never crashes or falls
+  back loudly on a missing/invalid key. Documented at
+  `platforms/nvidia-build/BUILD.md`, cross-linked from and distinguished
+  clearly against self-hosted NIM (`platforms/nvidia-nim/NEMOTRON.md`).
+- **`fit_device.py` Default for wire vs Max fit** — `--probe` reports a
+  memory-safer **Default for wire** (Aider / `.env` / launcher) alongside **Max
+  fit** (capability ceiling). Uses free/available RAM × safety factor when known;
+  WSL/iGPU/≤24GB profiles bias the smallest catalog fit under pressure (LENOVO
+  16GB class: 8B max, 4B default). `--emit-endpoint` emits the wire default.
+  Documented in `/local-models` and tooling scripts.
+
 - **`aider_repo_map_preflight.py`** — one actionable warning when git HEAD/index
   still lists paths deleted on disk (Aider maps `HEAD`∪index; `git add -u` alone
   does not quiet repo-map floods). Optional confirmed `--write-aiderignore` /
@@ -17,6 +107,58 @@ Newest first.
 
 ### Fixed
 
+- **Shipped files no longer cite private plan slugs** — eleven references to
+  `.plans/` working-backlog slugs were removed from the `/work` and
+  `/local-models` skill surfaces (both Claude and Grok), `scripts/batch_dispatch.py`,
+  `scripts/local_models_autowire.py`, `scripts/plan_board.py`,
+  `docs/docs/skills/local-models.md` and the batch-dispatch blog post. Those
+  slugs name files this repo never commits, and the skill surfaces and scripts
+  are scaffolded verbatim into dependent projects, where the names mean
+  nothing — `batch_dispatch.py --help` printed one. Docs that pointed at
+  unbuilt `/local-models-config` / `/local-models-ensure` commands now describe
+  the shipped behavior instead.
+- **Aider's machine-local files are no longer offered for staging** — a project
+  scaffolded with `anchor --platform aider` now ignores `.aider.conf.yml`,
+  `.aider.model.settings.yml` and Aider's session artifacts
+  (`.aider.chat.history.md`, `.aider.input.history`, `.aider.llm.history`,
+  `.aider.tags.cache.v*/`). The ignore list has a single definition in
+  `scripts/write_aider_env.py`, beside the existing `.env` contract, and is
+  ensured on scaffold, backfilled by `anchor <project-dir> --upgrade` for
+  projects created before the rules existed, and applied by
+  `local_models_autowire.py` before it writes `.aider.conf.yml`. The config
+  entries are root-anchored so the `.example` files Anchor ships stay tracked;
+  an existing `.aider*` catch-all is treated as coverage rather than stacked on.
+  Anchor's own `.gitignore` swaps that catch-all for the root-anchored rules,
+  which no longer shadow `platforms/aider/.aider.conf*.yml.example` or a
+  generated `.aiderignore`.
+
+- **CI's Lint job is green again** — `ruff check .` had been failing on every
+  branch for two unrelated findings, so a red Lint result carried no signal.
+  `scripts/fit_device.py` dropped the redundant `socket.timeout` from
+  `http_get_ok`'s `except` tuple (since Python 3.10 it *is* `TimeoutError`,
+  already listed) along with its now-unused `import socket`, and
+  `scripts/batch_dispatch.py` dropped a dead `plan_sort_key` import
+  (`inventory_ready` already sorts). No behavior change: the probe still
+  returns `False` rather than raising on a refused connection, and batch
+  ordering is unchanged.
+
+- **Bare `aider` connection-refused on WSL against host Ollama** — Aider reads
+  `OLLAMA_API_BASE` from a repo-root `.env`, but nothing wrote a
+  guest-reachable value there, so a plain `aider` invocation failed with
+  `OllamaError: … Connection refused` even when the host Ollama was healthy.
+  New `scripts/write_aider_env.py` reuses `fit_device.py`'s reachable-`base_url`
+  discovery and writes it into a gitignored `.env` (idempotent — refreshes only
+  that line after a reboot/gateway change; also ensures `.gitignore` covers
+  `.env`). Documented in `docs/docs/skills/local-models.md` and both
+  `/local-models` surfaces (Claude + Grok).
+- **`AIDER.md`'s `/work` trigger never reached the model** — Aider treats any
+  message starting with `/` as one of its own built-in commands and replies
+  `Invalid command: work` without ever calling the LLM, so a bare `/work` as
+  the brief instructed was silently swallowed by Aider itself, for every
+  model size. `AIDER.md` and its docs mirror (`docs/docs/platforms/aider.md`)
+  now say to type the word `work`, no leading slash — verified live against
+  Aider 0.86.2 (bare `/work` still intercepted, unchanged; `work`/`work --list`
+  reaches the model).
 - **Empty OpenAI `content` from thinking Qwen3/Ollama** — `Endpoint.chat` no
   longer treats HTTP 200 + empty `message.content` as success when the model
   burned tokens into `reasoning` / hit `finish_reason=length`. Portable fix:
@@ -25,6 +167,13 @@ Newest first.
   **not** emitted by `fit_device` by default — key presence would 400+retry
   llama.cpp / MLX / vLLM; after a 400 the client caches that the endpoint
   rejects `think`. `platforms/local-models/qwen3.md` documents the pitfall.
+- **WSL reachable Ollama/`base_url`** — `fit_device.py --probe` discovers a
+  guest-reachable OpenAI API URL (loopback → default gateway → `resolv.conf`
+  nameserver) and emits that `base_url` instead of blind `http://localhost:…`
+  when Windows Ollama only answers on the host gateway. Refuses
+  `--emit-endpoint` dead-localhost stanzas on WSL when nothing answers.
+  `/local-models` skills + personal-devices / scripts docs note re-probe after
+  reboot and optional mirrored networking.
 
 ## [0.2.0] - 2026-08-28
 

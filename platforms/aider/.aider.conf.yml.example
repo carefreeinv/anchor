@@ -1,0 +1,7 @@
+# Anchor: always load the project brief into every Aider session.
+# Copy this file to `.aider.conf.yml` (gitignored by default) and adjust as
+# needed for your local setup — host-specific values like OLLAMA_API_BASE
+# belong in `.env`, not here.
+read:
+  - AIDER.md
+  - platforms/aider/skills-index.md

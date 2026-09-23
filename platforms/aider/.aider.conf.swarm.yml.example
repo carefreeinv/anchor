@@ -1,0 +1,37 @@
+# Anchor: swarm-local profile for Aider + Qwen3 ≤8B (or similar small models).
+# Copy this file to `.aider.conf.yml` INSTEAD OF the default `.aider.conf.yml.example`
+# when this project's local model is a ≤8B swarm executor. Verified live against
+# aider 0.86.2 (2026-09-11): edit-format values "diff"/"whole"/"udiff" are real
+# coder names (aider/coders/{editblock,wholefile,udiff}_coder.py); timeout,
+# map-tokens, and stream are real config keys, confirmed via a live
+# `aider --verbose` config dump against this exact file (below).
+#
+# Always-on context stays THIN on purpose — a ≤8B model's context budget goes
+# to the plan it's executing, not to doctrine. This loads the drone card alone,
+# not the fuller AIDER.md brief or the skills-index.md roster (see
+# platforms/local-models/qwen3.md's canary note for why).
+read:
+  - platforms/aider/work-drone.md
+
+# Lighter edit format: full SEARCH/REPLACE diff blocks are easier for a small
+# model to produce correctly than a whole-file rewrite on every turn.
+edit-format: diff
+
+# Keep the auto repo-map small so it doesn't crowd out the plan being executed.
+map-tokens: 1024
+
+# A confused small model should time out in under a minute, not sit on a
+# multi-minute retry loop (see the qwen3.md canary: a real session hit 600s).
+timeout: 60
+
+# Streaming adds overhead for a small local model with no human watching
+# tokens arrive turn-by-turn in an unattended/headless drone run. Verified:
+# the config file wants the positive key `stream: false`, not `no-stream: true`
+# (the latter parses without error but is silently ignored — confirmed via
+# `aider --verbose`'s "Option settings" dump, ...stream: True regardless).
+stream: false
+
+# Qwen3's hybrid-thinking toggle is a chat-template convention, not an Aider
+# flag — Aider has no hook to auto-append it. Until that's wired end-to-end,
+# type `/work /no_think` (or `<your message> /no_think`) to keep Qwen3 out of
+# its thinking mode; see platforms/local-models/qwen3.md "Thinking toggle".

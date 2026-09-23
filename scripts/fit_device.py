@@ -12,12 +12,18 @@ Memory is a rough estimate (weights + KV cache + runtime overhead), deliberately
 conservative — treat it as a starting point and confirm with `benchmark.py`, not
 as a guarantee. Bigger-but-tighter fits are flagged, not hidden.
 
+``--probe`` reports two answers: **Max fit** (largest catalog entry under the
+usable budget — capability ceiling) and **Default for wire** (memory-safer
+pick for Aider / ``.env`` / launcher defaults, using free/available RAM when
+known). Personal-device profiles under pressure default to the smallest fit
+unless free RAM clearly supports the max.
+
 Usage:
   python fit_device.py --memory 48                    # 64GB Mac Mini (~48GB usable), Metal
   python fit_device.py --memory 16 --backend mlx
   python fit_device.py --memory 24 --backend cuda     # single RTX 4090
   python fit_device.py --memory 48 --context 32768    # size for a longer context
-  python fit_device.py --memory 48 --emit-endpoint    # print only the endpoints.yaml stanza
+  python fit_device.py --memory 48 --emit-endpoint    # stanza for Default for wire
   python fit_device.py --probe                         # detect OS/RAM/GPU and recommend
   python fit_device.py --list                          # show the whole model catalog
 """
@@ -29,6 +35,8 @@ import platform
 import re
 import shutil
 import subprocess
+import urllib.error
+import urllib.request
 from pathlib import Path
 
 # Bytes per weight by quantization (empirical GGUF/AWQ/FP8 footprints, incl. embeddings).
@@ -48,6 +56,18 @@ RUNTIME_OVERHEAD_GB = 1.0
 
 # Backend -> default quant it serves best.
 BACKEND_DEFAULT_QUANT = {"metal": "q4", "mlx": "q4", "cuda": "q4"}
+
+# Free/available RAM × this factor = runtime wire budget (leave headroom for OS/IDE).
+WIRE_SAFETY_FACTOR = 0.60
+
+# Profiles that bias Default for wire toward the smallest catalog fit when free
+# RAM is unknown or tight (WSL/iGPU/CPU laptops — the LENOVO 16GB class).
+PRESSURE_PRONE_PROFILES = frozenset({
+    "wsl-host-cpu",
+    "wsl-cpu",
+    "linux-cpu",
+    "unknown",
+})
 
 
 class Model:
@@ -166,14 +186,241 @@ def launch_command(model: Model, backend: str, quant: str, context: int) -> str:
             f"--max-model-len {context}{quant_flag}")
 
 
-def endpoint_stanza(model: Model, backend: str, context: int, name: str | None = None) -> str:
-    port = 8000 if backend == "cuda" else 8080
+# OpenAI-compatible local servers commonly used with personal devices.
+# Prefer Ollama (11434) before llama-server (8080) / vLLM (8000).
+LOCAL_API_PORTS: tuple[int, ...] = (11434, 8080, 8000)
+
+
+def default_gateway_ip() -> str | None:
+    """Best-effort default-gateway IPv4 (WSL → Windows host, typical Linux)."""
+    try:
+        out = _run(["ip", "route", "show", "default"], timeout=3)
+    except Exception:
+        out = ""
+    m = re.search(r"default via (\d+\.\d+\.\d+\.\d+)", out)
+    if m:
+        return m.group(1)
+    # Fallback: parse `ip route` without show default
+    try:
+        out = _run(["ip", "route"], timeout=3)
+    except Exception:
+        return None
+    m = re.search(r"default via (\d+\.\d+\.\d+\.\d+)", out)
+    return m.group(1) if m else None
+
+
+def resolv_nameserver_ips() -> list[str]:
+    """IPv4 nameservers from /etc/resolv.conf (WSL often lists the Windows host)."""
+    path = Path("/etc/resolv.conf")
+    if not path.is_file():
+        return []
+    found: list[str] = []
+    try:
+        text = path.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return []
+    for line in text.splitlines():
+        line = line.strip()
+        if not line.startswith("nameserver"):
+            continue
+        parts = line.split()
+        if len(parts) >= 2 and re.fullmatch(r"\d+\.\d+\.\d+\.\d+", parts[1]):
+            if parts[1] not in found:
+                found.append(parts[1])
+    return found
+
+
+def is_loopback_host(host: str) -> bool:
+    h = (host or "").strip().lower().strip("[]")
+    return h in {"127.0.0.1", "localhost", "::1", "0:0:0:0:0:0:0:1"}
+
+
+def candidate_api_hosts(*, wsl: bool | None = None) -> list[tuple[str, str]]:
+    """Ordered (host, source) candidates for a guest-reachable OpenAI API.
+
+    Order (plan contract): loopback → default-gateway → resolv nameserver.
+    Mirrored-networking localhost is covered by the loopback attempt.
+    """
+    if wsl is None:
+        wsl = detect_wsl()
+    ordered: list[tuple[str, str]] = [("127.0.0.1", "loopback")]
+    seen = {"127.0.0.1", "localhost"}
+    if wsl:
+        gw = default_gateway_ip()
+        if gw and gw not in seen:
+            ordered.append((gw, "default-gateway"))
+            seen.add(gw)
+        for ns in resolv_nameserver_ips():
+            if ns not in seen:
+                ordered.append((ns, "resolv-nameserver"))
+                seen.add(ns)
+    return ordered
+
+
+def openai_base_url(host: str, port: int) -> str:
+    return f"http://{host}:{int(port)}/v1"
+
+
+def http_get_ok(url: str, *, timeout: float = 1.5) -> bool:
+    """True when URL returns HTTP < 500 (connection/refusal → False)."""
+    try:
+        req = urllib.request.Request(url, method="GET", headers={"User-Agent": "anchor-fit-device/1"})
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            return int(getattr(resp, "status", 200) or 200) < 500
+    except (urllib.error.URLError, TimeoutError, OSError):
+        return False
+
+
+def discover_reachable_openai_base(
+    *,
+    wsl: bool | None = None,
+    ports: tuple[int, ...] | None = None,
+    timeout: float = 1.5,
+    probe_url=None,
+) -> dict | None:
+    """Return the first guest-reachable OpenAI-compatible ``/v1`` base URL.
+
+    Result keys: ``base_url``, ``host``, ``port``, ``source``, ``tried``.
+    ``None`` if nothing answered.
+
+    ``probe_url`` may be a test double: ``callable(url) -> bool`` or
+    ``callable(url, timeout=...) -> bool``.
+    """
+    check = probe_url or http_get_ok
+    port_list = ports or LOCAL_API_PORTS
+    tried: list[dict] = []
+    for host, source in candidate_api_hosts(wsl=wsl):
+        for port in port_list:
+            base = openai_base_url(host, port)
+            probe = base.rstrip("/") + "/models"
+            try:
+                ok = bool(check(probe, timeout=timeout))
+            except TypeError:
+                ok = bool(check(probe))
+            tried.append({"url": probe, "ok": ok, "source": source, "host": host, "port": port})
+            if ok:
+                return {
+                    "base_url": base,
+                    "host": host,
+                    "port": int(port),
+                    "source": source,
+                    "tried": tried,
+                }
+    return None
+
+
+def default_local_port(backend: str, *, prefer_ollama: bool = False) -> int:
+    if prefer_ollama:
+        return 11434
+    return 8000 if backend == "cuda" else 8080
+
+
+def normalize_openai_base_url(url: str) -> str:
+    u = (url or "").strip().rstrip("/")
+    if re.search(r":\d+$", u) and not u.endswith("/v1"):
+        u = u + "/v1"
+    return u
+
+
+def resolve_register_base_url(
+    proposed: str | None,
+    *,
+    wsl: bool | None = None,
+    backend: str = "metal",
+    discover=None,
+    http_ok=None,
+) -> dict:
+    """Pick a guest-reachable base_url for registration / stanza emission.
+
+    Never silently keep a loopback URL when the guest cannot open it and a
+    non-loopback candidate answered. Returns ``base_url``, ``ok``, ``rewrote``,
+    ``reason``, and optional ``discovery``.
+    """
+    discover_fn = discover or discover_reachable_openai_base
+    check = http_ok or http_get_ok
+    wsl_flag = detect_wsl() if wsl is None else wsl
+    prefer_ollama = bool(wsl_flag)
+    hit = discover_fn(wsl=wsl_flag)
+
+    if proposed:
+        proposed = normalize_openai_base_url(proposed)
+        m = re.match(r"^https?://([^/:]+)", proposed)
+        host = m.group(1) if m else ""
+        if is_loopback_host(host):
+            try:
+                loop_ok = bool(check(proposed.rstrip("/") + "/models", timeout=1.5))
+            except TypeError:
+                loop_ok = bool(check(proposed.rstrip("/") + "/models"))
+            if loop_ok:
+                return {
+                    "base_url": proposed,
+                    "ok": True,
+                    "rewrote": False,
+                    "reason": "loopback-reachable",
+                    "discovery": hit,
+                }
+            if hit and not is_loopback_host(str(hit.get("host", ""))):
+                return {
+                    "base_url": hit["base_url"],
+                    "ok": True,
+                    "rewrote": True,
+                    "reason": f"loopback-refused; using {hit['source']}",
+                    "discovery": hit,
+                }
+            return {
+                "base_url": proposed,
+                "ok": False,
+                "rewrote": False,
+                "reason": "loopback-refused; no reachable alternative",
+                "discovery": hit,
+            }
+        try:
+            ok = bool(check(proposed.rstrip("/") + "/models", timeout=1.5))
+        except TypeError:
+            ok = bool(check(proposed.rstrip("/") + "/models"))
+        return {
+            "base_url": proposed,
+            "ok": ok,
+            "rewrote": False,
+            "reason": "proposed-host" if ok else "proposed-host-unreachable",
+            "discovery": hit,
+        }
+
+    if hit:
+        return {
+            "base_url": hit["base_url"],
+            "ok": True,
+            "rewrote": False,
+            "reason": f"discovered:{hit['source']}",
+            "discovery": hit,
+        }
+
+    port = default_local_port(backend, prefer_ollama=prefer_ollama)
+    return {
+        "base_url": openai_base_url("127.0.0.1", port),
+        "ok": False,
+        "rewrote": False,
+        "reason": "no-reachable-api; loopback-fallback",
+        "discovery": None,
+    }
+
+
+def endpoint_stanza(
+    model: Model,
+    backend: str,
+    context: int,
+    name: str | None = None,
+    *,
+    base_url: str | None = None,
+) -> str:
+    port = default_local_port(backend, prefer_ollama=False)
     served = model.hf if backend == "cuda" else model.name
+    url = (base_url or openai_base_url("localhost", port)).rstrip("/")
     quirks = quirks_for(model, context)
     lines = [
         f"  - name: {name or f'{model.name}-local'}",
         f"    tier: {model.tier}",
-        f"    base_url: http://localhost:{port}/v1",
+        f"    base_url: {url}",
         f"    model: {served}",
     ]
     # Flow style for short quirks; block style once guardrail strings appear.
@@ -201,6 +448,71 @@ def fitting_models(memory_gb: float, quant: str, context: int) -> list[Model]:
     """Catalog entries that fit, largest (most capable) first."""
     fits = [m for m in CATALOG if estimate_memory_gb(m.params_b, quant, context) <= memory_gb]
     return sorted(fits, key=lambda m: m.params_b, reverse=True)
+
+
+def detect_available_memory_gb() -> float | None:
+    """Guest free/available RAM in GB (Linux MemAvailable; best-effort elsewhere)."""
+    try:
+        text = Path("/proc/meminfo").read_text(encoding="utf-8")
+        m = re.search(r"MemAvailable:\s+(\d+)\s+kB", text)
+        if m:
+            return int(m.group(1)) / (1024 * 1024)
+        m = re.search(r"MemFree:\s+(\d+)\s+kB", text)
+        if m:
+            return int(m.group(1)) / (1024 * 1024)
+    except OSError:
+        pass
+    return None
+
+
+def default_wire_model(
+    fits: list[Model],
+    *,
+    quant: str,
+    context: int,
+    free_gb: float | None = None,
+    available_gb: float | None = None,
+    profile: str | None = None,
+    total_ram_gb: float | None = None,
+    safety_factor: float = WIRE_SAFETY_FACTOR,
+) -> tuple[Model, str]:
+    """Pick the memory-safer default for config files + a pressure label.
+
+    Returns ``(model, pressure)`` where ``pressure`` is ``\"low\"`` or ``\"high\"``.
+
+    * **Max fit** remains ``fits[0]`` (largest under the usable/catalog budget).
+    * **Default for wire** prefers a model whose estimate fits
+      ``free_or_available * safety_factor`` when that figure is known.
+    * If free/available is unknown, pressure-prone profiles (WSL CPU/iGPU, linux
+      CPU, unified ≤24GB) get the **smallest** fit; otherwise max fit.
+    """
+    if not fits:
+        raise ValueError("fits must be non-empty")
+    max_fit = fits[0]
+    smallest = min(fits, key=lambda m: m.params_b)
+    profile = profile or ""
+    pressure_prone = (
+        profile in PRESSURE_PRONE_PROFILES
+        or (total_ram_gb is not None and total_ram_gb <= 24)
+        or ("igpu" in profile)
+    )
+
+    runtime_src = available_gb if available_gb is not None else free_gb
+    if runtime_src is not None:
+        budget = float(runtime_src) * float(safety_factor)
+        runtime_fits = [
+            m for m in fits
+            if estimate_memory_gb(m.params_b, quant, context) <= budget
+        ]
+        if runtime_fits and max_fit in runtime_fits:
+            return max_fit, "low"
+        if runtime_fits:
+            return min(runtime_fits, key=lambda m: m.params_b), "high"
+        return smallest, "high"
+
+    if pressure_prone:
+        return smallest, "high"
+    return max_fit, "low"
 
 
 def print_catalog() -> None:
@@ -479,6 +791,21 @@ def probe_device() -> dict:
     if win_host and win_host.get("tools_host"):
         tools.update({f"host_{k}": v for k, v in win_host["tools_host"].items()})
 
+    guest_available = detect_available_memory_gb()
+    host_free = None
+    if win_host and win_host.get("free_ram_gb") is not None:
+        try:
+            host_free = float(win_host["free_ram_gb"])
+        except (TypeError, ValueError):
+            host_free = None
+    # Prefer host free when recommending a Windows-host executor; else guest MemAvailable.
+    free_memory_gb = host_free if (recommend_bare_metal and host_free is not None) else guest_available
+    available_memory_gb = guest_available
+
+    # Guest-reachable OpenAI API (critical on WSL where Windows Ollama ≠ guest localhost).
+    reg = resolve_register_base_url(None, wsl=wsl, backend=backend)
+    reachable = reg.get("discovery") if reg.get("ok") else None
+
     return {
         "system": system,
         "machine": machine,
@@ -488,12 +815,18 @@ def probe_device() -> dict:
         "total_ram_gb": round(total_ram, 1) if total_ram else None,
         "cuda_vram_gb": round(cuda_vram, 1) if cuda_vram else None,
         "usable_memory_gb": round(usable, 1) if usable else None,
+        "free_memory_gb": round(free_memory_gb, 1) if free_memory_gb is not None else None,
+        "available_memory_gb": round(available_memory_gb, 1) if available_memory_gb is not None else None,
         "backend": backend,
         "profile": profile,
         "tools": tools,
         "windows_host": win_host,
         "recommend_bare_metal": recommend_bare_metal,
         "executor_placement": executor_placement,
+        "reachable_api": reachable,
+        "register_base_url": reg.get("base_url"),
+        "register_ok": bool(reg.get("ok")),
+        "register_reason": reg.get("reason"),
     }
 
 
@@ -542,6 +875,31 @@ def print_probe(probe: dict) -> None:
         print(f"  Usable for model:~{probe['usable_memory_gb']:.1f} GB (conservative fit budget)")
     else:
         print("  Usable for model: unknown — pass --memory manually")
+    if probe.get("free_memory_gb") is not None:
+        print(f"  Free / runtime:  ~{probe['free_memory_gb']:.1f} GB "
+              f"(wire budget ×{WIRE_SAFETY_FACTOR:.2f})")
+    elif probe.get("available_memory_gb") is not None:
+        print(f"  MemAvailable:    ~{probe['available_memory_gb']:.1f} GB "
+              f"(wire budget ×{WIRE_SAFETY_FACTOR:.2f})")
+
+    # Reachable API — never imply guest localhost works when it does not.
+    ra = probe.get("reachable_api")
+    if ra:
+        print(f"  Reachable API:   {ra['base_url']}  (via {ra['source']})")
+    elif probe.get("register_base_url"):
+        status = "OK" if probe.get("register_ok") else "UNVERIFIED / unreachable from guest"
+        print(f"  Reachable API:   {probe['register_base_url']}  ({status})")
+        if probe.get("wsl") and not probe.get("register_ok"):
+            print("  Warn:            guest cannot open a local OpenAI API yet — start "
+                  "Ollama/llama-server on the Windows host (0.0.0.0), then re-run --probe. "
+                  "Do not register dead localhost.")
+    if probe.get("wsl") and ra and ra.get("source") != "loopback":
+        print("  Note:            guest localhost refused (or was skipped); using the "
+              "Windows host address. Gateway IPs can change after `wsl --shutdown` — "
+              "re-probe before rewriting overlays. Optional: mirrored networking so "
+              "localhost works "
+              "(https://learn.microsoft.com/en-us/windows/wsl/networking).")
+
     print("\n  Tools:")
     for name, ok in probe["tools"].items():
         print(f"    {'yes' if ok else 'no ':3}  {name}")
@@ -615,11 +973,26 @@ def print_install_guidance(probe: dict) -> None:
         print("   - Or [llama.cpp Windows releases](https://github.com/ggerganov/llama.cpp/releases)")
         print("2. On Windows, pull/serve the recommended GGUF/small model, e.g. Ollama "
               "`qwen2.5:7b` / Qwen3 small tags, listening on `0.0.0.0:11434` or `:8080`.")
-        print("3. From **WSL**, reach the host (mirrored networking often makes "
-              "`localhost` work; otherwise use the Windows host IP from "
-              "`grep nameserver /etc/resolv.conf`).")
-        print("4. Register in Anchor, e.g. `http://localhost:11434/v1` (Ollama) or "
-              "`http://localhost:8080/v1` (llama-server).")
+        reg_url = probe.get("register_base_url")
+        ra = probe.get("reachable_api")
+        if ra:
+            print(f"3. From **WSL**, this probe already reached **`{ra['base_url']}`** "
+                  f"(via {ra['source']}). Prefer that over guessing localhost.")
+        else:
+            print("3. From **WSL**, probe candidates in order: `127.0.0.1` → default "
+                  "gateway (`ip route`) → `resolv.conf` nameserver. Mirrored networking "
+                  "can make localhost work "
+                  "(https://learn.microsoft.com/en-us/windows/wsl/networking); "
+                  "otherwise use the gateway IP — not a blind `localhost`.")
+        if reg_url and probe.get("register_ok"):
+            print(f"4. Register in Anchor (machine-local overlay): `{reg_url}` — "
+                  "re-run `--probe` after reboot; gateway IPs churn.")
+        elif reg_url:
+            print(f"4. Do **not** register dead localhost. After the host API is up, "
+                  f"re-run `--probe`; suggested fallback was `{reg_url}` "
+                  f"({probe.get('register_reason')}).")
+        else:
+            print("4. Register only a URL `curl` from the guest can hit.")
         print("5. Optional CUDA-in-WSL only if you insist on Linux-side GPU: "
               "[CUDA on WSL](https://docs.nvidia.com/cuda/wsl-user-guide/index.html) — "
               "still usually worse ergonomics than host Ollama/llama.cpp.\n")
@@ -671,43 +1044,99 @@ def print_recommendation_report(
             f"Nothing in the catalog fits {memory_gb:.0f}GB at {quant}/{context} context. "
             f"The smallest model ({smallest.name}) needs ~{need:.1f}GB — lower --context or free up memory.")
 
-    best = fits[0]
+    max_fit = fits[0]
+    wire, pressure = default_wire_model(
+        fits,
+        quant=quant,
+        context=context,
+        free_gb=probe.get("free_memory_gb"),
+        available_gb=probe.get("available_memory_gb"),
+        profile=probe.get("profile"),
+        total_ram_gb=probe.get("total_ram_gb"),
+    )
+
+    # Prefer a guest-reachable base_url (WSL→Windows host) over blind localhost.
+    base_url = None
+    if probe.get("register_ok") and probe.get("register_base_url"):
+        base_url = probe["register_base_url"]
+    elif probe.get("reachable_api"):
+        base_url = probe["reachable_api"]["base_url"]
+    elif probe.get("wsl") or str(probe.get("profile") or "").startswith("wsl"):
+        reg = resolve_register_base_url(None, wsl=True, backend=backend)
+        if reg.get("ok"):
+            base_url = reg["base_url"]
+        elif not reg.get("ok") and reg.get("reason", "").startswith("loopback-refused"):
+            # Refuse silent dead localhost in emitted stanza — still print warning.
+            base_url = None
+
     if emit_endpoint:
-        print(endpoint_stanza(best, backend, context, name))
+        if probe.get("wsl") and not base_url and not probe.get("register_ok"):
+            raise SystemExit(
+                "WSL guest has no reachable OpenAI API yet — refusing to emit a "
+                "dead localhost stanza. Start the host server, then re-run "
+                "`fit_device.py --probe --emit-endpoint`.")
+        # Autowire / config writers use the memory-safer default, not max fit.
+        print(endpoint_stanza(wire, backend, context, name, base_url=base_url))
         return
 
-    ctx_ceiling = max_context_for(best.params_b, quant, memory_gb)
-    est = estimate_memory_gb(best.params_b, quant, context)
+    ctx_ceiling = max_context_for(max_fit.params_b, quant, memory_gb)
+    est_max = estimate_memory_gb(max_fit.params_b, quant, context)
+    est_wire = estimate_memory_gb(wire.params_b, quant, context)
     place = probe.get("executor_placement") or "local"
     print(f"\n## Fit ({memory_gb:.0f}GB usable, backend={backend}, quant={quant}, "
           f"context={context}, executor={place})\n")
     if probe.get("recommend_bare_metal"):
         print("**Placement:** serve this model on **Windows bare metal** (host executor); "
               "do not treat WSL cgroup RAM as the ceiling when host RAM is larger.\n")
-    print(f"**Best lean fit:** **{best.name}** ({best.params_b:.0f}B, tier `{best.tier}`) "
-          f"— est. ~{est:.1f}GB")
-    if best.note:
-        print(f"- note: {best.note}")
+    if base_url:
+        print(f"**Reachable API (use this `base_url`):** `{base_url}`\n")
+    elif probe.get("wsl"):
+        print("**Reachable API:** none from this guest yet — do **not** register "
+              "`http://localhost:…` until `--probe` shows a Reachable API line.\n")
+    print(f"**Max fit** (capability ceiling): **{max_fit.name}** "
+          f"({max_fit.params_b:.0f}B, tier `{max_fit.tier}`) — est. ~{est_max:.1f}GB")
+    if max_fit.note:
+        print(f"- note: {max_fit.note}")
+    print(f"**Default for wire** (Aider / `.env` / launcher): **{wire.name}** "
+          f"({wire.params_b:.0f}B, tier `{wire.tier}`) — est. ~{est_wire:.1f}GB "
+          f"— memory_pressure=`{pressure}`")
+    if wire.name != max_fit.name:
+        print(f"- opt-up: pass an explicit model / confirm to use **{max_fit.name}** "
+              f"when free RAM allows (e.g. `AIDER_MODEL` / `--8b` style flags)")
+    if wire.note and wire.name != max_fit.name:
+        print(f"- note: {wire.note}")
     if ctx_ceiling > context:
         print(f"- headroom: up to ~{ctx_ceiling} context on {memory_gb:.0f}GB")
     elif ctx_ceiling and ctx_ceiling < context:
         print(f"- tight: {context} context may be over budget; ~{ctx_ceiling} is safer")
 
-    print("\n**Links (weights + official docs):**")
-    for label, url in official_links(best):
+    print("\n**Links (weights + official docs) — default for wire:**")
+    for label, url in official_links(wire):
         print(f"- [{label}]({url})")
+    if wire.name != max_fit.name:
+        print("\n**Links — max fit (opt-up):**")
+        for label, url in official_links(max_fit):
+            print(f"- [{label}]({url})")
 
     print("\n**Also fits (smaller / swarm-friendly):**")
     for m in fits[1:5]:
         print(f"- **{m.name}** ({m.params_b:.0f}B, `{m.tier}`) — "
               f"[GGUF](https://huggingface.co/{m.gguf})")
 
-    print("\n**Launch:**")
-    print(f"```bash\n{launch_command(best, backend, quant, context)}\n```")
-    print("\n**endpoints.yaml stanza:**")
-    print("```yaml")
-    print(endpoint_stanza(best, backend, context, name))
-    print("```")
+    print("\n**Launch (default for wire):**")
+    print(f"```bash\n{launch_command(wire, backend, quant, context)}\n```")
+    print("\n**endpoints.yaml stanza (default for wire):**")
+    if probe.get("wsl") and not base_url:
+        print("```text")
+        print("# refused: no guest-reachable API — re-run --probe after host Ollama is up")
+        print("```")
+    else:
+        print("```yaml")
+        print(endpoint_stanza(wire, backend, context, name, base_url=base_url))
+        print("```")
+        if base_url and not is_loopback_host(base_url.split("://", 1)[-1].split(":")[0]):
+            print("\n(Machine-local overlay only — do not commit this host gateway IP as "
+                  "fleet-wide truth. Re-probe after `wsl --shutdown` / reboot.)")
     print("\n(Memory is a conservative estimate — confirm with `scripts/benchmark.py`.)")
 
 

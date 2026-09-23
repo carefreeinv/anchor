@@ -8,7 +8,7 @@ picking. Never writes, moves, or edits anything under ``.plans/``.
 
 Header shows two rolling 7-day throughput counters, Completed and Processed
 (entered review-needed/), preferring ``.plans/logs/*.csv``/``*.local.csv``
-event files (see the lane-transition-log design) when present, falling back to
+event files when present, falling back to
 git commit time (tracked ``.md``) or filesystem mtime (``.local.md``) when the
 log is absent or empty. Each card also shows a brief label for the most recent
 logged event on record for its slug, if any.
@@ -134,7 +134,7 @@ class LogEvent:
 
 
 def parse_log_file(path: Path) -> LogEvent | None:
-    """Parse one lane-transition-log CSV event file. Content is authoritative
+    """Parse one lane-transition CSV event file. Content is authoritative
     (not the filename) — a manually renamed file still parses correctly."""
     try:
         with path.open(newline="", encoding="utf-8") as fh:

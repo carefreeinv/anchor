@@ -76,6 +76,15 @@ def test_endpoint_stanza_uses_cuda_port_and_hf_model():
     assert "localhost:8080" in metal and "model: qwen3-14b" in metal
 
 
+def test_endpoint_stanza_accepts_explicit_base_url():
+    m = next(x for x in fit_device.CATALOG if x.name == "qwen3-14b")
+    stanza = fit_device.endpoint_stanza(
+        m, "metal", 8192, base_url="http://172.26.0.1:11434/v1"
+    )
+    assert "base_url: http://172.26.0.1:11434/v1" in stanza
+    assert "localhost" not in stanza
+
+
 def test_endpoint_stanza_with_guardrail_is_valid_yaml():
     import yaml
 
@@ -91,12 +100,184 @@ def test_probe_device_returns_expected_keys():
     probe = fit_device.probe_device()
     for key in (
         "system", "machine", "wsl", "apple_silicon", "total_ram_gb",
-        "cuda_vram_gb", "usable_memory_gb", "backend", "profile", "tools",
+        "cuda_vram_gb", "usable_memory_gb", "free_memory_gb", "available_memory_gb",
+        "backend", "profile", "tools",
         "recommend_bare_metal", "executor_placement",
+        "reachable_api", "register_base_url", "register_ok", "register_reason",
     ):
         assert key in probe
     assert probe["backend"] in {"metal", "mlx", "cuda"}
     assert isinstance(probe["tools"], dict)
+
+
+def test_probe_device_free_memory_sources_host_free_on_wsl_host(monkeypatch):
+    """WSL + reachable Windows host: free_memory_gb must come from the HOST
+    (constrained-guest reality is exactly what recommend_bare_metal exists to
+    surface), never silently fall back to the guest's own MemAvailable."""
+    monkeypatch.setattr(fit_device, "detect_wsl", lambda: True)
+    monkeypatch.setattr(fit_device, "detect_apple_silicon", lambda: False)
+    monkeypatch.setattr(fit_device, "detect_total_ram_gb", lambda: 13.8)
+    monkeypatch.setattr(fit_device, "detect_cuda_vram_gb", lambda: None)
+    monkeypatch.setattr(fit_device, "detect_available_memory_gb", lambda: 0.3)
+    monkeypatch.setattr(
+        fit_device, "probe_windows_host",
+        lambda: {"total_ram_gb": 15.7, "free_ram_gb": 6.5, "has_nvidia": False},
+    )
+    probe = fit_device.probe_device()
+    assert probe["recommend_bare_metal"] is True
+    assert probe["free_memory_gb"] == 6.5
+    assert probe["available_memory_gb"] == 0.3
+
+
+def test_probe_device_free_memory_falls_back_to_guest_available_without_host(monkeypatch):
+    """No Windows host reachable (plain WSL guest or bare Linux): free_memory_gb
+    must come from the guest's own MemAvailable, not a stale/absent host value."""
+    monkeypatch.setattr(fit_device, "detect_wsl", lambda: True)
+    monkeypatch.setattr(fit_device, "detect_apple_silicon", lambda: False)
+    monkeypatch.setattr(fit_device, "detect_total_ram_gb", lambda: 13.8)
+    monkeypatch.setattr(fit_device, "detect_cuda_vram_gb", lambda: None)
+    monkeypatch.setattr(fit_device, "detect_available_memory_gb", lambda: 0.7)
+    monkeypatch.setattr(fit_device, "probe_windows_host", lambda: None)
+    probe = fit_device.probe_device()
+    assert probe["recommend_bare_metal"] is True  # wsl-cpu still prefers host if reachable later
+    assert probe["free_memory_gb"] == 0.7
+    assert probe["available_memory_gb"] == 0.7
+
+
+def test_default_wire_prefers_smallest_when_free_unknown_on_wsl_host_cpu():
+    fits = fit_device.fitting_models(8.6, "q4", 8192)
+    assert fits and fits[0].name == "qwen3-8b"
+    wire, pressure = fit_device.default_wire_model(
+        fits, quant="q4", context=8192, profile="wsl-host-cpu", total_ram_gb=16,
+    )
+    assert wire.name == "qwen3-4b"
+    assert pressure == "high"
+
+
+def test_default_wire_uses_max_fit_when_free_ram_healthy():
+    fits = fit_device.fitting_models(48, "q4", 8192)
+    assert fits[0].params_b >= 30
+    wire, pressure = fit_device.default_wire_model(
+        fits,
+        quant="q4",
+        context=8192,
+        free_gb=40.0,
+        profile="apple-silicon",
+        total_ram_gb=64,
+    )
+    assert wire.name == fits[0].name
+    assert pressure == "low"
+
+
+def test_default_wire_high_pressure_when_free_ram_tiny():
+    """LENOVO-class: catalog max is 8B on ~8.6GB usable, but free RAM is <1GB."""
+    fits = fit_device.fitting_models(8.6, "q4", 8192)
+    wire, pressure = fit_device.default_wire_model(
+        fits,
+        quant="q4",
+        context=8192,
+        free_gb=0.8,
+        profile="wsl-host-cpu",
+        total_ram_gb=16,
+    )
+    assert wire.name == "qwen3-4b"
+    assert pressure == "high"
+
+
+def test_print_recommendation_shows_both_answers(capsys):
+    fit_device.print_recommendation_report(
+        {
+            "profile": "wsl-host-cpu",
+            "executor_placement": "windows-host",
+            "recommend_bare_metal": True,
+            "free_memory_gb": 0.8,
+            "available_memory_gb": 0.5,
+            "total_ram_gb": 16,
+        },
+        8.6,
+        "metal",
+        "q4",
+        8192,
+    )
+    out = capsys.readouterr().out
+    assert "Max fit" in out and "qwen3-8b" in out
+    assert "Default for wire" in out and "qwen3-4b" in out
+    assert "memory_pressure=`high`" in out
+    assert "opt-up" in out.lower()
+
+
+def test_discover_picks_gateway_when_loopback_refuses(monkeypatch):
+    """2026-09-06 WSL matrix: localhost refused, default gateway Ollama OK."""
+    monkeypatch.setattr(fit_device, "candidate_api_hosts", lambda wsl=None: [
+        ("127.0.0.1", "loopback"),
+        ("172.26.0.1", "default-gateway"),
+        ("10.255.255.254", "resolv-nameserver"),
+    ])
+
+    def fake_probe(url, timeout=1.5):
+        return "172.26.0.1:11434" in url
+
+    hit = fit_device.discover_reachable_openai_base(wsl=True, probe_url=fake_probe)
+    assert hit is not None
+    assert hit["base_url"] == "http://172.26.0.1:11434/v1"
+    assert hit["source"] == "default-gateway"
+    assert hit["tried"][0]["ok"] is False  # loopback first attempt failed
+
+
+def test_discover_prefers_loopback_when_it_answers(monkeypatch):
+    monkeypatch.setattr(fit_device, "candidate_api_hosts", lambda wsl=None: [
+        ("127.0.0.1", "loopback"),
+        ("172.26.0.1", "default-gateway"),
+    ])
+
+    def fake_probe(url, timeout=1.5):
+        return "127.0.0.1:11434" in url
+
+    hit = fit_device.discover_reachable_openai_base(wsl=True, probe_url=fake_probe)
+    assert hit["source"] == "loopback"
+    assert hit["base_url"] == "http://127.0.0.1:11434/v1"
+
+
+def test_resolve_rewrites_dead_localhost_to_gateway(monkeypatch):
+    monkeypatch.setattr(
+        fit_device,
+        "discover_reachable_openai_base",
+        lambda **kwargs: {
+            "base_url": "http://172.26.0.1:11434/v1",
+            "host": "172.26.0.1",
+            "port": 11434,
+            "source": "default-gateway",
+            "tried": [],
+        },
+    )
+
+    def fake_http(url, timeout=1.5):
+        return "172.26.0.1" in url
+
+    out = fit_device.resolve_register_base_url(
+        "http://127.0.0.1:11434/v1",
+        wsl=True,
+        http_ok=fake_http,
+    )
+    assert out["ok"] is True
+    assert out["rewrote"] is True
+    assert out["base_url"] == "http://172.26.0.1:11434/v1"
+
+
+def test_resolve_refuses_dead_localhost_without_alternative(monkeypatch):
+    monkeypatch.setattr(fit_device, "discover_reachable_openai_base", lambda **kwargs: None)
+
+    def fake_http(url, timeout=1.5):
+        return False
+
+    out = fit_device.resolve_register_base_url(
+        "http://localhost:11434/v1",
+        wsl=True,
+        http_ok=fake_http,
+    )
+    assert out["ok"] is False
+    assert out["rewrote"] is False
+    assert "loopback-refused" in out["reason"]
 
 
 def test_official_links_include_https():

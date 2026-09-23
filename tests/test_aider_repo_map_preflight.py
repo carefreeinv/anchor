@@ -4,9 +4,8 @@ from __future__ import annotations
 import subprocess
 from pathlib import Path
 
-import pytest
-
 import aider_repo_map_preflight as preflight
+import pytest
 
 
 def _git(root: Path, *args: str) -> None:

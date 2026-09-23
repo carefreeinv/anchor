@@ -20,6 +20,12 @@ Per-model adaptations of `.anchor/system-prompts/mythos-core.md` for the models 
 
 Whenever these models appear in docs, link the name to the official quick-start URL above so operators can go from “recommended local model” to download/serve in one click.
 
+**Default for wire:** `fit_device.py --probe` prints **Max fit** (largest under
+usable budget) and **Default for wire** (memory-safer pick for Aider / `.env` /
+launcher). Free/available RAM × safety factor drives the wire default when known;
+WSL/iGPU/≤24GB biases the smallest catalog fit under pressure. Opt up to Max fit
+explicitly — never hide that a larger model exists.
+
 **Aider + local models:** before the first `aider` chat in a dirty migration
 worktree, run `python scripts/aider_repo_map_preflight.py` (see
 `platforms/aider/REPO_MAP_PREFLIGHT.md`). Aider’s repo-map follows roughly

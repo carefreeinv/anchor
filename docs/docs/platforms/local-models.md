@@ -3,7 +3,7 @@ sidebar_position: 4
 sidebar_label: Local Models
 ---
 
-<!-- synced-from: platforms/local-models/README.md @ db89d0ddc15a91f315cd4c6eb6d57a82c59d83ff -->
+<!-- synced-from: platforms/local-models/README.md @ fe47c10a3255394a9617dded5d0b3bdbb26986cc -->
 
 # Local Models
 
@@ -29,7 +29,11 @@ Each model name links to its **official quick start** (download / serve / chat t
 | [**DeepSeek-R1 distills**](https://huggingface.co/collections/deepseek-ai/deepseek-r1) | NO system prompt; temp ~0.6 (greedy breaks it); no few-shot; strip `<think>` downstream | critic + hard single problems; never an executor | [DeepSeek-R1 collection](https://huggingface.co/collections/deepseek-ai/deepseek-r1) |
 | [**Llama 3.3 70B**](https://huggingface.co/meta-llama/Llama-3.3-70B-Instruct) | none — the boring reliable one | generalist executor+critic if you have ~40GB VRAM | [HF model card](https://huggingface.co/meta-llama/Llama-3.3-70B-Instruct) |
 
-The quirks are encoded in `scripts/endpoints.yaml` (`quirks:` block) and applied automatically by `anchor_client.py`, so orchestration code never special-cases models. Hardware-specific serve helpers: [personal devices](/hardware/personal-devices/mac-mini), [H100](/hardware/h100).
+The quirks are encoded in `scripts/endpoints.yaml` (`quirks:` block) and applied automatically by `anchor_client.py`, so orchestration code never special-cases models.
+
+**Default for wire:** `fit_device.py --probe` prints **Max fit** (capability ceiling) and **Default for wire** (memory-safer for Aider / `.env` / launcher). Opt up to Max fit explicitly when free RAM allows.
+
+Hardware-specific serve helpers: [personal devices](/hardware/personal-devices/mac-mini), [H100](/hardware/h100).
 
 **Aider:** before the first chat in a dirty migration worktree, run
 `python scripts/aider_repo_map_preflight.py` (`platforms/aider/REPO_MAP_PREFLIGHT.md`).

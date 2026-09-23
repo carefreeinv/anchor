@@ -32,6 +32,67 @@ def test_resolve_selection_local_with_valid_submodel():
     assert anchor.LOCAL_MODEL_FILES["qwen3"] in srcs
 
 
+def test_resolve_selection_aider_returns_brief_and_conf_example():
+    pairs = anchor.resolve_selection(["aider"])
+    assert pairs == anchor.PLATFORMS["aider"]["files"]
+    dests = {dest for _, dest in pairs}
+    assert "AIDER.md" in dests
+    assert "platforms/aider/skills-index.md" in dests
+    assert "platforms/aider/work-drone.md" in dests
+    assert ".aider.conf.yml.example" in dests
+    assert "platforms/aider/.aider.conf.swarm.yml.example" in dests
+
+
+def test_ensure_aider_local_gitignored_covers_machine_local_files(tmp_path):
+    action = anchor.ensure_aider_local_gitignored(tmp_path)
+    assert action == "created"
+    lines = (tmp_path / ".gitignore").read_text().splitlines()
+    # Machine-local config written per host by /local-models autowire, plus
+    # Aider's own session artifacts — none of it belongs in a shared repo.
+    assert "/.aider.conf.yml" in lines
+    assert "/.aider.model.settings.yml" in lines
+    assert ".aider.input.history" in lines
+    # ...while the scaffolded example stays trackable.
+    assert ".aider.conf.yml.example" not in lines
+
+
+def test_ensure_aider_local_gitignored_is_idempotent(tmp_path):
+    anchor.ensure_aider_local_gitignored(tmp_path)
+    assert anchor.ensure_aider_local_gitignored(tmp_path) == "unchanged"
+
+
+def test_upgrade_aider_gitignore_skips_non_aider_projects(tmp_path):
+    anchor._upgrade_aider_gitignore(tmp_path, {"platforms": ["claude"]})
+    assert not (tmp_path / ".gitignore").exists()
+
+
+def test_upgrade_aider_gitignore_backfills_recorded_aider_project(tmp_path):
+    (tmp_path / ".gitignore").write_text("var/\n")
+    anchor._upgrade_aider_gitignore(tmp_path, {"platforms": ["aider"]})
+    lines = (tmp_path / ".gitignore").read_text().splitlines()
+    assert "var/" in lines
+    assert "/.aider.conf.yml" in lines
+
+
+def test_plan_copy_scaffolds_aider_brief_and_plans_tree(tmp_path):
+    plan = anchor.plan_copy(tmp_path, ["aider"], want_fleet=False)
+    dests = {str(dest.relative_to(tmp_path)) for _, dest in plan}
+    srcs = {str(src.relative_to(anchor.REPO_ROOT)) for src, _ in plan}
+    assert "AIDER.md" in dests
+    assert "platforms/aider/skills-index.md" in dests
+    assert "platforms/aider/work-drone.md" in dests
+    assert ".aider.conf.yml.example" in dests
+    assert "platforms/aider/.aider.conf.swarm.yml.example" in dests
+    assert "platforms/aider/AIDER.md" in srcs
+    assert "platforms/aider/skills-index.md" in srcs
+    assert "platforms/aider/work-drone.md" in srcs
+    # Aider is a drone: it still needs the .plans/ tree, but no Claude/Grok
+    # slash-command files (it has no slash-command runtime — see AIDER.md C2).
+    assert ".plans/bugs/.gitkeep" in dests
+    assert not any(d.startswith(".claude/") for d in dests)
+    assert not any(d.startswith(".grok/") for d in dests)
+
+
 def test_plan_copy_dedupes_same_destination(tmp_path):
     # claude + chat share the CORE_FILES; the same dest must not appear twice.
     plan = anchor.plan_copy(tmp_path, ["claude", "chat"], want_fleet=False)

@@ -27,11 +27,68 @@ Spec sheets do not answer “what can *this* box run?” This skill probes hardw
 
 1. **Machine profile** — guest OS + WSL?; on WSL, **host** RAM/CPU/GPU via `powershell.exe`  
 2. **Executor placement** — prefer **Windows bare-metal** model server when under WSL  
-3. **Best lean fit** (sized to host budget when known) + smaller options  
-4. **Links** — model quick starts + weight repos  
-5. **Install path** — host [Ollama for Windows](https://ollama.com/download) / llama.cpp first; in-WSL only as fallback  
-6. **Optional draft** — after the report, the agent asks only whether to create a plan (yes/no); it always writes under **`./.plans/drafts/`** with an auto slug (`local-executor-<model>`); install work is under **`## Prerequisites`**, not main Steps  
-7. **Routing** — reconfiguration respects the operator’s **model-priority** list first; lightweight locals only do lightweight work; if the host can run heavy local models, those locals are preferred for heavy inference **when** they appear appropriately in (or are inserted consistently with) that priority order
+3. **Reachable API** — guest-proven `base_url` (loopback → default gateway → `resolv.conf` nameserver); never register dead WSL `localhost` when the host API only answers on the gateway IP  
+4. **Best lean fit** (sized to host budget when known) + smaller options  
+5. **Links** — model quick starts + weight repos  
+6. **Install path** — host [Ollama for Windows](https://ollama.com/download) / llama.cpp first; in-WSL only as fallback; re-probe after reboot (gateway IPs churn); optional [mirrored networking](https://learn.microsoft.com/en-us/windows/wsl/networking)  
+7. **Optional draft** — after the report, the agent asks only whether to create a plan (yes/no); it always writes under **`./.plans/drafts/`** with an auto slug (`local-executor-<model>`); install work is under **`## Prerequisites`**, not main Steps  
+8. **Routing** — reconfiguration respects the operator’s **model-priority** list first; lightweight locals only do lightweight work; if the host can run heavy local models, those locals are preferred for heavy inference **when** they appear appropriately in (or are inserted consistently with) that priority order
+
+## WSL + Aider: bare `aider` needs `.env`
+
+Aider loads model config from `.aider.conf.yml` but reads `OLLAMA_API_BASE`
+from a repo-root `.env`, loaded *before* Aider's own model-info probe. On
+WSL2, if that variable is unset (or points at loopback), a bare `aider`
+invocation fails:
+
+```text
+OllamaError: Error getting model info for qwen3:4b. Set Ollama API Base via
+`OLLAMA_API_BASE` environment variable. Error: [Errno 111] Connection refused
+```
+
+because the Windows-side Ollama doesn't answer on the WSL guest's own
+`localhost`. `scripts/write_aider_env.py` reuses this skill's own
+reachable-`base_url` discovery (above) and writes it into a **gitignored**
+project `.env` (plus a placeholder `OPENAI_API_KEY=ollama` if none is set —
+litellm expects some value even though Ollama ignores it):
+
+```bash
+python scripts/write_aider_env.py --root <project>      # write/refresh .env
+python scripts/write_aider_env.py --root <project> --dry-run
+```
+
+Idempotent — re-running after `wsl --shutdown` or a gateway-IP change updates
+only the `OLLAMA_API_BASE` line, leaving the rest of `.env` untouched. Also
+ensures `.gitignore` covers `.env`/`.env.*` so the machine-local value is
+never committed. Never installs or configures Aider itself — only wires the
+endpoint an already-configured Aider project needs to reach it.
+
+## Confirmed-stack autowire
+
+In a **scaffolded project** (not the Anchor checkout itself), `/local-models`
+checks for a **confirmed** stack after the report — reachable **and** the
+API actually serves the Default-for-wire model, not just "responds":
+
+```bash
+python scripts/local_models_autowire.py --detect   # or .anchor/scripts/…
+```
+
+If confirmed, the skill asks **"Wire this project?"**. On yes:
+
+```bash
+python scripts/local_models_autowire.py --project <project> --write
+```
+
+Writes, all idempotent and machine-local only: a `var/endpoints.local.yaml`
+overlay (Default-for-wire model, never Max fit), the gitignored `.env` (via
+`write_aider_env.py`, above), an idempotent conventions note (only if the
+project already has a conventions file), and — only when `aider` is on
+`$PATH` — `.aider.conf.yml` plus a copied portable launcher
+(`scripts/aider-ollama.sh`, from `hardware/personal-devices/configs/`).
+Detection never writes anything; only an explicit "yes" does. Never installs
+Ollama or pulls model weights — detected-existing stacks only. Autowire when
+already serving is faster than a full declare/converge pass for projects
+that just need "use what's already up."
 
 ## CLI (no agent)
 
@@ -50,6 +107,64 @@ python scripts/fit_device.py --list
 |----------|------|
 | Grok Build | `.grok/skills/local-models/SKILL.md` |
 | Claude Code | `.claude/commands/local-models.md` |
+
+## Queen-bee plans, drone executes
+
+A local model this skill just wired up is a **drone**, not a planner:
+
+- **Queen-bee** (a cloud/frontier session, or a human) writes plans into
+  `.plans/drafts/` and promotes them to `.plans/bugs/` or `.plans/features/`.
+- **Drone** (the local model, via `/work` in an agentic harness like Aider, or
+  headless via `work_once.py`/`fleet_watch.py`) only claims and executes an
+  already-ready plan — it never drafts, promotes, reviews, or merges.
+
+If the local model's backlog is empty, that's the correct idle state — a
+drone does not invent work. See [`/work`](/skills/work) and
+[Fleet workers](/tooling/fleet-workers) for the full contract; the
+[Aider platform](/platforms/aider) page shows the same split for an
+interactive local-model harness.
+
+## Drone recipe: this machine, unattended
+
+Once `/local-models` has confirmed a reachable local endpoint (Ollama,
+llama.cpp, …), point `work_once.py` — the same headless picker
+[Fleet workers](/tooling/fleet-workers) documents generically — at a
+**machine-local** registry rather than the shared `scripts/endpoints.yaml`.
+This follows `/local-models`' own multi-machine hard rule: a laptop's
+`base_url` (an Ollama gateway IP, a `localhost` port) is host-specific and
+must never be committed as project-wide fleet truth — prefer a gitignored
+overlay; a shared registry entry is only for LAN/API hosts every clone can
+actually reach.
+
+```bash
+# var/endpoints.local.yaml (gitignored) — one entry, this host's reachable URL
+cat > var/endpoints.local.yaml <<'YAML'
+endpoints:
+  - name: laptop-swarm
+    tier: swarm
+    base_url: http://<reachable-ollama-url>/v1   # from /local-models' probe
+    model: qwen3:4b
+    quirks: {think_toggle: qwen3, strip_think: true, min_completion_tokens: 256}
+YAML
+
+# Inspect, then claim one fit-appropriate ready plan (never merges):
+python scripts/work_once.py --list --endpoint laptop-swarm --registry var/endpoints.local.yaml
+python scripts/work_once.py --once --endpoint laptop-swarm --registry var/endpoints.local.yaml --agent-id laptop-swarm-1
+```
+
+For a reboot-persistent poller instead of a one-shot claim, hand the same
+registry/endpoint name to [`/fleet-watch`](/skills/fleet-watch) — the
+`--worker` spec takes a `registry=` key so the generated systemd unit points
+at your machine-local file, not the shared `scripts/endpoints.yaml` default:
+
+```bash
+python scripts/fleet_watch.py --project . --emit systemd \
+  --worker tier=small,agent=laptop-swarm-1,interval=10m,endpoint=laptop-swarm,registry=var/endpoints.local.yaml
+```
+
+See [Fleet workers](/tooling/fleet-workers) for the full systemd/cron
+recipes; this page only adds the machine-local-registry step specific to a
+drone running on the box `/local-models` just probed.
 
 ## Related
 
