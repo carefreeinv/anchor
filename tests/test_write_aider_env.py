@@ -130,3 +130,65 @@ def test_ensure_env_gitignored_dry_run_writes_nothing(tmp_path: Path):
     action = wae.ensure_env_gitignored(tmp_path, dry_run=True)
     assert action == "would-create"
     assert not (tmp_path / ".gitignore").exists()
+
+
+# --- gitignore: Aider's own machine-local files -----------------------------
+
+def test_ensure_aider_gitignored_creates_when_missing(tmp_path: Path):
+    action = wae.ensure_aider_gitignored(tmp_path)
+    assert action == "created"
+    lines = (tmp_path / ".gitignore").read_text().splitlines()
+    assert "/.aider.conf.yml" in lines
+    assert "/.aider.model.settings.yml" in lines
+    assert ".aider.chat.history.md" in lines
+    assert ".aider.input.history" in lines
+    assert ".aider.tags.cache.v*/" in lines
+
+
+def test_ensure_aider_gitignored_appends_to_existing(tmp_path: Path):
+    (tmp_path / ".gitignore").write_text("node_modules/\n.env\n")
+    action = wae.ensure_aider_gitignored(tmp_path)
+    assert action == "updated"
+    text = (tmp_path / ".gitignore").read_text()
+    assert "node_modules/" in text and ".env" in text.splitlines()
+    assert "/.aider.conf.yml" in text.splitlines()
+
+
+def test_ensure_aider_gitignored_unchanged_when_covered(tmp_path: Path):
+    (tmp_path / ".gitignore").write_text(
+        "\n".join(wae.AIDER_GITIGNORE_ENTRIES) + "\n")
+    assert wae.ensure_aider_gitignored(tmp_path) == "unchanged"
+
+
+def test_ensure_aider_gitignored_accepts_unanchored_hand_written_entries(tmp_path: Path):
+    """A project that wrote `.aider.conf.yml` itself is already covered — the
+    root-anchored form must not be appended on top of it."""
+    (tmp_path / ".gitignore").write_text(".aider.conf.yml\n")
+    action = wae.ensure_aider_gitignored(tmp_path)
+    assert action == "updated"  # the other entries are still missing
+    lines = (tmp_path / ".gitignore").read_text().splitlines()
+    assert lines.count(".aider.conf.yml") == 1
+    assert "/.aider.conf.yml" not in lines
+    assert "/.aider.model.settings.yml" in lines
+
+
+def test_ensure_aider_gitignored_dry_run_writes_nothing(tmp_path: Path):
+    assert wae.ensure_aider_gitignored(tmp_path, dry_run=True) == "would-create"
+    assert not (tmp_path / ".gitignore").exists()
+
+
+def test_aider_entries_do_not_shadow_scaffolded_examples(tmp_path: Path):
+    """The scaffold ships `.aider.conf.yml.example` (root) and
+    `platforms/aider/.aider.conf.*.example` — the ignore block must leave both
+    trackable."""
+    ignored = {e.lstrip("/") for e in wae.AIDER_GITIGNORE_ENTRIES}
+    assert ".aider.conf.yml.example" not in ignored
+    assert all(not e.endswith(".example") for e in wae.AIDER_GITIGNORE_ENTRIES)
+
+
+def test_ensure_aider_gitignored_respects_aiders_own_catchall(tmp_path: Path):
+    """Aider appends `.aider*` itself on first run in a repo; that already
+    covers every entry, so Anchor must not stack a redundant block under it."""
+    (tmp_path / ".gitignore").write_text("node_modules/\n.aider*\n")
+    assert wae.ensure_aider_gitignored(tmp_path) == "unchanged"
+    assert (tmp_path / ".gitignore").read_text() == "node_modules/\n.aider*\n"

@@ -18,4 +18,22 @@ var/
 .env.*
 !.env.example
 
-.aider*
+# The launcher scripts/aider-ollama.sh is a machine-local copy written by
+# /local-models autowire; hardware/personal-devices/configs/ holds the
+# tracked template it is copied from.
+/scripts/aider-ollama.sh
+
+# Anchor-managed: machine-local Aider config + session artifacts (never commit).
+# These replace the broader `.aider*` catch-all main carried (a653cc5): that
+# pattern also matched the tracked `platforms/aider/.aider.conf*.yml.example`
+# files and a hand-written `.aiderignore`, so a new example could not be
+# committed without `-f`. Keeping both was not an option — gitignore has no
+# "more specific wins" rule, so the catch-all would have gone on shadowing
+# them. The root-anchored `/` entries below cannot shadow anything outside
+# the repo root.
+/.aider.conf.yml
+/.aider.model.settings.yml
+.aider.chat.history.md
+.aider.input.history
+.aider.llm.history
+.aider.tags.cache.v*/

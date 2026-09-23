@@ -46,6 +46,17 @@ read:
   - platforms/aider/skills-index.md
 ```
 
+The same scaffold adds the ignore rules that keep Aider's machine-local files
+out of the repo — `.aider.conf.yml`, `.aider.model.settings.yml`, and the
+session artifacts (`.aider.chat.history.md`, `.aider.input.history`,
+`.aider.llm.history`, `.aider.tags.cache.v*/`). The `.example` files stay
+tracked: the config entries are root-anchored so they cannot shadow them. A
+project scaffolded before these rules existed picks them up from
+`anchor <project-dir> --upgrade`, and `write_aider_env.py` (which writes
+`.env`) ensures them too, so a local-model wire-up never leaves host-specific
+config staged. If Aider already appended its own catch-all `.aider*`, Anchor
+leaves it alone rather than stacking a second block.
+
 `skills-index.md` is the roster: `/work` is the only Anchor skill Aider runs
 in v1, and it lists everything else (`/draft`, `/review`, `/audit`, …) as
 queen-bee-only, so a drone session points the operator back to Claude Code or
