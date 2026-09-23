@@ -175,6 +175,9 @@ blocker is cleared.
 - **Depends on:** <slug-a, slug-b | none>
 - **Release:** <release-slug>        # optional; see ## Releases below
 
+## Likely touch points          # optional, advisory/best-effort only — not enforced
+- path/to/file.ext: function_or_class()   # why an executor would touch it
+
 ## Goal
 ...
 ```

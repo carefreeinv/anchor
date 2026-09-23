@@ -24,9 +24,14 @@ Build), and offer to run `/work` on whatever is already ready instead.
 
 ## The only skill you run: `/work`
 
-Aider has no slash-command runtime — treat the literal text `/work` (optionally
-followed by a plan slug) as an instruction to follow this procedure yourself,
-using your shell/file tools:
+**Verified against Aider 0.86.2, 2026-09-11: type `work`, not `/work`.** Aider
+*does* have its own slash-command runtime — it treats any chat message that
+*starts* with `/` as one of its own built-in commands (`/add`, `/diff`, …)
+and replies `Invalid command: work` without ever calling you; a literal
+`/work` never reaches you. Treat the word **`work`** (optionally followed by
+a plan slug, e.g. `work my-slug`, or embedded mid-sentence — anything not
+starting with `/`) as an instruction to follow this procedure yourself, using
+your shell/file tools:
 
 1. **Pick a plan.** No slug given → look under `.plans/bugs/` first, then
    `.plans/features/`; pick the first by `Priority` (P1 → P2 → P3, default P2),

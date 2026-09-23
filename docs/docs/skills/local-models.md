@@ -34,6 +34,62 @@ Spec sheets do not answer “what can *this* box run?” This skill probes hardw
 7. **Optional draft** — after the report, the agent asks only whether to create a plan (yes/no); it always writes under **`./.plans/drafts/`** with an auto slug (`local-executor-<model>`); install work is under **`## Prerequisites`**, not main Steps  
 8. **Routing** — reconfiguration respects the operator’s **model-priority** list first; lightweight locals only do lightweight work; if the host can run heavy local models, those locals are preferred for heavy inference **when** they appear appropriately in (or are inserted consistently with) that priority order
 
+## WSL + Aider: bare `aider` needs `.env`
+
+Aider loads model config from `.aider.conf.yml` but reads `OLLAMA_API_BASE`
+from a repo-root `.env`, loaded *before* Aider's own model-info probe. On
+WSL2, if that variable is unset (or points at loopback), a bare `aider`
+invocation fails:
+
+```text
+OllamaError: Error getting model info for qwen3:4b. Set Ollama API Base via
+`OLLAMA_API_BASE` environment variable. Error: [Errno 111] Connection refused
+```
+
+because the Windows-side Ollama doesn't answer on the WSL guest's own
+`localhost`. `scripts/write_aider_env.py` reuses this skill's own
+reachable-`base_url` discovery (above) and writes it into a **gitignored**
+project `.env` (plus a placeholder `OPENAI_API_KEY=ollama` if none is set —
+litellm expects some value even though Ollama ignores it):
+
+```bash
+python scripts/write_aider_env.py --root <project>      # write/refresh .env
+python scripts/write_aider_env.py --root <project> --dry-run
+```
+
+Idempotent — re-running after `wsl --shutdown` or a gateway-IP change updates
+only the `OLLAMA_API_BASE` line, leaving the rest of `.env` untouched. Also
+ensures `.gitignore` covers `.env`/`.env.*` so the machine-local value is
+never committed. Never installs or configures Aider itself — only wires the
+endpoint an already-configured Aider project needs to reach it.
+
+## Confirmed-stack autowire
+
+In a **scaffolded project** (not the Anchor checkout itself), `/local-models`
+checks for a **confirmed** stack after the report — reachable **and** the
+API actually serves the Default-for-wire model, not just "responds":
+
+```bash
+python scripts/local_models_autowire.py --detect   # or .anchor/scripts/…
+```
+
+If confirmed, the skill asks **"Wire this project?"**. On yes:
+
+```bash
+python scripts/local_models_autowire.py --project <project> --write
+```
+
+Writes, all idempotent and machine-local only: a `var/endpoints.local.yaml`
+overlay (Default-for-wire model, never Max fit), the gitignored `.env` (via
+`write_aider_env.py`, above), an idempotent conventions note (only if the
+project already has a conventions file), and — only when `aider` is on
+`$PATH` — `.aider.conf.yml` plus a copied portable launcher
+(`scripts/aider-ollama.sh`, from `hardware/personal-devices/configs/`).
+Detection never writes anything; only an explicit "yes" does. Never installs
+Ollama or pulls model weights — detected-existing stacks only. Autowire when
+already serving is faster than a full declare/converge pass for projects
+that just need "use what's already up."
+
 ## CLI (no agent)
 
 ```bash

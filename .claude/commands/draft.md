@@ -57,6 +57,16 @@ row's Task text, shortened) plus a trailing `- [ ] Done when holds` bullet,
 all `[ ]` at draft time. Advisory only; `/work` keeps it in sync during
 execution.
 
+**Populate `## Likely touch points` last too**, once `## Context read` and
+`## Steps` have surfaced real files/symbols — a short, deduped, whole-plan
+list (file, and a function/class name when you already know it) so a lesser
+executor sees roughly where to look before reading the rest of the plan.
+Advisory/best-effort only: never invent a plausible-sounding file or symbol
+you haven't actually seen — write "not applicable" instead for a genuinely
+exploratory plan. This never changes what's enforced: the per-step Steps
+`Touches` column and a task spec's `## Files in scope` (scope-gate-checked)
+stay authoritative.
+
 **Human-owned plans:** if the work must be completed by a person (release
 sign-off, manual QA, anything gated on human judgment/access), set
 `- **Assignee:** <name|username|email>` (or `human`) in the header. The plan

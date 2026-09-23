@@ -147,11 +147,14 @@ FLEET_FILES: list[str] = [
     "scripts/scope_gate.py",
     "scripts/roles.py",
     "scripts/worktree_for_agent.py",
+    "scripts/batch_dispatch.py",
     "scripts/fleet_watch.py",
     "scripts/prompt_tuner.py",
     "scripts/router.py",
     "scripts/benchmark.py",
     "scripts/fit_device.py",
+    "scripts/write_aider_env.py",
+    "scripts/local_models_autowire.py",
     "scripts/endpoints.yaml",
     "scripts/requirements.txt",
     "mcp/anchor-prompts/server.py",
@@ -933,6 +936,24 @@ def ensure_project_var(project_dir: Path) -> dict[str, str]:
     }
 
 
+def ensure_aider_local_gitignored(project_dir: Path) -> str:
+    """Ensure a project scaffolded for Aider ignores Aider's machine-local
+    files (`.aider.conf.yml`, `.aider.model.settings.yml`, session history and
+    tag caches).
+
+    The ignore contract itself lives in ``write_aider_env.py`` — the same
+    module that writes `.env` and is scaffolded into consumers — so the list
+    has exactly one definition. Imported lazily: scaffolds that do not select
+    the Aider platform should not pay for (or depend on) the fleet scripts.
+    """
+    scripts_dir = str(REPO_ROOT / "scripts")
+    if scripts_dir not in sys.path:
+        sys.path.insert(0, scripts_dir)
+    import write_aider_env  # local import: see docstring
+
+    return write_aider_env.ensure_aider_gitignored(project_dir)
+
+
 def _sha256(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
@@ -1356,6 +1377,17 @@ def _confirm_upgrade(*, yes: bool, dry_run: bool) -> bool:
     return raw in {"y", "yes"}
 
 
+def _upgrade_aider_gitignore(project_dir: Path, manifest: dict) -> None:
+    """Backfill the Aider local-file ignore rules on a project scaffolded for
+    Aider before those rules existed. Silent when the project never selected
+    the platform, or when the rules are already there."""
+    if "aider" not in (manifest.get("platforms") or []):
+        return
+    action = ensure_aider_local_gitignored(project_dir)
+    if action != "unchanged":
+        print(f"  .gitignore: Aider machine-local config + session artifacts [{action}]")
+
+
 def upgrade_project(
     project_dir: Path,
     *,
@@ -1421,9 +1453,12 @@ def upgrade_project(
 
     if not moves and not actionable_content and not news:
         print("\nNothing to do — project matches current scaffold for managed files.")
-        # Still ensure var/
+        # Still ensure var/ and (for Aider projects) the local-file ignore rules:
+        # both are .gitignore state, not managed files, so a project can be
+        # "unchanged" above and still be missing them.
         if not dry_run:
             ensure_project_var(project_dir)
+            _upgrade_aider_gitignore(project_dir, manifest)
         return
 
     if dry_run:
@@ -1483,6 +1518,7 @@ def upgrade_project(
         write_upstream(st)
 
     ensure_project_var(project_dir)
+    _upgrade_aider_gitignore(project_dir, manifest)
 
     manifest["files"] = files_map
     manifest["anchor_commit"] = _repo_commit()
@@ -1639,6 +1675,9 @@ def main() -> None:
     var_info = ensure_project_var(project_dir)
     print(f"  {VAR_DIR_NAME}/ (local state; gitignored via root .gitignore "
           f"[{var_info['gitignore']}])")
+    if "aider" in platform_keys:
+        aider_gi = ensure_aider_local_gitignored(project_dir)
+        print(f"  .gitignore: Aider machine-local config + session artifacts [{aider_gi}]")
     manifest = build_manifest(project_dir, plan, conventions, platform_keys, want_fleet,
                               framework, model_priority, preferred_orch)
     manifest_path.write_text(json.dumps(manifest, indent=2) + "\n")

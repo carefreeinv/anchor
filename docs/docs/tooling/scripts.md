@@ -122,6 +122,27 @@ python scripts/plan_board.py --include-parked --no-color
 
 Column color accents: green (Completed), yellow (Review Needed), orange (In Progress), red (everything else) — an accent only, never the sole signal; column names stay authoritative under `--no-color` or on non-TTY output (auto-disabled).
 
+## batch_dispatch.py
+
+Selection + preparation for **parallel** `/work` (`/work --batch [N]`, default
+`N=10`): picks up to `N` ready plans whose declared `## Likely touch points`
+don't overlap, then claims each and creates its own worktree via
+`worktree_for_agent.py` — reusing `plan_select.py`'s existing Priority →
+Value → fit → Depends-on rules unchanged. A plan with no touch-point data is
+excluded from the batch (it still runs through ordinary serial `/work`).
+**Never spawns an agent itself** — its output is a prepared batch (plan path,
+worktree path, feature branch, agent-id per entry) for an operator or
+orchestrating session to hand to K separate executor sessions.
+
+```bash
+python scripts/batch_dispatch.py --root . --max 10 --tier mid            # preview only
+python scripts/batch_dispatch.py --root . --max 10 --tier mid --claim    # claim + worktree the batch
+```
+
+Partial success is normal: a claim race on one plan (another agent grabbed it
+between selection and claim) reports the rest of the batch as prepared, not an
+all-or-nothing abort.
+
 ## fleet_watch.py
 
 Implementation behind the [**`/fleet-watch`**](/skills/fleet-watch) skill (prefer the skill in an agent). Direct CLI for automation/CI: `--project`, `--status`, `--list` / `--once`, `--emit systemd|cron`, `--install-user` (systemd **user** timers; reboot-safe with `loginctl enable-linger $USER`). See [Fleet workers](/tooling/fleet-workers) for the pull model.

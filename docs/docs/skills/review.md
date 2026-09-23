@@ -43,10 +43,36 @@ the empty-queue **dev → main** gate.
 | `/review --promote` | Force promotion review (refuses if not ahead) |
 | `/review --no-promote` | Empty queue stops without offering promotion |
 | `/review --push` | After successful **local** merge, confirm push to `origin` |
+| `/review --batch [N]` | **Opt-in**: review up to `N` (default 3) top-priority plans in one invocation, each with its own full pipeline and required survey |
 
-**One decision per invocation** (one plan **or** one promotion). After you
-finish, re-run `/review` for the next item — the skill never drains the queue
-or chains plan Approve into promotion in one go.
+**One decision per invocation** (one plan **or** one promotion) is the
+default and stays true for every flag except `--batch`. After you finish a
+single-item session, re-run `/review` for the next item — the skill never
+drains the queue or chains plan Approve into promotion in one go.
+
+### Batch mode (`--batch [N]`)
+
+An explicit opt-in for working through a queue faster **without** weakening
+the per-plan gate: each of up to `N` plans (default 3, capped, top
+Priority/Value first) still gets its own fresh-context AI critic and its own
+required survey — no shared verdict, no inferred Approve from a pattern in
+earlier items. Before the loop starts, `/review` shows the whole batch
+(what's in, what got excluded and why) so nothing is a surprise mid-session.
+
+A candidate is excluded from the batch (falls back to single-item review)
+when it: carries a `## Handoff` **hold** note, has a large diff (>8 files or
+±300 lines net), or shares a touched path with another candidate — an exact
+match, or one plan naming a directory containing the other's file (the same
+overlap rule `/work --batch`'s `batch_dispatch.py` applies for parallel
+execution, restated in prose here so this check stands on its own) —
+batching two plans that would conflict at merge time, or rushing a human
+through a big diff back-to-back with others, defeats the point of a careful
+review. Fewer than 2 eligible plans after filtering means nothing to batch.
+
+`--batch` refuses to combine with `--skip-ai` (skipping the fresh-context
+critic across several plans at once is exactly the rubber-stamp risk this
+mode is designed to avoid) and never applies to promotion review, which
+stays a single, deliberate decision.
 
 ## Session pipeline (plan)
 

@@ -3,7 +3,7 @@ sidebar_position: 6
 sidebar_label: Aider
 ---
 
-<!-- synced-from: platforms/aider/AIDER.md @ b02012754013a9b3ce362a09a0fed6fe145caf0d -->
+<!-- synced-from: platforms/aider/AIDER.md @ 9d01b2748887e83272feac6bb37cdb4dedfbaf20 -->
 
 # Aider
 
@@ -19,9 +19,10 @@ architectural calls. Anchor treats Aider as a **drone harness**: it runs
 - **Drone** (Aider) only runs `/work` against an already-ready plan — it does
   not draft, promote, review, or merge.
 
-Aider has no slash-command runtime, so `AIDER.md` teaches the model to treat
-the literal text `/work` as an instruction to follow a condensed version of
-the [`/work`](/skills/work) procedure itself: pick a ready plan by priority,
+Aider treats any message starting with `/` as one of its own built-in
+commands, so `AIDER.md` teaches the model to treat the word **`work`** — no
+leading slash — as an instruction to follow a condensed version of the
+[`/work`](/skills/work) procedure itself: pick a ready plan by priority,
 claim it into `.plans/in-progress/`, execute its Steps one at a time, run the
 project's tests before committing, commit on `feature/<slug>`, then finish to
 `.plans/review-needed/` and stop — a drone never merges and never asks a
@@ -44,6 +45,17 @@ read:
   - AIDER.md
   - platforms/aider/skills-index.md
 ```
+
+The same scaffold adds the ignore rules that keep Aider's machine-local files
+out of the repo — `.aider.conf.yml`, `.aider.model.settings.yml`, and the
+session artifacts (`.aider.chat.history.md`, `.aider.input.history`,
+`.aider.llm.history`, `.aider.tags.cache.v*/`). The `.example` files stay
+tracked: the config entries are root-anchored so they cannot shadow them. A
+project scaffolded before these rules existed picks them up from
+`anchor <project-dir> --upgrade`, and `write_aider_env.py` (which writes
+`.env`) ensures them too, so a local-model wire-up never leaves host-specific
+config staged. If Aider already appended its own catch-all `.aider*`, Anchor
+leaves it alone rather than stacking a second block.
 
 `skills-index.md` is the roster: `/work` is the only Anchor skill Aider runs
 in v1, and it lists everything else (`/draft`, `/review`, `/audit`, …) as

@@ -18,6 +18,24 @@
 - **Depends on:** <comma-separated plan slugs, or `none`>  <!-- other .plans work that must be done first -->
 - **Release:** <release-slug>                <!-- optional; matches a .plans/.releases/<slug>.md file. Self-declaring — the release file never lists member plans, it's computed by scanning this field. Omit if this plan isn't part of a named release. -->
 
+## Likely touch points
+<!-- Optional, best-effort, advisory only — NOT authoritative and NOT
+     enforced. This is the planner's up-front guess at where an executor will
+     likely need to look, written once other sections below (Context read,
+     Steps) have surfaced real files/symbols — so draft this section last,
+     even though it's placed here for an executor to see immediately. It
+     never changes what's actually enforced: the per-step Steps `Touches`
+     column and a task spec's `## Files in scope` (scope-gate-checked) remain
+     the real boundaries. Verify against the actual code — this list can go
+     stale after edits, and that's an acceptable, known limitation, not a bug
+     to chase. Omit entirely (state "not applicable") rather than invent a
+     plausible-sounding file/function name for a genuinely exploratory plan.
+     One consolidated, deduped list for the whole plan — not repeated per
+     step. File-level alone is fine; name a function/class too when you
+     already know it. -->
+- `path/to/file.ext: function_or_class()` — why an executor would touch it
+- `path/to/other_file.ext` — file-level only, when no specific symbol is known yet
+
 ## Progress
 <!-- Populate LAST, after ## Steps and ## Done when are written below — this
      section mirrors them, so draft it after they exist even though it's
