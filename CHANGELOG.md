@@ -65,8 +65,9 @@ Newest first.
   to the release closest to complete — strictly within the same
   Priority+Value, never across it. A plan naming a release with no file (a
   typo) sorts **neutrally**, never demoted. `plan_board.py` applies the same
-  affinity, so its Ready column cannot disagree with the plan `/work` would
-  actually claim. `/work` and `/review` (both platform surfaces) ask **once**,
+  affinity in its Ready column, so its head is the plan `/work` would actually
+  claim (regression-tested against the mtime tiebreak, which can otherwise mask
+  a broken bias). `/work` and `/review` (both platform surfaces) ask **once**,
   interactively, when a release's every member plan reaches `completed/`,
   offering to hand off to `/release` — never auto-run. `release_progress.py`
   reads plans without modifying them; the one thing it writes is a release

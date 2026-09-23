@@ -50,6 +50,7 @@ from plan_select import (  # noqa: E402
     parse_depends_on,
     parse_preferred,
     parse_priority,
+    parse_release_field,
     parse_title,
     parse_value,
     plan_slug,
@@ -289,6 +290,11 @@ def scan_lane(plans_root: Path, lane: str) -> list[PlanRecord]:
                 depends_on=tuple(parse_depends_on(text)),
                 assignee=parse_assignee(text),
                 agent_assignable=is_agent_assignable(text),
+                # Without this the release bias build_columns threads into
+                # plan_sort_key can never fire: the guard tests `r.release`,
+                # which would default to None and silently make the board's
+                # Ready head disagree with the plan /work actually claims.
+                release=parse_release_field(text),
             )
         )
     return records

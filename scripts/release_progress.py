@@ -11,10 +11,10 @@ Membership is always computed here by scanning every plan's ``Release:``
 field; nothing stores that list twice.
 
     python scripts/release_progress.py --list
-    local-inference-optimizations   open    12/17 complete (5 remaining)
-    plan-lifecycle-observability    open     0/4  complete (4 remaining)
+    v0.3.0        open    12/17 complete (5 remaining)
+    v0.4.0        open     0/4  complete (4 remaining)
 
-    python scripts/release_progress.py --status local-inference-optimizations
+    python scripts/release_progress.py --status v0.3.0
     ...
 
 A plan may point at a release slug with no matching ``.plans/.releases/<slug>.md``

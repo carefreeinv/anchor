@@ -77,7 +77,7 @@ prompt.
 
 ```bash
 python scripts/release_progress.py --list
-python scripts/release_progress.py --status local-inference-optimizations
+python scripts/release_progress.py --status v0.3.0
 python scripts/release_progress.py --json
 ```
 

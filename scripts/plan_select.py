@@ -869,6 +869,11 @@ def _release_completion_map(plans_root: Path) -> dict[str, float]:
     every equal-priority peer, which silently demotes a plan for a typo
     instead of leaving it neutral.
     """
+    # Cheap exit for the common case: a project with no .releases/ directory
+    # has no affinity to compute, and this runs on every plan_board redraw.
+    if not (plans_root / ".releases").is_dir():
+        return {}
+
     from release_progress import scan_releases
 
     releases = scan_releases(plans_root)

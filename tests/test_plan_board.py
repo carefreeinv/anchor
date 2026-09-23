@@ -798,3 +798,55 @@ def test_default_priority_and_value_when_headers_absent(tmp_path):
     assert rec.priority == "P2"
     assert rec.value == "medium"
     assert rec.title == "Plan: Bare"
+
+
+def _release_plan(path: Path, release: str, *, value: str = "medium",
+                  priority: str = "P2") -> None:
+    """A plan carrying a `Release:` header (the board's `_plan` helper omits it)."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        f"# Plan: {path.stem}\n\n"
+        f"- **Value:** {value}\n"
+        f"- **Priority:** {priority}\n"
+        "- **Preferred models:** mid\n"
+        f"- **Release:** {release}\n\n"
+        "## Goal\ng\n\n## Steps\n| 1 | x |\n\n## Done when\n- [ ] ok\n",
+        encoding="utf-8",
+    )
+
+
+def test_board_ready_head_matches_work_pick_with_release_affinity(tmp_path):
+    """The board's Ready column must order like `/work`'s actual pick.
+
+    Regression for a fix that was *inert*: `build_columns` threaded a release
+    bias into `plan_sort_key`, but `scan_lane` never set `PlanRecord.release`,
+    so the guard `if release_bias and r.release ...` was never taken and the
+    board silently disagreed with `/work` at the head.
+
+    The fixture forces divergence deliberately. A tagged plan whose release is
+    90% complete must outrank an untagged one *against* the mtime tiebreak —
+    the untagged plan is made older, so if the bias does not fire the untagged
+    plan wins and this test fails.
+    """
+    import plan_select as ps
+
+    plans = _tree(tmp_path)
+    (plans / ".releases").mkdir(parents=True, exist_ok=True)
+    (plans / ".releases" / "r1.md").write_text(
+        "# Release: r1\n\n- **Status:** open\n- **Target:** none\n", encoding="utf-8")
+    for i in range(9):                                   # 9/10 members complete -> 0.9
+        _release_plan(plans / "completed" / f"done{i}.md", "r1")
+    _release_plan(plans / "features" / "zzz-tagged.md", "r1")
+    _plan(plans / "features" / "aaa-untagged.md", value="medium", priority="P2")
+
+    # Make the untagged plan strictly older so the mtime tiebreak favours it.
+    old = 10_000_000
+    os.utime(plans / "features" / "aaa-untagged.md", (old, old))
+
+    board = dict(pb.build_columns(plans, include_parked=False))
+    ready = [r.rel for r in board["Ready"]]
+    assert ready.index("features/zzz-tagged.md") < ready.index("features/aaa-untagged.md")
+
+    # …and it agrees with what /work would actually claim.
+    work_order = [r.rel for r in ps.inventory_ready(plans, ps.Worker("t", "mid"))]
+    assert work_order[0] == ready[0]

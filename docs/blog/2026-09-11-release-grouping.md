@@ -17,10 +17,10 @@ fully done.
 A plan may carry an optional header:
 
 ```markdown
-- **Release:** local-inference-optimizations
+- **Release:** v0.3.0
 ```
 
-`.plans/.releases/local-inference-optimizations.md` holds only release-level
+`.plans/.releases/v0.3.0.md` holds only release-level
 metadata — a `Status` (`open` / `ready` / `shipped`) and an optional
 `Target` version — and **never** a list of member plans. Membership is
 always computed by scanning every plan's `Release:` field. The design went
