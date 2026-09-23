@@ -263,8 +263,8 @@ python3 scripts/local_models_autowire.py --project <project> --write
 
 Writes, all idempotent (C5) and machine-local only (C2): a `var/endpoints.local.yaml`
 overlay (memory-safer **Default for wire** model, never Max fit — C3b), the
-gitignored `.env` via `write_aider_env.py` (`aider-wsl-ollama-api-base-env`'s
-own contract — reused, not reforked), an idempotent conventions note (only
+gitignored `.env` via `write_aider_env.py` (its own existing contract —
+reused, not reforked), an idempotent conventions note (only
 appended if the project already has a conventions file — never invents one),
 and — only when `aider` is on `$PATH` — `.aider.conf.yml` plus a copied
 portable launcher (`scripts/aider-ollama.sh`).
@@ -402,5 +402,4 @@ for project path or slug when offering a draft.
 - Creating drafts or writing defaults without user consent
 - Treating Prerequisites install as silent `/work` steps
 - Committing one machine’s localhost fit as project-wide required capacity
-- Implementing full desired-state declaration / ensure pipelines (future
-  `/local-models-config` + `/local-models-ensure` if present in backlog)
+- Implementing full desired-state declaration / ensure pipelines

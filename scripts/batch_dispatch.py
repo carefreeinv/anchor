@@ -6,12 +6,11 @@ This is a **selection + preparation** tool, not an agent-spawning runtime:
 Anchor doesn't run its own agents. This script picks the batch, claims each
 plan, and creates its worktree; an operator or an orchestrating harness (e.g.
 its own subagent/Task mechanism) is what actually runs K parallel executor
-sessions against the prepared batch — see plan
-``non-conflicting-parallel-dispatch`` (C1).
+sessions against the prepared batch.
 
-## Conflict model (plan Step 1 design note)
+## Conflict model
 
-Each plan's ``## Likely touch points`` bullets (see ``plan-touch-map``) are
+Each plan's ``## Likely touch points`` bullets are
 parsed to a flat set of normalized paths, symbol suffix (``: func()``)
 stripped — *which* symbol changed inside a shared file doesn't make two plans
 safer to run in parallel; the file is the unit of conflict. Two plans

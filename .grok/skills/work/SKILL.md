@@ -618,8 +618,8 @@ missing). Optional `--slug` checks out `feature/<slug>` inside the worktree.
 ## Batch dispatch (`--batch`)
 
 `/work --batch [N]` (default `N=10`) hands off to `scripts/batch_dispatch.py`
-to select **up to N** ready plans whose declared `## Likely touch points` (see
-`plan-touch-map`) don't overlap, then claims + creates a dedicated worktree
+to select **up to N** ready plans whose declared `## Likely touch points`
+don't overlap, then claims + creates a dedicated worktree
 for each one — so up to N *separate* executor sessions can run them in
 parallel with a low a-priori chance of merge conflicts or shared-file races.
 
@@ -648,8 +648,8 @@ successfully prepared plus one skip-with-reason, rather than aborting.
 This is orthogonal to **parallel review**: `/review`'s "one decision per
 invocation" rule is unchanged by this flag; a batch-dispatch of *execution*
 across several worktrees has no bearing on how each finished plan is later
-reviewed one at a time (see `review-batch-queue` for that separate,
-review-side story — this flag does not touch `/review`'s doctrine).
+reviewed one at a time. `/review` has its own opt-in `--batch` flag for
+chaining several sign-off cycles; this flag does not touch `/review`'s doctrine.
 
 ## Out of scope
 

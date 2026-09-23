@@ -1,16 +1,15 @@
 #!/usr/bin/env python3
 """Detect a *confirmed* local-model stack in a scaffolded consumer project
 and, on operator confirm, write the machine-local wiring so `aider` (and
-other swarm-tier work) can use it immediately — without waiting for the
-full ``/local-models-config`` -> ``/local-models-ensure`` convergence
-pipeline to land.
+other swarm-tier work) can use it immediately, rather than requiring a
+full declare/converge configuration pass.
 
-This is the middle path between "/local-models only reports + offers a
-draft" and a full declare/converge system: **detection never mutates
+This is the middle path between "/local-models only reports" and a full
+declare/converge system: **detection never mutates
 anything**; only :func:`write_project_stack`, called after an explicit
 operator confirm, writes files.
 
-Confirm gates (plan ``local-models-confirmed-stack-autowire`` Step 1):
+Confirm gates:
 
 1. a guest-reachable OpenAI-compatible API answered
    (``fit_device.probe_device()['register_ok']``)
@@ -251,8 +250,7 @@ LAUNCHER_DEST_REL = "scripts/aider-ollama.sh"
 def copy_launcher_template(anchor_root: Path, project_dir: Path, *, dry_run: bool = False) -> str:
     """Copy the portable Aider+Ollama launcher template into the consumer
     project's own `scripts/`, only when Aider is on PATH (optional
-    convenience — `.env` alone is the bare-`aider` fix, per the
-    `aider-wsl-ollama-api-base-env` plan's own C1)."""
+    convenience — `.env` alone is the bare-`aider` fix)."""
     src = anchor_root / LAUNCHER_TEMPLATE_REL
     if not src.is_file():
         return f"skipped (template missing: {src})"

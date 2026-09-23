@@ -33,10 +33,9 @@ python scripts/batch_dispatch.py --root . --max 10 --tier mid --claim    # claim
 Anchor doesn't run its own agents, and this tool doesn't start. Its output is
 a list of prepared plans — path, worktree, feature branch, agent-id — for an
 operator or an orchestrating session to hand to separate executor sessions.
-A plan with no touch-point data (most of today's backlog, since the
-touch-points convention just shipped) is excluded from the batch entirely
-rather than guessed at; it still runs fine through ordinary serial `/work`.
+A plan with no touch-point data is excluded from the batch entirely rather
+than guessed at; it still runs fine through ordinary serial `/work`.
 
-This is about parallel **execution** only. Parallel *review* of similar
-plans is a separate, already-planned story (`review-batch-queue`) — this
-change leaves `/review`'s one-decision-per-invocation rule untouched.
+This is about parallel **execution** only. Parallel *review* is a separate
+opt-in flag, `/review --batch`, and this change leaves `/review`'s
+one-decision-per-invocation rule untouched.

@@ -8,6 +8,12 @@ Newest first.
 
 ### Added
 
+- **`/work --batch` is documented on the published skill page** —
+  `docs/docs/skills/work.md` now covers the flag its Claude and Grok surfaces
+  already shipped: what `scripts/batch_dispatch.py` selects, that it never
+  spawns an agent, that a plan without touch points is excluded, and its real
+  flag list. `/review --batch` was already mirrored; `/work --batch` was not.
+
 - **`/review --batch [N]`** — opt-in batch mode reviews up to `N` (default 3)
   top-priority `review-needed/` plans in one invocation. Every plan still
   gets its own full pipeline and its own required, never-inferred survey —
@@ -93,6 +99,17 @@ Newest first.
   Documented in `/local-models` and tooling scripts.
 
 ### Fixed
+
+- **Shipped files no longer cite private plan slugs** — eleven references to
+  `.plans/` working-backlog slugs were removed from the `/work` and
+  `/local-models` skill surfaces (both Claude and Grok), `scripts/batch_dispatch.py`,
+  `scripts/local_models_autowire.py`, `scripts/plan_board.py`,
+  `docs/docs/skills/local-models.md` and the batch-dispatch blog post. Those
+  slugs name files this repo never commits, and the skill surfaces and scripts
+  are scaffolded verbatim into dependent projects, where the names mean
+  nothing — `batch_dispatch.py --help` printed one. Docs that pointed at
+  unbuilt `/local-models-config` / `/local-models-ensure` commands now describe
+  the shipped behavior instead.
 
 - **CI's Lint job is green again** — `ruff check .` had been failing on every
   branch for two unrelated findings, so a red Lint result carried no signal.

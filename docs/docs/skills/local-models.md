@@ -87,8 +87,8 @@ project already has a conventions file), and — only when `aider` is on
 (`scripts/aider-ollama.sh`, from `hardware/personal-devices/configs/`).
 Detection never writes anything; only an explicit "yes" does. Never installs
 Ollama or pulls model weights — detected-existing stacks only. Autowire when
-already serving beats the slower `/local-models-config` → `/local-models-ensure`
-declare/converge path for projects that just need "use what's already up."
+already serving is faster than a full declare/converge pass for projects
+that just need "use what's already up."
 
 ## CLI (no agent)
 
