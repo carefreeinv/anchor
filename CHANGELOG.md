@@ -107,6 +107,20 @@ Newest first.
 
 ### Fixed
 
+- **`aider_repo_map_preflight.py --stage` no longer leads operators into losing
+  renamed files** — it stages the delete side only, so an operator following
+  the shipped checklist after a `.md`→`.mdx` migration committed a
+  deletion-only change and dropped the new files (git reports the add side as a
+  collapsed `?? dir/`, which is easy to miss). The warning block, `--stage`
+  help, its success output and `platforms/aider/REPO_MAP_PREFLIGHT.md` now all
+  say to stage both sides (`git add -A -- <dir>/`). Also: a repo with **no
+  commits** no longer hard-errors with a raw `fatal: Not a valid object name
+  HEAD` (an absent HEAD is an empty HEAD set, as Aider itself treats it);
+  `.aiderignore` entries starting `#` or `!` or containing `[` are escaped
+  rather than silently read as comment/negation/character-class, and the
+  written block says to delete it after committing; `--sample 0` no longer
+  prints an empty `sample:` header.
+
 - **Shipped files no longer cite private plan slugs** — eleven references to
   `.plans/` working-backlog slugs were removed from the `/work` and
   `/local-models` skill surfaces (both Claude and Grok), `scripts/batch_dispatch.py`,

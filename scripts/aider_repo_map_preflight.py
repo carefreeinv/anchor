@@ -86,6 +86,18 @@ def _git_lines(root: Path, *args: str) -> list[str]:
     return [ln for ln in proc.stdout.splitlines() if ln]
 
 
+def _git_lines_or_empty(root: Path, *args: str) -> list[str]:
+    """Like :func:`_git_lines`, but a failing command yields no lines.
+
+    Only for reads where "this does not exist yet" is a legitimate state —
+    currently ``ls-tree HEAD`` in a repo with no commits.
+    """
+    proc = _git(root, *args)
+    if proc.returncode != 0:
+        return []
+    return [ln for ln in proc.stdout.splitlines() if ln]
+
+
 def find_git_root(start: Path | None = None) -> Path:
     start = (start or Path.cwd()).resolve()
     proc = _git(start, "rev-parse", "--show-toplevel")
@@ -98,7 +110,12 @@ def scan(root: Path | None = None) -> StaleIndexReport:
     """Return deleted worktree paths and HEAD paths missing on disk."""
     git_root = find_git_root(root)
     deleted = _git_lines(git_root, "ls-files", "-d")
-    head_paths = _git_lines(git_root, "ls-tree", "-r", "--name-only", "HEAD")
+    # A repo with no commits has no HEAD: `ls-tree HEAD` exits non-zero with
+    # "Not a valid object name HEAD". That is an empty HEAD set, not an error —
+    # Aider itself tolerates it (repo.py catches ValueError and sets
+    # commit = None). Raising here made --ok-exit unreachable, since the
+    # exception escaped before that check.
+    head_paths = _git_lines_or_empty(git_root, "ls-tree", "-r", "--name-only", "HEAD")
     missing: list[str] = []
     for rel in head_paths:
         if not (git_root / rel).exists():
@@ -121,19 +138,24 @@ def format_warning(report: StaleIndexReport, *, sample: int = SAMPLE_DEFAULT) ->
         f"aider-repo-map preflight: {n} path(s) missing on disk but still in "
         f"git HEAD/index (Aider maps HEAD∪index — repo-map will flood).",
         f"  root: {report.root}",
-        "  sample:",
     ]
-    lines.extend(f"    - {p}" for p in shown)
+    if shown:
+        lines.append("  sample:")
+        lines.extend(f"    - {p}" for p in shown)
     if more > 0:
-        lines.append(f"    … +{more} more")
+        lines.append(f"    … +{more} more" if shown else f"    ({more} path(s), sample suppressed)")
     lines.extend(
         [
             "  why staging alone is not enough: `git add -u` removes the path from",
             "  the *index*, but Aider still sees it via HEAD until you commit — or",
             "  hide ghosts with `.aiderignore`.",
             "  next (pick one):",
-            "    1) stage scoped deletes, then commit the migration:",
-            "         git add -u -- <paths…>   # prep only — never auto-commit",
+            "    1) stage the migration, then commit it:",
+            "         # `git add -u` stages DELETIONS ONLY. For a rename",
+            "         # (e.g. .md→.mdx) it leaves the NEW files untracked, and",
+            "         # committing then loses them. Stage both sides:",
+            "         git add -A -- <dir>/     # deletes AND new files",
+            "         # (or: git add -u -- <paths…> && git add -- <new paths…>)",
             "         # then your normal /commit-prep + commit",
             "    2) interim ignore until commit (and `!.aiderignore` if `.aider*`",
             "       is gitignored):",
@@ -142,6 +164,19 @@ def format_warning(report: StaleIndexReport, *, sample: int = SAMPLE_DEFAULT) ->
         ]
     )
     return "\n".join(lines) + "\n"
+
+
+def _escape_ignore_line(path: str) -> str:
+    """Escape a path for gitwildmatch (Aider's ``.aiderignore`` syntax).
+
+    A leading ``#`` is a comment and a leading ``!`` is a negation, so both are
+    backslash-escaped. ``[`` opens a character class and would silently fail to
+    match the literal filename.
+    """
+    out = path.replace("[", "\\[")
+    if out.startswith("#") or out.startswith("!"):
+        out = "\\" + out
+    return out
 
 
 def write_aiderignore(
@@ -168,15 +203,28 @@ def write_aiderignore(
     to_add = [p for p in stale if p not in existing]
     if not to_add:
         return ignore
-    block = ["", "# Anchor aider_repo_map_preflight — HEAD paths missing on disk"]
-    block.extend(to_add)
+    block = [
+        "",
+        "# Anchor aider_repo_map_preflight — HEAD paths missing on disk.",
+        "# TEMPORARY: delete this block once the migration is committed, or these",
+        "# entries keep real files out of Aider's repo-map after they come back.",
+    ]
+    block.extend(_escape_ignore_line(p) for p in to_add)
     with ignore.open("a", encoding="utf-8") as fh:
         fh.write("\n".join(block) + "\n")
     return ignore
 
 
 def stage_deletions(report: StaleIndexReport, *, yes: bool = False) -> list[str]:
-    """``git add -u`` for deleted worktree paths only. Never commits. Needs yes."""
+    """``git add -u`` for deleted worktree paths only. Never commits. Needs yes.
+
+    **Stages the delete side only.** For a rename (D+A) — the .md→.mdx class
+    this script exists for — the new files stay untracked, so committing right
+    after this drops them. Callers must stage the add side themselves
+    (``git add -A -- <dir>/``). Deliberately not done here: this helper is
+    scoped to the paths the report found, and the add side is by definition
+    paths the report cannot know about.
+    """
     if not yes:
         raise ValueError("refusing to stage without yes=True")
     root = Path(report.root)
@@ -202,7 +250,9 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument(
         "--stage",
         action="store_true",
-        help="git add -u for deleted worktree paths only (requires --yes; never commits)",
+        help=("git add -u for deleted worktree paths ONLY (requires --yes; never "
+              "commits). Does NOT stage new files: after a rename, stage the add "
+              "side too (git add -A -- <dir>/) or committing will drop them"),
     )
     ap.add_argument(
         "--yes",
@@ -242,6 +292,8 @@ def main(argv: list[str] | None = None) -> int:
             staged = stage_deletions(report, yes=args.yes)
             if staged and not args.json:
                 print(f"staged {len(staged)} deletion(s) (not committed)")
+                print("  deletions only — if this was a rename, stage the new "
+                      "files too (git add -A -- <dir>/) before committing")
     except ValueError as exc:
         print(f"aider-repo-map preflight: {exc}", file=sys.stderr)
         return 2

@@ -25,7 +25,9 @@ paths with **`.aiderignore`**.
 
 ## Preflight
 
-From the Anchor checkout or a scaffolded project’s `.anchor/scripts/`:
+From the Anchor checkout, `scripts/`; in a scaffolded project the same script
+lives at `.anchor/scripts/`. Substitute that prefix throughout the examples
+below — they are written for the Anchor checkout.
 
 ```bash
 python scripts/aider_repo_map_preflight.py
@@ -46,9 +48,13 @@ If your `.gitignore` uses a broad `.aider*` rule, allow the ignore file itself:
 ## Operator checklist after `.md` → `.mdx` (or similar)
 
 1. Run the preflight — expect one block with a count + sample, not N Aider lines.
-2. Stage scoped deletes (`git add -u -- path/…` or `--stage --yes`).
+2. Stage the migration. **For a rename (`.md` → `.mdx`), stage both sides:**
+   `git add -A -- path/` — `git add -u` and `--stage --yes` stage **deletions
+   only**, so committing after them drops the new files.
 3. Either **commit** the migration (durable) **or** write `.aiderignore` lines
-   for HEAD ghosts until that commit.
+   for HEAD ghosts until that commit. If you wrote `.aiderignore` lines,
+   **delete that block once you commit** — otherwise it keeps the real files
+   out of the repo-map after they return.
 4. Then start Aider.
 
 Never let unattended preflight commit for you.
