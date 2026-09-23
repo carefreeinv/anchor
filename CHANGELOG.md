@@ -188,6 +188,16 @@ Newest first.
   `/local-models` skills + personal-devices / scripts docs note re-probe after
   reboot and optional mirrored networking.
 
+### Changed
+
+- **Plans that share a whole-tree gate are written as one plan** — `/draft`
+  now says findings under one whole-tree check (`ruff check .`, `mypy .`,
+  `tsc --noEmit`, a full `pytest`) belong in a single plan with per-file Steps,
+  and the plan template requires every `## Done when` criterion to be satisfiable
+  on a green tree. `/commit-prep` Gate 1 names a failure outside the plan's scope
+  as still red: stop, report it, and let the operator decide (joint commit,
+  recorded in each affected plan's `## Handoff`) — not a waiver.
+
 ## [0.2.0] - 2026-08-28
 
 ### Added

@@ -109,6 +109,13 @@ only when no matching draft file exists.
    "not applicable" for a genuinely exploratory plan. Never changes what's
    enforced: the per-step `Touches` column and a task spec's `## Files in scope`
    (scope-gate-checked) stay authoritative.
+   **Whole-tree gates: one plan, not several.** Findings that share one **whole-
+   tree** gate (`ruff check .`, `mypy .`, `tsc --noEmit`, a full `pytest`, any
+   check CI runs without path scoping) belong in **one** plan with per-file
+   Steps. A step's `Verify by` may still be scoped (`ruff check <one file>`),
+   which keeps the isolation a split was reaching for. Splitting them across
+   plans makes every branch fail the gate — each is uncommittable until the other
+   lands.
 6. Path only under `drafts/`. **Default filename `<slug>.local.md`** (private,
    gitignored); `--shared`/`--tracked` writes a committable `<slug>.md`. Report
    path; do not promote unless asked.

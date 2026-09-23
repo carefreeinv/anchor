@@ -102,6 +102,11 @@ Optional detail list:
 - Step looks overqualified for its assigned tier (boilerplate/rename/formatting on a frontier route) → downgrade to smaller/local model instead
 
 ## Done when
+<!-- Every criterion must be satisfiable on a **green** tree. Never write one
+     that only holds while a gate stays broken (e.g. "`ruff check .` reports
+     exactly one remaining finding"). A scope guardrail — "do not touch the
+     other finding" — belongs under `## Constraints`, where it restricts the
+     diff without becoming an acceptance condition. -->
 - <machine-checkable conditions, all must hold>
 
 ---

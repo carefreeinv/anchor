@@ -36,6 +36,16 @@ and reports gate results. It does **not** `git commit`, push, or merge.
    failure, stop and surface it — don't thrash.
 3. Never weaken, skip, or delete a test just to go green; if a test seems wrong, say
    so and let the user decide.
+4. **A failure this branch did not cause, in a path the plan forbids touching, is
+   still red.** Prep never passes it, and it is not a waiver: "the gate must
+   actually pass" stays the rule. Stop and report that specific shape — "gate
+   fails on a path outside this plan's scope" — with the failing check and path,
+   instead of thrashing or silently widening scope. The resolution is an
+   **operator decision**, not an executor one: ask the operator; if they approve,
+   land the fixes jointly in one commit. Then write the override into **every**
+   affected plan's `## Handoff`, naming the branch, the SHA, and who approved, so
+   a later reader sees an authorized decision rather than a silent constraint
+   violation.
 
 ## Gate 2 — release notes
 

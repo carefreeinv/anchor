@@ -81,6 +81,10 @@ Populate `## Progress` **last**, after `## Steps` and `## Done when` exist: one 
 
 Populate `## Likely touch points` **last too**, once `## Context read` and `## Steps` have surfaced real files/symbols: a short, deduped, whole-plan list (file, and a function/class name when known) so a lesser executor sees roughly where to look before reading the rest of the plan. Advisory/best-effort only — never invent a plausible file/symbol; write "not applicable" for a genuinely exploratory plan. Never changes what's enforced: the per-step `Touches` column and a task spec's `## Files in scope` (scope-gate-checked) stay authoritative.
 
+**Whole-tree gates: one plan, not several.** Findings that share one **whole-tree** gate (`ruff check .`, `mypy .`, `tsc --noEmit`, a full `pytest`, any check CI runs without path scoping) belong in **one** plan with per-file Steps. A step's `Verify by` may still be scoped (`ruff check <one file>`), which keeps the isolation a split was reaching for. Splitting them across plans makes every branch fail the gate — each is uncommittable until the other lands.
+
+In the plan template, every `## Done when` criterion must also be satisfiable on a **green** tree; a scope guardrail belongs under `## Constraints`, not as an acceptance condition.
+
 ### Promote
 User passes `--promote <slug>` (or `promote <slug>`). Agent reads the plan and chooses:
 

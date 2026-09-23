@@ -67,6 +67,13 @@ exploratory plan. This never changes what's enforced: the per-step Steps
 `Touches` column and a task spec's `## Files in scope` (scope-gate-checked)
 stay authoritative.
 
+**Whole-tree gates: one plan, not several.** Findings that share one
+**whole-tree** gate (`ruff check .`, `mypy .`, `tsc --noEmit`, a full `pytest`,
+any check CI runs without path scoping) belong in **one** plan with per-file
+Steps. A step's `Verify by` may still be scoped (`ruff check <one file>`), which
+keeps the isolation a split was reaching for. Splitting them across plans makes
+every branch fail the gate — each is uncommittable until the other lands.
+
 **Human-owned plans:** if the work must be completed by a person (release
 sign-off, manual QA, anything gated on human judgment/access), set
 `- **Assignee:** <name|username|email>` (or `human`) in the header. The plan
