@@ -126,7 +126,8 @@ gating as `/work`'s culmination question):
 `python scripts/release_progress.py --list --root .`. A `Status: open` release with
 all members in `completed/` → ask **once** whether to prepare it for deployment,
 then `--mark-ready <slug>` on any answer. Never auto-run `/release`, never let it
-change mode selection. Detail: `docs/docs/tooling/scripts.md`.
+change mode selection. Detail: `python scripts/release_progress.py --help`,
+or https://carefreeinv.com/anchor/tooling/scripts
 
 ## 2. Select mode and target
 

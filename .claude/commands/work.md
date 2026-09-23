@@ -369,7 +369,8 @@ the queue moving. Small models do not grab architecture plans to "try hard."
   `python scripts/release_progress.py --list --root .`. A `Status: open` release with
   all members in `completed/` → ask **once** whether to prepare it for deployment,
   then `--mark-ready <slug>` on any answer. Never auto-run `/release`, never let it
-  change plan selection. Detail: `docs/docs/tooling/scripts.md`.
+  change plan selection. Detail: `python scripts/release_progress.py --help`,
+  or https://carefreeinv.com/anchor/tooling/scripts
 
 ### 2. Parse arguments
 

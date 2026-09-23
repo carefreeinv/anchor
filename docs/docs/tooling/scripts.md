@@ -62,7 +62,18 @@ membership grows over time. `--list` prints one line per release
 (`slug  status  completed/total complete (N remaining)`); `--status <slug>`
 gives the member breakdown; `--json` for tooling. A plan pointing at an
 undefined release slug is reported as `unknown-release`, never silently
-dropped or counted toward a phantom "complete" release.
+dropped or counted toward a phantom "complete" release. Orphans are listed in
+their own format with no `Status:` column, so they can never satisfy the
+completion prompt `/work` and `/review` raise — a release reads complete only
+when every plan pointing at it resolves to a real release file and has reached
+`completed/`. Orphaned plans also sort **neutrally**, never demoted, so a typo
+in a `Release:` header cannot quietly push a plan down the ready queue.
+
+Scanning is read-only for plans. One release-file field is written: `Status:`
+is flipped `ready -> open` automatically when a release marked ready gains an
+incomplete member (`--no-reconcile` skips it). The `open -> ready` direction is
+never automatic — it comes from `--mark-ready` or the interactive completion
+prompt.
 
 ```bash
 python scripts/release_progress.py --list

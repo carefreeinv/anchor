@@ -54,6 +54,7 @@ from plan_select import (  # noqa: E402
     parse_value,
     plan_slug,
     plan_sort_key,
+    release_completion_map,
 )
 
 SCHEMA_VERSION = 1
@@ -296,11 +297,15 @@ def scan_lane(plans_root: Path, lane: str) -> list[PlanRecord]:
 def build_columns(plans_root: Path, *, include_parked: bool) -> list[tuple[str, list[PlanRecord]]]:
     spec = COLUMN_LANES + (PARKED_COLUMN_LANES if include_parked else [])
     columns: list[tuple[str, list[PlanRecord]]] = []
+    # Same release affinity /work applies, so the Ready column's head matches
+    # the plan /work would actually claim. Computed once per build, not per
+    # column. Neutral for lanes where it is meaningless (drafts, completed).
+    release_bias = release_completion_map(plans_root)
     for name, lanes in spec:
         records: list[PlanRecord] = []
         for lane in lanes:
             records.extend(scan_lane(plans_root, lane))
-        records.sort(key=plan_sort_key)
+        records.sort(key=lambda r: plan_sort_key(r, release_bias))
         columns.append((name, records))
     return columns
 

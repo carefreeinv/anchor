@@ -21,10 +21,15 @@ A plan may point at a release slug with no matching ``.plans/.releases/<slug>.md
 file (typo, or the file was never created) — reported as ``unknown-release``,
 never silently dropped and never counted toward a phantom "complete" release.
 
-This is **read-only**: it never claims, moves, or edits a plan, and never
-writes a release file's ``Status:`` — the tiebreak (`plan_select.py`) and the
-completion prompt (`/work` / `/review` doctrine) are the only writers of that
-field, and only on an explicit ask/answer.
+It never claims, moves, or edits a **plan**. It does write one thing: a
+release file's ``Status:``, and only in the ``ready -> open`` direction, via
+``reconcile_reopen`` — which runs **by default** before ``--list`` /
+``--status`` / ``--json``. That pass is pure bookkeeping (a release marked
+ready that gained an incomplete member is no longer ready) and takes no
+prompt; pass ``--no-reconcile`` to suppress it. The opposite direction,
+``open -> ready``, is never automatic: it comes from ``--mark-ready`` or the
+interactive ``/work`` / ``/review`` completion prompt. ``plan_select.py``
+reads this data for its tiebreak and writes nothing.
 
 Exit codes: 0 ran OK (including an empty backlog) · 2 error (bad args, no
 ``.plans/``).

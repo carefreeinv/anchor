@@ -63,10 +63,16 @@ Newest first.
   completion (`--list`, `--status`, `--json`) and orphan `unknown-release`
   references. `plan_select.py`'s ready-lane picker gives a **soft** tiebreak
   to the release closest to complete — strictly within the same
-  Priority+Value, never across it. `/work` and `/review` (both platform
-  surfaces) ask **once**, interactively, when a release's every member plan
-  reaches `completed/`, offering to hand off to `/release` — never auto-run.
-  Documented in `.plans/README.md` and `docs/docs/tooling/scripts.md`.
+  Priority+Value, never across it. A plan naming a release with no file (a
+  typo) sorts **neutrally**, never demoted. `plan_board.py` applies the same
+  affinity, so its Ready column cannot disagree with the plan `/work` would
+  actually claim. `/work` and `/review` (both platform surfaces) ask **once**,
+  interactively, when a release's every member plan reaches `completed/`,
+  offering to hand off to `/release` — never auto-run. `release_progress.py`
+  reads plans without modifying them; the one thing it writes is a release
+  file's `Status:`, flipped `ready -> open` when a ready release gains an
+  incomplete member (`--no-reconcile` skips that pass). Documented in
+  `.plans/README.md` and `docs/docs/tooling/scripts.md`.
 - **`aider` platform** — `anchor --platform aider` scaffolds `AIDER.md` (drone
   brief: queen-bee plans, Aider runs `/work` only — no draft/review/merge) and
   a tracked `.aider.conf.yml.example` (`read: AIDER.md`). No slash-command

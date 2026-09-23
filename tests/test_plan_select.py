@@ -535,3 +535,30 @@ def test_barely_started_release_does_not_beat_untagged_plan(tmp_path):
     recs = inventory_ready(plans, worker)
     p2 = [r.rel for r in recs if r.rel in {"features/zzz-tagged.md", "features/aaa-untagged.md"}]
     assert p2 == ["features/aaa-untagged.md", "features/zzz-tagged.md"]
+
+
+def test_unknown_release_slug_is_neutral_not_demoted(tmp_path):
+    """A plan whose `Release:` names no `.releases/` file (typically a typo)
+    must sort *neutrally*, not behind every equal-priority peer.
+
+    Regression for MED-1: `_release_completion_map` filtered only on
+    `info.total > 0`. An orphan slug with one incomplete member is a real
+    `0/1 = 0.0` fraction, which sorted its plan last — silently demoting a
+    plan for a typo. The `file_exists` guard leaves it on
+    NEUTRAL_RELEASE_BIAS instead.
+    """
+    plans = _tree(tmp_path)
+    # No _release_file() call: "ghost" is an orphan slug with no release file.
+    _plan(
+        plans / "features" / "aaa-orphan.md",
+        value="medium",
+        priority="P2",
+        preferred="mid",
+        release="ghost",
+    )
+    _plan(plans / "features" / "zzz-untagged.md", value="medium", priority="P2", preferred="mid")
+    worker = Worker("test", "mid")
+    rels = [r.rel for r in inventory_ready(plans, worker)]
+    # Neutral on both sides -> the filename tiebreak decides, so the orphan
+    # (aaa-) comes first. Before the fix it sorted last despite that.
+    assert rels.index("features/aaa-orphan.md") < rels.index("features/zzz-untagged.md")

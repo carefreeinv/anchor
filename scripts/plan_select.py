@@ -861,9 +861,13 @@ def _release_completion_map(plans_root: Path) -> dict[str, float]:
     Local import: release_progress.py imports *from* this module (plan_slug,
     plans_root_for, parse_release_field, …), so importing it back here at
     module load time would cycle. Deferring the import here mirrors the
-    existing plan_lease pattern in inventory_in_progress. Any release with
-    zero members is omitted — plan_sort_key's default (NEUTRAL_RELEASE_BIAS)
-    already covers "no real completion data" correctly.
+    existing plan_lease pattern in inventory_in_progress. Omitted here, so
+    that plan_sort_key's default (NEUTRAL_RELEASE_BIAS) applies: any release
+    with zero members, **and any orphan slug with no `.releases/` file**. An
+    orphan is usually a typo in a plan's `Release:` header; without the
+    file_exists guard its members compute a real 0.0 fraction and sort behind
+    every equal-priority peer, which silently demotes a plan for a typo
+    instead of leaving it neutral.
     """
     from release_progress import scan_releases
 
@@ -871,8 +875,18 @@ def _release_completion_map(plans_root: Path) -> dict[str, float]:
     return {
         slug: info.completed / info.total
         for slug, info in releases.items()
-        if info.total > 0
+        if info.file_exists and info.total > 0
     }
+
+
+def release_completion_map(plans_root: Path) -> dict[str, float]:
+    """Public accessor for the release-affinity map (see ``plan_sort_key``).
+
+    Any caller that sorts plan records with ``plan_sort_key`` and wants the
+    *same* head ordering ``/work`` produces must pass this — ``plan_board.py``
+    does, so its Ready column cannot disagree with the actual next pick.
+    """
+    return _release_completion_map(plans_root)
 
 
 def inventory_ready(plans_root: Path, worker: Worker | None = None) -> list[PlanRecord]:
