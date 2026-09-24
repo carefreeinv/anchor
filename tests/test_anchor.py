@@ -672,6 +672,90 @@ def test_set_project_orchestrator_writes_conventions(tmp_path):
     assert "ANCHOR-CONVENTIONS.md" not in manifest["files"]
 
 
+def test_resolve_review_batch_precedence_flag_project_machine_builtin():
+    # Built-in default is on (trial), and says where it came from.
+    assert anchor.resolve_review_batch() == (True, "built-in default")
+    # Machine default beats the built-in; project beats machine; flag beats both.
+    assert anchor.resolve_review_batch(saved="off") == (False, "machine default")
+    assert anchor.resolve_review_batch(project="on", saved="off") == (True, "project convention")
+    assert anchor.resolve_review_batch("off", "on", "on") == (False, "flag")
+
+
+def test_resolve_review_batch_ignores_unrecognised_values():
+    # Junk falls through to the next source instead of being guessed at.
+    assert anchor.resolve_review_batch("maybe", "sometimes", "off") == (False, "machine default")
+    assert anchor.resolve_review_batch(None, "", "  ") == (True, "built-in default")
+    assert anchor.resolve_review_batch("ON", None, "off") == (True, "flag")
+
+
+def test_load_review_batch_from_defaults(tmp_path, monkeypatch):
+    defaults_file = tmp_path / "defaults"
+    monkeypatch.setattr(anchor, "DEFAULTS_FILE", defaults_file)
+    assert anchor.load_review_batch() is None  # file missing
+    defaults_file.write_text("PLATFORMS=chat\nREVIEW_BATCH=Off\n")
+    assert anchor.load_review_batch() == "off"
+    defaults_file.write_text("PLATFORMS=chat\nREVIEW_BATCH=banana\n")
+    assert anchor.load_review_batch() is None
+
+
+def test_parse_and_set_review_batch_in_conventions():
+    base = "# Anchor conventions\n\n## Model routing (fit check)\n\nnotes\n"
+    assert anchor.parse_review_batch_from_conventions(base) is None
+    on = anchor.set_review_batch_in_conventions(base, "on")
+    assert "**Review batch:** `on`" in on
+    assert anchor.parse_review_batch_from_conventions(on) == "on"
+    # Second write replaces the line in place rather than appending another.
+    off = anchor.set_review_batch_in_conventions(on, "OFF")
+    assert off.count("**Review batch:**") == 1
+    assert anchor.parse_review_batch_from_conventions(off) == "off"
+    assert "## Model routing (fit check)" in off  # rest of the file intact
+    with pytest.raises(ValueError):
+        anchor.set_review_batch_in_conventions(base, "maybe")
+
+
+def test_set_project_review_batch_writes_conventions_and_manifest(tmp_path):
+    project = tmp_path / "proj"
+    (project / ".anchor").mkdir(parents=True)
+    conv = project / ".anchor" / "conventions.md"
+    conv.write_text("# Anchor conventions\n\n**Preferred orchestrator:** `claude:opus`\n")
+    (project / ".anchor-manifest.json").write_text(
+        json.dumps({"files": {".anchor/conventions.md": {"src": None, "hash": "stale"}}})
+    )
+    anchor.set_project_review_batch(project, "off")
+    text = conv.read_text()
+    assert "**Review batch:** `off`" in text
+    assert "**Preferred orchestrator:** `claude:opus`" in text  # untouched
+    manifest = json.loads((project / ".anchor-manifest.json").read_text())
+    assert manifest["files"][".anchor/conventions.md"]["hash"] != "stale"
+
+
+def test_set_project_review_batch_rejects_bad_value_and_missing_conventions(tmp_path):
+    project = tmp_path / "proj"
+    project.mkdir()
+    with pytest.raises(SystemExit):  # nothing scaffolded yet
+        anchor.set_project_review_batch(project, "on")
+    (project / ".anchor").mkdir()
+    (project / ".anchor" / "conventions.md").write_text("# c\n")
+    with pytest.raises(SystemExit):
+        anchor.set_project_review_batch(project, "maybe")
+
+
+def test_show_project_review_batch_reports_source(tmp_path, monkeypatch, capsys):
+    monkeypatch.setattr(anchor, "DEFAULTS_FILE", tmp_path / "defaults")
+    project = tmp_path / "proj"
+    (project / ".anchor").mkdir(parents=True)
+    conv = project / ".anchor" / "conventions.md"
+    conv.write_text("# c\n")
+    anchor.show_project_review_batch(project)
+    assert capsys.readouterr().out.strip() == "review batch: on (source: built-in default)"
+    (tmp_path / "defaults").write_text("REVIEW_BATCH=off\n")
+    anchor.show_project_review_batch(project)
+    assert capsys.readouterr().out.strip() == "review batch: off (source: machine default)"
+    conv.write_text(anchor.set_review_batch_in_conventions("# c\n", "on"))
+    anchor.show_project_review_batch(project)
+    assert capsys.readouterr().out.strip() == "review batch: on (source: project convention)"
+
+
 def test_plan_conventions_dest_is_dot_anchor(tmp_path):
     result = anchor.plan_conventions(tmp_path, "php", None, None)
     assert result is not None

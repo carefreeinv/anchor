@@ -37,5 +37,5 @@ A plan with no touch-point data is excluded from the batch entirely rather
 than guessed at; it still runs fine through ordinary serial `/work`.
 
 This is about parallel **execution** only. Parallel *review* is a separate
-opt-in flag, `/review --batch`, and this change leaves `/review`'s
+batch mode, `/review --batch`, and this change leaves `/review`'s
 one-decision-per-invocation rule untouched.

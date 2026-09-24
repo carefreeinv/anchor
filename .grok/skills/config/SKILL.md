@@ -21,12 +21,15 @@ When the user types `/config`:
    **preferred orchestrator** (who plans/coordinates; lesser models defer to it).
    Tokens are `<provider>` or `<provider>:<model>` — e.g.
    `nim,grok,openai:gpt-5,claude:sonnet,claude:opus,claude:fable` and orchestrator
-   `claude:opus` (blank orchestrator = last priority token).
+   `claude:opus` (blank orchestrator = last priority token). Optionally ask whether
+   bare `/review` should **batch by default** (`on`/`off`; on when unset).
 2. Run, from the Anchor repo root: `./config.sh --platform <keys> [--fleet]
-   [--model-priority <ordered,list>] [--orchestrator <token>]` (non-interactive form —
+   [--model-priority <ordered,list>] [--orchestrator <token>] [--review-batch on|off]`
+   (non-interactive form —
    the interactive prompts in `./config.sh` with no flags can't be driven through a chat turn).
 3. Relay exactly what it printed: defaults path, model priority, preferred orchestrator,
-   and `anchor <project-dir>`. Mention per-project: `anchor <dir> --set-orchestrator <token>`.
+   and `anchor <project-dir>`. Mention per-project: `anchor <dir> --set-orchestrator <token>` and
+   `anchor <dir> --set-review-batch on|off`.
 4. Point the user to https://carefreeinv.com/anchor for further help.
 
 Mark anything about your specific Grok Build environment's command mechanism as

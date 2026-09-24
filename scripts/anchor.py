@@ -20,6 +20,8 @@ Usage:
   python scripts/anchor.py --upgrade --yes                       # non-interactive safe upgrade
   python scripts/anchor.py --upgrade --yes --force               # also take locally modified files
   python scripts/anchor.py --set-orchestrator claude:opus
+  python scripts/anchor.py --set-review-batch off   # /review batch-by-default: on | off
+  python scripts/anchor.py --show-review-batch
   python scripts/anchor.py --yes                                 # scaffold without confirmation prompt
 
 If no --platform is given and ../config.sh has saved defaults (~/.config/anchor/defaults
@@ -452,6 +454,112 @@ def set_orchestrator_in_conventions(text: str, orchestrator: str) -> str:
             1,
         )
     return text.rstrip() + f"\n\n## Preferred orchestrator\n\n{new_line}\n"
+
+
+REVIEW_BATCH_VALUES = ("on", "off")
+
+# Matches the bold review-batch line in .anchor/conventions.md
+_REVIEW_BATCH_LINE_RE = re.compile(
+    r"^(\*\*Review batch:\*\*\s*)(`?)([^`\n]+)\2\s*$",
+    re.MULTILINE,
+)
+
+
+def _normalize_review_batch(raw: str | None) -> str | None:
+    """Return ``on``/``off`` for a recognised value, else None (unset or junk)."""
+    val = (raw or "").strip().strip("`").lower()
+    return val if val in REVIEW_BATCH_VALUES else None
+
+
+def load_review_batch() -> str | None:
+    """Read the machine-level ``REVIEW_BATCH`` (on/off) saved by config.sh, if any."""
+    return _normalize_review_batch(_read_defaults_file().get("REVIEW_BATCH"))
+
+
+def parse_review_batch_from_conventions(text: str) -> str | None:
+    """Extract the project ``**Review batch:**`` value (on/off) from conventions, if set."""
+    m = _REVIEW_BATCH_LINE_RE.search(text)
+    return _normalize_review_batch(m.group(3)) if m else None
+
+
+def resolve_review_batch(
+    explicit: str | None = None,
+    project: str | None = None,
+    saved: str | None = None,
+) -> tuple[bool, str]:
+    """Should bare ``/review`` batch by default? → ``(enabled, source)``.
+
+    Precedence, highest first: explicit CLI flag → project convention → machine
+    default → built-in default (**on** for the trial). Unrecognised values are
+    ignored (fall through) rather than guessed at.
+    """
+    for label, raw in (
+        ("flag", explicit),
+        ("project convention", project),
+        ("machine default", saved),
+    ):
+        val = _normalize_review_batch(raw)
+        if val is not None:
+            return val == "on", label
+    return True, "built-in default"
+
+
+def set_review_batch_in_conventions(text: str, value: str) -> str:
+    """Replace or insert the ``**Review batch:**`` line; keep the rest intact."""
+    val = _normalize_review_batch(value)
+    if val is None:
+        raise ValueError(f"review batch must be one of {REVIEW_BATCH_VALUES}, got {value!r}")
+    new_line = f"**Review batch:** `{val}`"
+    if _REVIEW_BATCH_LINE_RE.search(text):
+        return _REVIEW_BATCH_LINE_RE.sub(new_line, text, count=1)
+    return text.rstrip() + f"\n\n## Review batch\n\n{new_line}\n"
+
+
+def set_project_review_batch(project_dir: Path, value: str) -> None:
+    """Write the project ``Review batch`` convention (+ manifest hash); no re-scaffold."""
+    val = _normalize_review_batch(value)
+    if val is None:
+        raise SystemExit(f"--set-review-batch takes one of {', '.join(REVIEW_BATCH_VALUES)}.")
+    read_path = conventions_path(project_dir, for_write=False)
+    if not read_path.is_file():
+        raise SystemExit(
+            f"No {CONVENTIONS_REL} in {project_dir} — scaffold the project with `anchor` first."
+        )
+    conv_path = conventions_path(project_dir, for_write=True)
+    new_text = set_review_batch_in_conventions(read_path.read_text(encoding="utf-8"), val)
+    conv_path.parent.mkdir(parents=True, exist_ok=True)
+    conv_path.write_text(new_text, encoding="utf-8")
+    legacy = project_dir / CONVENTIONS_LEGACY_REL
+    if legacy.is_file() and legacy.resolve() != conv_path.resolve():
+        legacy.unlink()
+        print(f"  migrated {CONVENTIONS_LEGACY_REL} → {CONVENTIONS_REL}")
+
+    manifest_path = find_manifest_path(project_dir) or (project_dir / MANIFEST_NAME)
+    if manifest_path.is_file():
+        try:
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError:
+            manifest = {}
+        files = manifest.get("files") or {}
+        files.pop(CONVENTIONS_LEGACY_REL, None)
+        files[CONVENTIONS_REL] = {"src": None, "hash": _sha256(conv_path)}
+        manifest["files"] = files
+        manifest_path.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
+
+    print(f"Review batch for '{project_dir}' → `{val}`")
+    print(f"  wrote {conv_path.relative_to(project_dir)}"
+          + (f" and updated {manifest_path.name}" if manifest_path.is_file() else ""))
+
+
+def show_project_review_batch(project_dir: Path, explicit: str | None = None) -> None:
+    """Print the effective review-batch setting and where it came from."""
+    read_path = conventions_path(project_dir, for_write=False)
+    project = (
+        parse_review_batch_from_conventions(read_path.read_text(encoding="utf-8"))
+        if read_path.is_file() else None
+    )
+    enabled, source = resolve_review_batch(explicit, project, load_review_batch())
+    print(f"review batch: {'on' if enabled else 'off'} (source: {source})")
 
 
 def resolve_project_dir(project_dir: str | None) -> Path:
@@ -1551,6 +1659,12 @@ def main() -> None:
     ap.add_argument("--set-orchestrator", metavar="TOKEN",
                     help=f"update only the project's preferred orchestrator ({CONVENTIONS_REL} "
                          "+ manifest); does not re-scaffold. Example: claude:opus")
+    ap.add_argument("--set-review-batch", metavar="on|off",
+                    help=f"update only the project's `/review` batch-by-default setting "
+                         f"({CONVENTIONS_REL} + manifest); does not re-scaffold")
+    ap.add_argument("--show-review-batch", action="store_true",
+                    help="print the effective `/review` batch-by-default setting and its source "
+                         "(project convention → machine default → built-in) and exit")
     ap.add_argument("--list", action="store_true", help="print available platform keys and exit")
     ap.add_argument("--dry-run", action="store_true",
                     help="preview only (scaffold findings or upgrade plan); never write")
@@ -1577,6 +1691,14 @@ def main() -> None:
 
     if args.set_orchestrator is not None:
         set_project_orchestrator(project_dir, args.set_orchestrator)
+        return
+
+    if args.set_review_batch is not None:
+        set_project_review_batch(project_dir, args.set_review_batch)
+        return
+
+    if args.show_review_batch:
+        show_project_review_batch(project_dir)
         return
 
     mode_count = sum(bool(x) for x in (args.check, args.diff, args.upgrade, args.update))

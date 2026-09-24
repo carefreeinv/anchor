@@ -14,7 +14,7 @@ Newest first.
   spawns an agent, that a plan without touch points is excluded, and its real
   flag list. `/review --batch` was already mirrored; `/work --batch` was not.
 
-- **`/review --batch [N]`** — opt-in batch mode reviews up to `N` (default 3)
+- **`/review` batch mode** (`--batch [N]`; on by default — see Changed) reviews up to `N` (default 3)
   top-priority `review-needed/` plans in one invocation. Every plan still
   gets its own full pipeline and its own required, never-inferred survey —
   batching removes re-typing `/review` between items, not per-plan sign-off.
@@ -24,7 +24,7 @@ Newest first.
   rule `/work --batch`'s `batch_dispatch.py` applies for parallel execution,
   restated in prose so this check is self-contained). Refuses to combine
   with `--skip-ai`; promotion review stays
-  single-decision, untouched by this flag. Documented in both `/review`
+  single-decision, untouched by batch mode. Documented in both `/review`
   surfaces (Claude + Grok) and `docs/docs/skills/review.md`.
 
 - **`/local-models` confirmed-stack autowire** — `scripts/local_models_autowire.py`
@@ -221,6 +221,19 @@ Newest first.
   reboot and optional mirrored networking.
 
 ### Changed
+
+- **Bare `/review` batches by default** (a trial) — with 2+ eligible plans in
+  `review-needed/`, `/review` now opens a batch (default `N=3`) instead of one
+  plan. Each plan still gets its own fresh-context critic and its own required,
+  never-inferred survey; promotion review is never batched, and a named slug,
+  `--promote`, `--skip-ai` or fewer than 2 eligible plans run single-item with no
+  error. Opt out per run with `--no-batch` (alias `--single`); set it for good with
+  `anchor --set-review-batch on|off` (project, in `.anchor/conventions.md`) or
+  `./config.sh --review-batch on|off` (machine, `REVIEW_BATCH`). Order: flag, project,
+  machine, built-in default (on); `anchor --show-review-batch` prints the effective
+  value and its source, and each batch overview names the opt-out. `config.sh` keeps a
+  saved `REVIEW_BATCH` when re-run without the flag. Documented in both `/review`
+  surfaces, `/config`, and `docs/docs/skills/review.md`.
 
 - **Plans that share a whole-tree gate are written as one plan** — `/draft`
   now says findings under one whole-tree check (`ruff check .`, `mypy .`,

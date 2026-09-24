@@ -17,16 +17,19 @@ Help the user set their Anchor defaults, then show them how to use them.
    - their **preferred orchestrator** (who plans/coordinates multi-step work; lesser
      models should recommend this instead of orchestrating themselves) — same token
      form, e.g. `claude:opus`. Blank = last model-priority entry.
+   - whether bare `/review` should **batch by default** (`on` or `off`; on = the
+     built-in default when unset) — optional, only ask if they want to change it.
    If `$ARGUMENTS` already looks like `--platform ...` / `--model-priority ...` /
-   `--orchestrator ...` flags, use those instead of asking.
+   `--orchestrator ...` / `--review-batch ...` flags, use those instead of asking.
 2. Run `./config.sh --platform <keys> [--fleet] [--model-priority <ordered,list>]
-   [--orchestrator <token>]` from the Anchor repo root via the Bash tool (non-interactive
+   [--orchestrator <token>] [--review-batch on|off]` from the Anchor repo root via the Bash tool (non-interactive
    form — don't run it with no flags, since its interactive prompts can't be answered
    through this command). If `./config.sh` isn't at the current directory, find the
    Anchor repo root first (it contains `ANCHOR.md`, `platforms/`, `scripts/anchor.py`).
 3. Report back exactly what it printed: where the defaults were saved, model priority,
    preferred orchestrator, and the `anchor <project-dir>` command. Mention per-project
-   change: `anchor <project-dir> --set-orchestrator <token>`.
+   change: `anchor <project-dir> --set-orchestrator <token>` (and
+   `anchor <project-dir> --set-review-batch on|off`).
 4. Point the user to https://carefreeinv.com/anchor for further help.
 
 Don't invent platform keys or file paths beyond what `./config.sh --help` and

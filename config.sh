@@ -15,6 +15,7 @@
 #   ./config.sh --platform claude,grok --fleet --language node \
 #     --model-priority nim,grok,claude:sonnet,claude:opus,claude:fable \
 #     --orchestrator claude:opus   non-interactive
+#   ./config.sh --review-batch off                          machine default for /review batching
 #   ./config.sh --show                                      print saved defaults and exit
 #
 # Preferred orchestrator: who should plan/coordinate long-horizon work; written
@@ -43,6 +44,7 @@ Usage:
   ./config.sh --platform claude,grok --fleet --language node \
     --model-priority nim,grok,claude:sonnet,claude:opus,claude:fable \
     --orchestrator claude:opus                                    non-interactive
+  ./config.sh --review-batch on|off                       does bare /review batch by default?
   ./config.sh --show                                      print saved defaults and exit
 
 Platforms: claude, grok, nemotron, local:<model>, chat
@@ -52,6 +54,9 @@ Language: free-form (e.g. node, python, rust, go, java, ruby, dotnet, php) — p
 Model priority: ordered, comma-separated, highest priority first. Providers:
           claude, openai (ChatGPT), gemini, grok, nim, local, chat — optionally with a
           specific model after a colon (claude:sonnet, openai:gpt-5, gemini:2.5-pro).
+Review batch: on|off — machine default for whether bare /review runs in batch mode
+          (default on when unset). A project's `**Review batch:**` convention overrides it;
+          `/review --no-batch` overrides both for one run. Omitted → keeps the saved value.
 Orchestrator: single token (same form as priority entries) — preferred planner/coordinator
           for scaffolded projects. If omitted and priority is set, defaults to the last
           priority token (frontier end of a cheapest-first list).
@@ -63,6 +68,7 @@ fleet_flag="0"
 language_arg=""
 priority_arg=""
 orchestrator_arg=""
+review_batch_arg=""
 show_only="0"
 
 while [ $# -gt 0 ]; do
@@ -76,6 +82,8 @@ while [ $# -gt 0 ]; do
     --model-priority=*) priority_arg="${1#--model-priority=}"; shift ;;
     --orchestrator) orchestrator_arg="$2"; shift 2 ;;
     --orchestrator=*) orchestrator_arg="${1#--orchestrator=}"; shift ;;
+    --review-batch) review_batch_arg="$2"; shift 2 ;;
+    --review-batch=*) review_batch_arg="${1#--review-batch=}"; shift ;;
     --show) show_only="1"; shift ;;
     -h|--help) usage; exit 0 ;;
     *) echo "Unknown argument: $1" >&2; usage >&2; exit 1 ;;
@@ -254,6 +262,17 @@ if [ -n "$orchestrator" ]; then
   validate_priority_key "$orchestrator"
 fi
 
+# Review batch: explicit flag, else keep whatever was saved before (this script otherwise
+# rewrites the whole file, so an omitted setting would silently reset to the built-in default).
+review_batch="$(echo "$review_batch_arg" | xargs | tr '[:upper:]' '[:lower:]')"
+if [ -z "$review_batch" ] && [ -f "$CONFIG_FILE" ]; then
+  review_batch="$(sed -n 's/^REVIEW_BATCH=//p' "$CONFIG_FILE" | tail -n 1 | xargs)"
+fi
+case "$review_batch" in
+  ""|on|off) ;;
+  *) echo "Unknown --review-batch '$review_batch'. Valid: on, off." >&2; exit 1 ;;
+esac
+
 mkdir -p "$CONFIG_DIR"
 {
   echo "# Written by config.sh on $(date -u +%Y-%m-%dT%H:%M:%SZ)"
@@ -268,6 +287,9 @@ mkdir -p "$CONFIG_DIR"
   if [ -n "$orchestrator" ]; then
     echo "ORCHESTRATOR=$orchestrator"
   fi
+  if [ -n "$review_batch" ]; then
+    echo "REVIEW_BATCH=$review_batch"
+  fi
 } > "$CONFIG_FILE"
 
 echo
@@ -277,6 +299,9 @@ if [ -n "$language" ]; then
 fi
 if [ -n "$priority_csv" ]; then
   echo "Model priority (highest first): $priority_csv"
+fi
+if [ -n "$review_batch" ]; then
+  echo "/review batch by default: $review_batch (per-project: anchor --set-review-batch on|off)"
 fi
 if [ -n "$orchestrator" ]; then
   echo "Preferred orchestrator: $orchestrator"

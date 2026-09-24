@@ -655,7 +655,7 @@ successfully prepared plus one skip-with-reason, rather than aborting.
 This is orthogonal to **parallel review**: `/review`'s "one decision per
 invocation" rule is unchanged by this flag; a batch-dispatch of *execution*
 across several worktrees has no bearing on how each finished plan is later
-reviewed one at a time. `/review` has its own opt-in `--batch` flag for
+reviewed one at a time. `/review` batches by default (`--no-batch` opts out) for
 chaining several sign-off cycles; this flag does not touch `/review`'s doctrine.
 
 ## Out of scope

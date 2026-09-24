@@ -165,7 +165,7 @@ python scripts/batch_dispatch.py --root . --max 5 --claim --agent-prefix batch
 Flags: `--root --max --tier --model --effort --no-fit-check --claim
 --agent-prefix --json`.
 
-This is orthogonal to review. `/review` has its own opt-in `--batch` flag for
+This is orthogonal to review. `/review` batches by default (`--no-batch` opts out) for
 chaining sign-off cycles; neither changes the other's doctrine.
 
 ## Install (platform wiring)

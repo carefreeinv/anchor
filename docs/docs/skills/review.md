@@ -35,7 +35,7 @@ the empty-queue **dev → main** gate.
 
 | Invocation | Behavior |
 |------------|----------|
-| `/review` | On `main`/`dev` with both a queue **and** `dev` ahead of `main`: asks which to review. Else plan mode if queue non-empty; else promotion mode if `dev` ahead of `main` |
+| `/review` | On `main`/`dev` with both a queue **and** `dev` ahead of `main`: asks which to review. Else **batch mode if 2+ eligible plans are queued** (the default), plan mode for a single plan; else promotion mode if `dev` ahead of `main` |
 | `/review <slug>` | Session for that plan only (must be under `review-needed/`) |
 | `/review --list` | Inventory queue + ahead-of-mainline advisory; no merge |
 | `/review --skip-ai` | Evidence + survey only (still one decision) |
@@ -43,17 +43,20 @@ the empty-queue **dev → main** gate.
 | `/review --promote` | Force promotion review (refuses if not ahead) |
 | `/review --no-promote` | Empty queue stops without offering promotion |
 | `/review --push` | After successful **local** merge, confirm push to `origin` |
-| `/review --batch [N]` | **Opt-in**: review up to `N` (default 3) top-priority plans in one invocation, each with its own full pipeline and required survey |
+| `/review --batch [N]` | Batch mode with an explicit cap: review up to `N` (default 3) top-priority plans in one invocation, each with its own full pipeline and required survey. Bare `/review` already batches; this only sets `N` |
+| `/review --no-batch` (alias `--single`) | Force single-item mode for this run — one plan **or** one promotion. Overrides the project and machine settings |
 
-**One decision per invocation** (one plan **or** one promotion) is the
-default and stays true for every flag except `--batch`. After you finish a
-single-item session, re-run `/review` for the next item — the skill never
-drains the queue or chains plan Approve into promotion in one go.
+In single-item mode (a named slug, `--promote`, `--skip-ai`, `--no-batch`, or
+fewer than 2 eligible plans) it is **one decision per invocation** — one plan
+**or** one promotion. After you finish a single-item session, re-run `/review`
+for the next item; the skill never chains plan Approve into promotion in one go.
+With 2+ eligible plans queued, bare `/review` opens a batch instead (below).
 
-### Batch mode (`--batch [N]`)
+### Batch mode (default for a queue of 2+ plans)
 
-An explicit opt-in for working through a queue faster **without** weakening
-the per-plan gate: each of up to `N` plans (default 3, capped, top
+Batch mode is on by default for bare `/review` — currently a trial, so the
+default may change. It is for working through a queue faster **without**
+weakening the per-plan gate: each of up to `N` plans (default 3, capped, top
 Priority/Value first) still gets its own fresh-context AI critic and its own
 required survey — no shared verdict, no inferred Approve from a pattern in
 earlier items. Before the loop starts, `/review` shows the whole batch
@@ -69,10 +72,19 @@ batching two plans that would conflict at merge time, or rushing a human
 through a big diff back-to-back with others, defeats the point of a careful
 review. Fewer than 2 eligible plans after filtering means nothing to batch.
 
-`--batch` refuses to combine with `--skip-ai` (skipping the fresh-context
-critic across several plans at once is exactly the rubber-stamp risk this
-mode is designed to avoid) and never applies to promotion review, which
-stays a single, deliberate decision.
+An explicit `--batch` refuses to combine with `--skip-ai`, a slug, or
+`--promote`; without the flag, those simply run single-item. (Skipping the
+fresh-context critic across several plans at once is exactly the rubber-stamp
+risk this mode is designed to avoid.) Batch mode never applies to promotion
+review, which stays a single, deliberate decision.
+
+**Turning it off.** Pass `--no-batch` (or `--single`) for one run. To change the
+default, set it per project with `anchor --set-review-batch off` (stored as
+`**Review batch:** off` in `.anchor/conventions.md`) or for your machine with
+`./config.sh --review-batch off` (`REVIEW_BATCH` in `~/.config/anchor/defaults`).
+The order is: flag, then project, then machine, then the built-in default (on).
+`anchor --show-review-batch` prints the effective setting and where it came from,
+and every batch overview repeats how to opt out.
 
 ## Session pipeline (plan)
 

@@ -41,3 +41,14 @@ single-item review) when it:
 `--batch` refuses to combine with `--skip-ai` — skipping the fresh-context
 critic across several plans at once is exactly the rubber-stamp risk this
 mode exists to avoid.
+
+## Update: batch is now the default
+
+Bare `/review` now opens a batch whenever two or more plans are eligible — the
+opt-in flag above became the default, as a trial. Nothing about the gate moved:
+each plan still gets its own critic and its own required survey. To go back to
+one at a time, pass `/review --no-batch` for a run, or set it for good with
+`anchor --set-review-batch off` (project) or `./config.sh --review-batch off`
+(machine); `anchor --show-review-batch` prints the effective setting and its
+source. A named slug, `--promote` and `--skip-ai` still run single-item with no
+error.
