@@ -29,6 +29,10 @@ allowed-tools: Bash(*), Read, Write, Edit
      reboot — gateway IPs churn)
    - **config scope**: machine-local vs portable multi-clone project config
 4. Do **not** download multi‑GB models or `pip install vllm` without confirmation.
+4b. If wiring **Aider**, run `python3 …/scripts/aider_repo_map_preflight.py`
+   first — one warning for HEAD/index ghosts (Aider maps `HEAD`∪index;
+   staging alone is not enough — commit after `/commit-prep` or
+   `.aiderignore`). See `platforms/aider/REPO_MAP_PREFLIGHT.md`.
 5. **Multi-machine hard rule:** never commit this host’s localhost / gateway-IP
    fit as project law; prefer `~/.config/anchor` + gitignored overlays for
    host-only endpoints; shared registry only for LAN/API hosts other clones can

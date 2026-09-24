@@ -153,6 +153,7 @@ FLEET_FILES: list[str] = [
     "scripts/router.py",
     "scripts/benchmark.py",
     "scripts/fit_device.py",
+    "scripts/aider_repo_map_preflight.py",
     "scripts/write_aider_env.py",
     "scripts/local_models_autowire.py",
     "scripts/endpoints.yaml",

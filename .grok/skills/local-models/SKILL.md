@@ -174,6 +174,24 @@ docs) so the client can render clickable links.
 
 Also link concrete HF repos printed by `fit_device.py` for the recommended model.
 
+### 3b. Aider repo-map preflight (when the operator uses Aider)
+
+If this session is about wiring **Aider** (or the operator is about to run
+`aider` in a repo that just migrated/deleted tracked files), run:
+
+```bash
+python3 "$SCRIPTS/aider_repo_map_preflight.py"
+```
+
+Aider maps roughly **`HEAD` ∪ index**. Paths deleted on disk but still in HEAD
+(e.g. `.md` → `.mdx` like the **network-lunar** 2026-09-06 case) produce dozens
+of “Repo-map can't include … not from git?” lines. The helper prints **one**
+block with count + sample + next steps. Staging deletions alone is **not**
+enough — commit the migration (after **`/commit-prep`**) or hide ghosts with
+`.aiderignore` (`--write-aiderignore --yes`; add `!.aiderignore` if `.aider*` is
+gitignored). Never auto-commit from preflight. Details:
+`platforms/aider/REPO_MAP_PREFLIGHT.md`.
+
 ### 4. Do not silently install heavy stacks
 
 - **Never** `pip install vllm` / download multi‑GB weights without user confirmation.

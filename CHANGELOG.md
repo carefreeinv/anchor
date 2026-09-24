@@ -118,7 +118,28 @@ Newest first.
   16GB class: 8B max, 4B default). `--emit-endpoint` emits the wire default.
   Documented in `/local-models` and tooling scripts.
 
+- **`aider_repo_map_preflight.py`** — one actionable warning when git HEAD/index
+  still lists paths deleted on disk (Aider maps `HEAD`∪index; `git add -u` alone
+  does not quiet repo-map floods). Optional confirmed `--write-aiderignore` /
+  `--stage` (never auto-commits). Documented in
+  `platforms/aider/REPO_MAP_PREFLIGHT.md` (network-lunar `.md`→`.mdx` class) and
+  `/local-models`. Shipped via `FLEET_FILES`.
+
 ### Fixed
+
+- **`aider_repo_map_preflight.py --stage` no longer leads operators into losing
+  renamed files** — it stages the delete side only, so an operator following
+  the shipped checklist after a `.md`→`.mdx` migration committed a
+  deletion-only change and dropped the new files (git reports the add side as a
+  collapsed `?? dir/`, which is easy to miss). The warning block, `--stage`
+  help, its success output and `platforms/aider/REPO_MAP_PREFLIGHT.md` now all
+  say to stage both sides (`git add -A -- <dir>/`). Also: a repo with **no
+  commits** no longer hard-errors with a raw `fatal: Not a valid object name
+  HEAD` (an absent HEAD is an empty HEAD set, as Aider itself treats it);
+  `.aiderignore` entries starting `#` or `!` or containing `[` are escaped
+  rather than silently read as comment/negation/character-class, and the
+  written block says to delete it after committing; `--sample 0` no longer
+  prints an empty `sample:` header.
 
 - **Shipped files no longer cite private plan slugs** — eleven references to
   `.plans/` working-backlog slugs were removed from the `/work` and

@@ -220,3 +220,14 @@ python fit_device.py --list
 ```
 
 `--probe` prints machine facts, **markdown-friendly install links** (WSL, CUDA, llama.cpp, Ollama, vLLM, MLX), then **two** fit answers: **Max fit** (largest under the usable budget) and **Default for wire** (memory-safer pick for Aider / `.env` / launcher, using free/available RAM when known; WSL/iGPU/≤24GB biases smallest under pressure). `--emit-endpoint` emits the **default-for-wire** stanza using a **Reachable API** `base_url` — discovered by probing guest loopback → default gateway → `resolv.conf` nameserver, so stanzas do not blindly use dead `localhost` when Ollama only answers on the Windows host. On **WSL**, it also queries the **Windows host** via `powershell.exe` (RAM/CPU/GPUs) so recommendations use bare-metal capacity and prefer a **host** model executor. Manual `--memory` / `--backend` still work. Memory is a conservative weights+KV+overhead estimate — confirm with `benchmark.py`. Agent UX: [**`/local-models`**](/skills/local-models).
+
+## aider_repo_map_preflight.py
+
+One-block warning when the worktree has **deleted tracked files** or **HEAD paths missing on disk** — the class of stale index that makes Aider print dozens of “Repo-map can't include … not from git?” lines (Aider maps roughly `HEAD` ∪ index; `git add -u` alone is not enough). Optional confirmed `--write-aiderignore` / `--stage` (never commits). Full operator notes: `platforms/aider/REPO_MAP_PREFLIGHT.md`.
+
+```bash
+python aider_repo_map_preflight.py
+python aider_repo_map_preflight.py --ok-exit          # warn-only for launchers
+python aider_repo_map_preflight.py --write-aiderignore --yes
+python aider_repo_map_preflight.py --stage --yes      # prep commit; no auto-commit
+```

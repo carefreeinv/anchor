@@ -3,7 +3,7 @@ sidebar_position: 4
 sidebar_label: Local Models
 ---
 
-<!-- synced-from: platforms/local-models/README.md @ 6264911c0f1afdafde73d379383b4a4fe427f832 -->
+<!-- synced-from: platforms/local-models/README.md @ fe47c10a3255394a9617dded5d0b3bdbb26986cc -->
 
 # Local Models
 
@@ -34,6 +34,12 @@ The quirks are encoded in `scripts/endpoints.yaml` (`quirks:` block) and applied
 **Default for wire:** `fit_device.py --probe` prints **Max fit** (capability ceiling) and **Default for wire** (memory-safer for Aider / `.env` / launcher). Opt up to Max fit explicitly when free RAM allows.
 
 Hardware-specific serve helpers: [personal devices](/hardware/personal-devices/mac-mini), [H100](/hardware/h100).
+
+**Aider:** before the first chat in a dirty migration worktree, run
+`python scripts/aider_repo_map_preflight.py` (`platforms/aider/REPO_MAP_PREFLIGHT.md`).
+Aider’s repo-map follows roughly `HEAD` ∪ index — deleted-on-disk paths still in
+HEAD flood “Repo-map can't include …” warnings; staging alone does not clear them
+until commit or `.aiderignore`.
 
 ## Tracked plans and coordination
 

@@ -25,3 +25,10 @@ usable budget) and **Default for wire** (memory-safer pick for Aider / `.env` /
 launcher). Free/available RAM × safety factor drives the wire default when known;
 WSL/iGPU/≤24GB biases the smallest catalog fit under pressure. Opt up to Max fit
 explicitly — never hide that a larger model exists.
+
+**Aider + local models:** before the first `aider` chat in a dirty migration
+worktree, run `python scripts/aider_repo_map_preflight.py` (see
+`platforms/aider/REPO_MAP_PREFLIGHT.md`). Aider’s repo-map follows roughly
+`HEAD` ∪ index — deleted-on-disk paths still in HEAD produce one “Repo-map can't
+include …” line each; staging alone does not clear them until commit or
+`.aiderignore`.
