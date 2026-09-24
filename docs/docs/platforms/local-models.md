@@ -23,7 +23,7 @@ Each model name links to its **official quick start** (download / serve / chat t
 
 | Model | Key quirk | Role fit | Official quick start |
 |---|---|---|---|
-| [**Qwen3**](https://qwen.readthedocs.io/en/latest/getting_started/quickstart.html) (4B–32B, 30B-A3B) | `/think` / `/no_think` per message; never greedy in thinking mode | executor + critic; 32B a passable planner | [Qwen3 Quickstart](https://qwen.readthedocs.io/en/latest/getting_started/quickstart.html) |
+| [**Qwen3**](https://qwen.readthedocs.io/en/latest/getting_started/quickstart.html) (4B–32B, 30B-A3B) | `/think` / `/no_think` per message on servers that honor it (llama.cpp, vLLM) — on Ollama use `think: false`; never greedy in thinking mode | executor + critic; 32B a passable planner | [Qwen3 Quickstart](https://qwen.readthedocs.io/en/latest/getting_started/quickstart.html) |
 | [**Gemma 3**](https://ai.google.dev/gemma/docs/core) (12B/27B) | no true system role — fold instructions into first user turn; one task per conversation | obedient executor; add the BLOCKED guardrail (it won't push back on bad specs) | [Gemma docs](https://ai.google.dev/gemma/docs/core) |
 | [**Mistral Small 3.x**](https://huggingface.co/mistralai/Mistral-Small-3.1-24B-Instruct-2503) | wants LOW temp (0.15); terse — enforce the footer in the pipeline | fast executor, best local tool-caller per GB | [HF model card](https://huggingface.co/mistralai/Mistral-Small-3.1-24B-Instruct-2503) |
 | [**DeepSeek-R1 distills**](https://huggingface.co/collections/deepseek-ai/deepseek-r1) | NO system prompt; temp ~0.6 (greedy breaks it); no few-shot; strip `<think>` downstream | critic + hard single problems; never an executor | [DeepSeek-R1 collection](https://huggingface.co/collections/deepseek-ai/deepseek-r1) |

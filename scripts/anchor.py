@@ -264,6 +264,10 @@ PLATFORMS: dict[str, dict] = {
                 "platforms/aider/.aider.conf.swarm.yml.example",
                 "platforms/aider/.aider.conf.swarm.yml.example",
             ),
+            (
+                "platforms/aider/.aider.model.settings.yml.example",
+                "platforms/aider/.aider.model.settings.yml.example",
+            ),
         ],
     },
     "local": {

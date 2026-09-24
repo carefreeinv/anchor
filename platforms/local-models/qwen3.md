@@ -9,7 +9,14 @@
 Qwen3 supports hybrid reasoning. Control per message:
 
 - Append `/think` for planner/critic roles — sampling: temp 0.6, top_p 0.95, top_k 20. **Never greedy in thinking mode** (causes repetition loops).
-- Append `/no_think` for executor steps — temp 0.7, top_p 0.8.
+- Append `/no_think` for executor steps — temp 0.7, top_p 0.8. **Ollama does
+  not honor this suffix** (measured on Ollama 0.34.0 and 0.34.2, `qwen3:8b`,
+  2026-09: a one-word prompt with `/no_think` still emitted reasoning, 274
+  tokens; the same prompt with the API-level `"think": false` answered in about
+  1s with no reasoning). On Ollama use `think: false` — for Aider, that is
+  `reasoning_effort: none` in `.aider.model.settings.yml` (see
+  `platforms/aider/.aider.model.settings.yml.example`). The suffix still applies
+  on llama.cpp, vLLM and any server that passes the chat template through.
 - Do not include reasoning content from previous turns back into context (strip `<think>` blocks in multi-turn use; `.anchor/scripts/` helpers do this).
 
 ### OpenAI-compatible pitfall (Ollama and similar)
@@ -23,7 +30,8 @@ instead of returning `""`. Do **not** paste `reasoning` into user-visible output
 
 Native Ollama `/api/chat` `think:false` can still put “thinking” into `content`
 on some builds — prefer the OpenAI path through `anchor_client` with the quirks
-below, and keep `/no_think` on executor turns.
+below. (On Ollama 0.34.2 with `qwen3:8b`, `/api/chat` with `think:false`
+returned clean `content` and no `thinking` field.)
 
 Registry mapping for the fleet scripts (`.anchor/scripts/fit_device.py` emits this for you):
 
@@ -97,11 +105,34 @@ applied — two findings that correct/extend the above:**
   minimal-context prompt ("hello, just say hi back", no drone card loaded)
   still failed to complete in 60s on this host via Aider/litellm, while the
   **same** Ollama endpoint answered a comparable prompt over raw `curl` in
-  ~8–12s — the gap is in the Aider/litellm request path on this host, not
-  raw model throughput. Root cause not further isolated here; treat
-  "Interactive 4B remains hopeless on this class of host" (this plan's own
-  Risk) as the honest current status rather than something the timeout/map-tokens
-  caps alone fixed.
+  ~8–12s.
+
+**Cause, measured (2026-09, Ollama 0.34.0/0.34.2, `qwen3:8b` Q4_K_M, WSL2
+client → Windows-host Ollama; one CPU-only host, not the fleet):** three
+things account for the gap, and none is in the Aider/litellm path itself.
+
+- **Thinking was never off.** `/no_think` is ignored by Ollama, so Aider's
+  turns always reasoned: a one-word prompt with the suffix produced 274
+  reasoning tokens (~70s on a cold load), while the same prompt with the
+  API-level `"think": false` answered in ~1.1s with no reasoning. Aider can
+  send that flag — `reasoning_effort: none` in `.aider.model.settings.yml`
+  (see `platforms/aider/.aider.model.settings.yml.example`).
+- **The model was served from CPU.** `/api/ps` reported `size_vram: 0` for the
+  loaded 5.9 GB model, and an earlier session on the same host measured
+  ~15 tok/s prompt eval (a 4022-token prompt took 274.2s; the same prompt
+  fell to 21.7s, then 7.2s, with a warm prefix). Aider's own system prompt is
+  ~3.5k tokens before any repo map, so a cold turn costs minutes here. A
+  ~2.5k-token prompt (estimated) did not finish within a 200s client cap on
+  the re-run.
+- **The context window was unpinned.** `/api/ps` showed `context_length: 4096`
+  — Ollama's default, not the endpoint's recorded `max_context: 8192`. Ollama
+  truncates to that window silently, which corrupts `diff` edits without an
+  error; pin it with `num_ctx` in the same settings file.
+
+So the honest status is narrower than "Interactive 4B remains hopeless": on a
+**CPU-only** host, cold first turns are slow by construction and the small
+`timeout:` caps in the swarm example fire on legitimate calls, while on a
+host with the model in VRAM the same caps are fine.
 
 ## Serving
 

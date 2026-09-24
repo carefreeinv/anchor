@@ -41,6 +41,7 @@ def test_resolve_selection_aider_returns_brief_and_conf_example():
     assert "platforms/aider/work-drone.md" in dests
     assert ".aider.conf.yml.example" in dests
     assert "platforms/aider/.aider.conf.swarm.yml.example" in dests
+    assert "platforms/aider/.aider.model.settings.yml.example" in dests
 
 
 def test_ensure_aider_local_gitignored_covers_machine_local_files(tmp_path):
@@ -83,6 +84,7 @@ def test_plan_copy_scaffolds_aider_brief_and_plans_tree(tmp_path):
     assert "platforms/aider/work-drone.md" in dests
     assert ".aider.conf.yml.example" in dests
     assert "platforms/aider/.aider.conf.swarm.yml.example" in dests
+    assert "platforms/aider/.aider.model.settings.yml.example" in dests
     assert "platforms/aider/AIDER.md" in srcs
     assert "platforms/aider/skills-index.md" in srcs
     assert "platforms/aider/work-drone.md" in srcs

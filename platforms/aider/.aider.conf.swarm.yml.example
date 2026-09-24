@@ -18,10 +18,17 @@ read:
 edit-format: diff
 
 # Keep the auto repo-map small so it doesn't crowd out the plan being executed.
+# GPU-host default. On a CPU-only host (Ollama `/api/ps` shows `size_vram: 0`)
+# even 1024 can exceed the timeout on a cold turn -- measured 2026-09 on one
+# such WSL2 + Windows-Ollama host: an identical trivial prompt answered in ~72s
+# with `map-tokens: 0`, and twice failed to finish in 560s with 1024. Set 0 there.
 map-tokens: 1024
 
 # A confused small model should time out in under a minute, not sit on a
 # multi-minute retry loop (see the qwen3.md canary: a real session hit 600s).
+# GPU-host default. litellm retries a timed-out call, and on a CPU-only host a
+# legitimate cold first call can exceed 60s, so raise this there (see the same
+# canary note in qwen3.md for the measured cause).
 timeout: 60
 
 # Streaming adds overhead for a small local model with no human watching
@@ -31,7 +38,11 @@ timeout: 60
 # `aider --verbose`'s "Option settings" dump, ...stream: True regardless).
 stream: false
 
-# Qwen3's hybrid-thinking toggle is a chat-template convention, not an Aider
-# flag — Aider has no hook to auto-append it. Until that's wired end-to-end,
-# type `/work /no_think` (or `<your message> /no_think`) to keep Qwen3 out of
-# its thinking mode; see platforms/local-models/qwen3.md "Thinking toggle".
+# Thinking mode is NOT controlled from this file, and typing `/no_think` into
+# an Ollama-served Aider session does nothing (Ollama ignores it; measured on
+# Ollama 0.34.0 and 0.34.2). The switch that works is the API-level
+# `think: false`, which Aider reaches via `reasoning_effort: none` in
+# `.aider.model.settings.yml` -- copy
+# platforms/aider/.aider.model.settings.yml.example, which also pins `num_ctx`.
+# `/no_think` still applies on servers that pass the chat-template suffix
+# through (llama.cpp, vLLM); see platforms/local-models/qwen3.md "Thinking toggle".
