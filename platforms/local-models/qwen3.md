@@ -9,14 +9,15 @@
 Qwen3 supports hybrid reasoning. Control per message:
 
 - Append `/think` for planner/critic roles — sampling: temp 0.6, top_p 0.95, top_k 20. **Never greedy in thinking mode** (causes repetition loops).
-- Append `/no_think` for executor steps — temp 0.7, top_p 0.8. **Ollama does
-  not honor this suffix** (measured on Ollama 0.34.0 and 0.34.2, `qwen3:8b`,
-  2026-09: a one-word prompt with `/no_think` still emitted reasoning, 274
-  tokens; the same prompt with the API-level `"think": false` answered in about
-  1s with no reasoning). On Ollama use `think: false` — for Aider, that is
-  `reasoning_effort: none` in `.aider.model.settings.yml` (see
-  `platforms/aider/.aider.model.settings.yml.example`). The suffix still applies
-  on llama.cpp, vLLM and any server that passes the chat template through.
+- Append `/no_think` for executor steps — temp 0.7, top_p 0.8. **Ollama did
+  not honor this suffix on the builds measured** (0.34.0 and 0.34.2, `qwen3:8b`,
+  2026-09, one CPU-only host: a one-word prompt with `/no_think` still emitted
+  reasoning, 274 tokens; the same prompt with the API-level `"think": false`
+  answered in ~1.1s warm with no reasoning). On Ollama 0.34.x use `think: false`
+  — for Aider, that is `reasoning_effort: none` in `.aider.model.settings.yml`
+  (see `platforms/aider/.aider.model.settings.yml.example`). Older Ollama builds
+  may still honor the suffix. On llama.cpp and vLLM it should work per Qwen's
+  chat template, but that was **not measured here**.
 - Do not include reasoning content from previous turns back into context (strip `<think>` blocks in multi-turn use; `.anchor/scripts/` helpers do this).
 
 ### OpenAI-compatible pitfall (Ollama and similar)
@@ -28,10 +29,11 @@ HTTP 200 with **`content=""`** while tokens sit in `message.reasoning` and
 retries once with think-off + a higher budget, then raises `EmptyAssistantText`
 instead of returning `""`. Do **not** paste `reasoning` into user-visible output.
 
-Native Ollama `/api/chat` `think:false` can still put “thinking” into `content`
+Native Ollama `/api/chat` `think:false` has put “thinking” into `content`
 on some builds — prefer the OpenAI path through `anchor_client` with the quirks
-below. (On Ollama 0.34.2 with `qwen3:8b`, `/api/chat` with `think:false`
-returned clean `content` and no `thinking` field.)
+below. That caveat is build-specific: on Ollama 0.34.2 with `qwen3:8b` (2026-09,
+one CPU-only host) `/api/chat` with `think:false` returned clean `content` and
+no `thinking` field.
 
 Registry mapping for the fleet scripts (`.anchor/scripts/fit_device.py` emits this for you):
 
@@ -43,6 +45,11 @@ quirks:
   sampling_thinking: {top_p: 0.95, top_k: 20}
   sampling: {top_p: 0.8}       # /no_think executor rec (Anchor keeps temp low for determinism)
 ```
+
+`think_toggle: qwen3` works by appending the suffix, which Ollama 0.34.x ignores
+(above), so on an Ollama endpoint that quirk alone does not turn thinking off;
+the fleet path relies on the think-off retry described above and on the
+`openai_think` opt-in below.
 
 **Ollama-only opt-in:** add `openai_think: false` (or `true`) to an Ollama
 endpoint when you want the OpenAI-body `think` field. Key **presence** (not the
@@ -124,10 +131,14 @@ things account for the gap, and none is in the Aider/litellm path itself.
   ~3.5k tokens before any repo map, so a cold turn costs minutes here. A
   ~2.5k-token prompt (estimated) did not finish within a 200s client cap on
   the re-run.
-- **The context window was unpinned.** `/api/ps` showed `context_length: 4096`
-  — Ollama's default, not the endpoint's recorded `max_context: 8192`. Ollama
-  truncates to that window silently, which corrupts `diff` edits without an
-  error; pin it with `num_ctx` in the same settings file.
+- **Context window: not a cause on the Aider path.** Raw requests without
+  `num_ctx` get Ollama's default window — `/api/ps` showed `context_length:
+  4096` for the direct `curl` calls of the re-run, below the endpoint's recorded
+  `max_context: 8192`, and Ollama truncates to it silently. Aider 0.86.2 does not
+  send raw requests: for Ollama models it sets `num_ctx` itself on every call
+  (about 1.25× the prompt's tokens + 8192, `aider/models.py`) unless `num_ctx` is
+  in `extra_params`. Pinning it is therefore optional there — see the
+  commented `num_ctx` line in `platforms/aider/.aider.model.settings.yml.example`.
 
 So the honest status is narrower than "Interactive 4B remains hopeless": on a
 **CPU-only** host, cold first turns are slow by construction and the small

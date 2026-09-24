@@ -38,11 +38,11 @@ timeout: 60
 # `aider --verbose`'s "Option settings" dump, ...stream: True regardless).
 stream: false
 
-# Thinking mode is NOT controlled from this file, and typing `/no_think` into
-# an Ollama-served Aider session does nothing (Ollama ignores it; measured on
-# Ollama 0.34.0 and 0.34.2). The switch that works is the API-level
-# `think: false`, which Aider reaches via `reasoning_effort: none` in
+# Thinking mode is NOT controlled from this file. Typing `/no_think` into an
+# Ollama-served Aider session had no effect on Ollama 0.34.0 and 0.34.2
+# (measured 2026-09; older builds may differ). The switch that worked is the
+# API-level `think: false`, which Aider reaches via `reasoning_effort: none` in
 # `.aider.model.settings.yml` -- copy
-# platforms/aider/.aider.model.settings.yml.example, which also pins `num_ctx`.
-# `/no_think` still applies on servers that pass the chat-template suffix
-# through (llama.cpp, vLLM); see platforms/local-models/qwen3.md "Thinking toggle".
+# platforms/aider/.aider.model.settings.yml.example. Whether `/no_think` works on
+# llama.cpp / vLLM was not measured here; see
+# platforms/local-models/qwen3.md "Thinking toggle".

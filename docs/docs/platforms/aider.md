@@ -91,15 +91,16 @@ exceed 60s and the repo map can stall it outright (measured 2026-09 on one
 WSL2 + Windows-Ollama host: ~72s with `map-tokens: 0`, no finish in 560s with
 `1024`), so set `map-tokens: 0` and a larger `timeout:` there.
 
-**Turn thinking off with `think: false`, not `/no_think`.** On Ollama, the
-`/no_think` message suffix does nothing (measured on Ollama 0.34.0 and 0.34.2):
-a one-word prompt still emitted reasoning. The API-level `think: false` works,
-and Aider reaches it through litellm's `reasoning_effort` mapping. Copy
+**Turn thinking off with `think: false`, not `/no_think`.** On Ollama 0.34.0 and
+0.34.2 (measured 2026-09), the `/no_think` message suffix had no effect: a
+one-word prompt still emitted reasoning. The API-level `think: false` worked, and
+Aider reaches it through litellm's `reasoning_effort` mapping. Copy
 `platforms/aider/.aider.model.settings.yml.example` to
 `.aider.model.settings.yml` (machine-local, already gitignored by Anchor) — it
-sets `reasoning_effort: none` and pins `num_ctx`, which Ollama otherwise
-truncates to its own default window without any error. The `/no_think` suffix
-still applies on llama.cpp and vLLM.
+sets `reasoning_effort: none`. Older Ollama builds may still honor the suffix,
+and it was not measured on llama.cpp or vLLM. The same file carries an optional,
+commented `num_ctx` line: Aider 0.86.2 already sizes `num_ctx` for Ollama models
+on every request, so pinning it is a choice, not a fix.
 
 **Type `work`, not `/work`.** Aider treats any message starting with `/` as
 one of its own built-in commands, so a bare `/work` never reaches the model —

@@ -2,13 +2,13 @@
 # Copy this file to `.aider.model.settings.yml` (machine-local; Anchor's
 # gitignore block already covers it) and change `name:` to the model you serve.
 #
-# Why this file exists: two things an operator has to get right for an
-# Ollama-served model can NOT be set from `.aider.conf.yml` or typed into chat.
+# Why this file exists: thinking mode for an Ollama-served model can NOT be set
+# from `.aider.conf.yml` or typed into chat.
 #
 # 1. Thinking off. Qwen3's `/no_think` message suffix is a chat-template
-#    convention that Ollama does not honor (measured on Ollama 0.34.0 and 0.34.2:
-#    a one-word prompt with `/no_think` still emitted reasoning). The switch that
-#    works is the API-level `think: false`. Aider passes `extra_params` to
+#    convention that Ollama did not honor on the builds measured (0.34.0 and
+#    0.34.2, 2026-09: a one-word prompt with `/no_think` still emitted
+#    reasoning). The switch that worked is the API-level `think: false`. Aider passes `extra_params` to
 #    litellm, and litellm's Ollama transform maps `reasoning_effort` to that flag:
 #    `reasoning_effort` outside {"low", "medium", "high"} sends `think: false`
 #    (litellm/llms/ollama/chat/transformation.py, verified through litellm
@@ -17,14 +17,19 @@
 #    with `curl $OLLAMA/api/chat -d '{..., "think": false}'` -- a clean answer
 #    with no `thinking` field is the behavior this line is asking for.
 #
-# 2. Context window pinned. Without `num_ctx`, Ollama silently truncates to its
-#    own default window and diff-format edits corrupt without any error. Set it
-#    to what the model actually serves (the fleet registry records this as
-#    `max_context`).
+# 2. Context window (optional, off by default). Aider 0.86.2 already sizes
+#    `num_ctx` for Ollama models on every request (about 1.25x the prompt's
+#    tokens + 8192, aider/models.py) unless `extra_params` sets it, so Aider is
+#    not silently truncated to Ollama's default window the way a raw request is.
+#    A fixed `num_ctx` overrides that sizing: it keeps the window constant, but a
+#    prompt larger than the value you pick would be truncated. Only uncomment it
+#    if you want that, and match it to the window your model actually serves
+#    (the fleet registry records it as `max_context`).
 #
-# Non-Ollama servers (llama.cpp, vLLM) do not need `reasoning_effort: none`.
+# Servers other than Ollama (llama.cpp, vLLM) do not take `reasoning_effort` as
+# an Ollama `think` flag; whether `/no_think` works there was not measured here.
 - name: ollama_chat/qwen3:8b
   edit_format: diff
   extra_params:
-    num_ctx: 8192
     reasoning_effort: none
+    # num_ctx: 8192

@@ -128,15 +128,15 @@ Newest first.
 ### Fixed
 
 - **Aider + Ollama guidance no longer tells operators to type `/no_think`** —
-  Ollama ignores that suffix (measured on Ollama 0.34.0 and 0.34.2), so a
-  session followed the docs and still reasoned on every turn. The docs and the
-  swarm example now name the API-level `think: false`, reached from Aider via
+  Ollama 0.34.0 and 0.34.2 ignored that suffix when measured, so a session
+  following the docs still reasoned on every turn. The docs and the swarm example
+  now name the API-level `think: false`, reached from Aider via
   `reasoning_effort: none`. New `platforms/aider/.aider.model.settings.yml.example`
-  (scaffolded by `anchor --platform aider`) sets that and pins `num_ctx`, which
-  Ollama otherwise truncates to its default window without an error. The
-  Qwen3 canary note now states the measured cause of the hang (thinking never
-  off, plus CPU-only serving on that host) instead of "not further isolated",
-  and `map-tokens` / `timeout` are marked as GPU-host defaults.
+  (scaffolded by `anchor --platform aider`) sets that, with an optional commented
+  `num_ctx` (Aider already sizes it per request for Ollama). The Qwen3 canary
+  note now states the measured causes of the hang on that host (thinking never
+  off, CPU-only serving) instead of "not further isolated", and `map-tokens` /
+  `timeout` are marked as GPU-host defaults.
 
 - **`aider_repo_map_preflight.py --stage` no longer leads operators into losing
   renamed files** — it stages the delete side only, so an operator following
