@@ -408,9 +408,13 @@ STAGED = "STAGED"
 # Distinct from a real merge, because `land` returns the target's head either way
 # and a caller cannot otherwise tell that this run moved nothing.
 ALREADY_CONTAINED = "ALREADY_CONTAINED"
+# ``ff_only`` landing found the target no longer fast-forwardable (it moved after
+# the gate looked). Nothing was merged or staged; the checkout is restored.
+NOT_FAST_FORWARD = "NOT_FAST_FORWARD"
 
 
-def land(root: Path, branch: str, target: str, *, title: str = "") -> str:
+def land(root: Path, branch: str, target: str, *, title: str = "",
+         ff_only: bool = False) -> str:
     """Merge ``branch`` into ``target``; return the target's new HEAD, ``STAGED``,
     or ``ALREADY_CONTAINED``.
 
@@ -428,6 +432,10 @@ def land(root: Path, branch: str, target: str, *, title: str = "") -> str:
 
     The target branch is left checked out when a merge is staged, because an
     unfinished merge cannot survive a checkout. Never pushes.
+
+    ``ff_only`` is for callers with no way to run ``/commit-prep`` (the ``anchor
+    review`` CLI): when the fast-forward fails it stages nothing, restores the
+    checkout, and returns :data:`NOT_FAST_FORWARD`.
     """
     if is_ancestor(root, branch, target):
         # `merge --ff-only` would answer "Already up to date" and exit 0, and
@@ -441,6 +449,8 @@ def land(root: Path, branch: str, target: str, *, title: str = "") -> str:
         _git(root, "checkout", target)
         if _git(root, "merge", "--ff-only", branch, check=False).returncode == 0:
             return head_sha(root, "HEAD")
+        if ff_only:
+            return NOT_FAST_FORWARD
         p = _git(root, "merge", "--no-ff", "--no-commit", branch, check=False)
         if p.returncode != 0:
             _git(root, "merge", "--abort", check=False)
@@ -749,7 +759,7 @@ def read_touched(source: str) -> tuple[str, ...]:
 def run(root: Path, slug: str, touched: tuple[str, ...], *, base: str | None = None,
         expect_head: str | None = None, target: str | None = None,
         branch: str | None = None, dry_run: bool = False,
-        title: str = "") -> tuple[MergeVerdict, str | None]:
+        title: str = "", ff_only: bool = False) -> tuple[MergeVerdict, str | None]:
     """Evaluate the gate and, unless ``dry_run``, land the branch.
 
     Returns ``(verdict, outcome)``. ``outcome`` is None when the gate refused or
@@ -764,6 +774,11 @@ def run(root: Path, slug: str, touched: tuple[str, ...], *, base: str | None = N
     A non-None outcome therefore does not mean "merged". Distinguishing the three
     is the whole point of the sentinels: before they existed a caller could not
     tell a real merge from a no-op, because both handed back the target's head.
+
+    ``ff_only`` refuses a non-fast-forward before any conflict probe (reason
+    ``not-fast-forward``) and passes through to :func:`land`, which re-checks at
+    merge time — so a target that moves between the two can still never leave a
+    staged merge behind.
     """
     branch = branch or f"feature/{slug}"
     resolved = resolve_target(root, target)
@@ -846,6 +861,12 @@ def run(root: Path, slug: str, touched: tuple[str, ...], *, base: str | None = N
     )
     if not verdict.ok:
         return verdict, None
+    if ff_only and not (ff or already):
+        return MergeVerdict(
+            ok=False, code=EXIT_PRECONDITION, reason="not-fast-forward",
+            message=(f"refuse: {branch} is not a fast-forward of {resolved}; a merge "
+                     f"commit needs /commit-prep on the merged tree."),
+        ), None
 
     # Runs after the gate above so the more specific refusals (provenance, scope,
     # the feature worktree being dirty) keep their reasons, and before the probe,
@@ -867,7 +888,7 @@ def run(root: Path, slug: str, touched: tuple[str, ...], *, base: str | None = N
     )
     if not verdict.ok or dry_run:
         return verdict, None
-    return verdict, land(root, branch, resolved, title=title)
+    return verdict, land(root, branch, resolved, title=title, ff_only=ff_only)
 
 
 def main(argv: list[str] | None = None) -> int:

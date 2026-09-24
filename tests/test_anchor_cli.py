@@ -405,7 +405,11 @@ HEADLESS_ARGVS = [
     ["draft"],
     ["draft", "fresh"],
     ["draft", "--promote", "d1"],
+    ["work", "--heartbeat", "f1"],
+    ["work", "--finish", "f1"],
+    ["work", "--return", "f1"],
 ]
+OWNED_VERBS = ("--heartbeat", "--finish", "--return")
 
 
 @pytest.mark.parametrize("close", [False, True], ids=["devnull", "closed"])
@@ -414,6 +418,8 @@ def test_no_verb_blocks_with_stdin_closed(project, argv, close):
     write(project, "features", "f1")
     write(project, "review-needed", "r1")
     write(project, "drafts", "d1")
+    if any(flag in argv for flag in OWNED_VERBS):
+        plan_lease.claim_and_move(project / ".plans", "features/f1.md", "sub")
     cmd = [sys.executable, str(SCRIPTS / "anchor.py"), *argv, "--root", str(project),
            "--agent-id", "sub"] if argv[0] == "work" else [
         sys.executable, str(SCRIPTS / "anchor.py"), *argv, "--root", str(project)]
@@ -480,3 +486,115 @@ def test_docs_quote_help_verbatim(verb):
         f"docs/docs/tooling/plan-verbs.md is stale for `anchor {verb} --help`; "
         "regenerate its Command reference section"
     )
+
+
+# --- review fixes: race, remote-only branch, critic confirmation ----------------
+
+
+def test_review_approve_race_never_leaves_a_staged_merge(repo_project):
+    """dev advances while the operator is at the prompt (the critic's H1 repro)."""
+
+    def answer_after_dev_moves(_prompt: str) -> str:
+        _git(repo_project, "checkout", "-q", "dev")
+        (repo_project / "race.txt").write_text("r\n", encoding="utf-8")
+        _git(repo_project, "add", "race.txt")
+        _git(repo_project, "commit", "-q", "-m", "dev moved during the prompt")
+        return "approve"
+
+    out, stdin = TTY(), TTY()
+    code = anchor_cli.main(["review", "r1", "--root", str(repo_project), "--json"],
+                           stdin=stdin, stdout=out, env={}, read=answer_after_dev_moves)
+    doc = json.loads(out.getvalue())
+    assert code == anchor_cli.EXIT_NEEDS_OPERATOR, doc
+    assert doc["pending"][-1]["step"] == "merge-commit"
+    assert _git(repo_project, "status", "--porcelain") == ""
+    probe = subprocess.run(["git", "-C", str(repo_project), "rev-parse", "-q", "--verify", "MERGE_HEAD"],
+                           capture_output=True, text=True)
+    assert probe.returncode != 0, "a merge was left staged"
+    assert (repo_project / ".plans" / "review-needed" / "r1.md").is_file()
+
+
+def test_review_approve_with_remote_only_branch_does_not_archive(repo_project, tmp_path):
+    remote = tmp_path / "remote.git"
+    subprocess.run(["git", "init", "-q", "--bare", str(remote)], check=True)
+    _git(repo_project, "remote", "add", "origin", str(remote))
+    _git(repo_project, "push", "-q", "origin", "feature/r1")
+    _git(repo_project, "fetch", "-q", "origin")
+    _git(repo_project, "branch", "-D", "feature/r1")
+    code, doc = cli(["review", "r1", "--root", str(repo_project), "--json"],
+                    interactive=True, answers=["approve"])
+    assert code == 3
+    assert doc["result"]["remote_only"] == ["origin/feature/r1"]
+    assert doc["pending"][-1]["step"] == "local-branch"
+    assert (repo_project / ".plans" / "review-needed" / "r1.md").is_file()
+
+
+@pytest.mark.parametrize(
+    "text,verdict",
+    [
+        ("## Verdict\n**Verdict: ACCEPT**", "ACCEPT"),
+        ("Checklist ok.\n\nVerdict: REVISE — fix H1", "REVISE"),
+        ("**Verdict:** escalate", "ESCALATE"),
+        ("looks fine but I would REVISE the docs; ACCEPT otherwise", "REVISE"),
+        ("no verdict here", "UNKNOWN"),
+    ],
+)
+def test_critic_verdict(text, verdict):
+    assert anchor_cli.critic_verdict(text) == verdict
+
+
+@pytest.fixture
+def critic_fleet(monkeypatch, tmp_path):
+    anchor_client = pytest.importorskip("anchor_client")
+    ep = _StubEndpoint("Findings: H1 is real.\n\n**Verdict: REVISE**")
+
+    class StubFleet:
+        def __init__(self, _path):
+            self.endpoints = [ep]
+
+        def pick(self, _role):
+            return ep
+
+    reg = tmp_path / "endpoints.yaml"
+    reg.write_text("endpoints: []\n", encoding="utf-8")
+    monkeypatch.setattr(anchor_client, "Fleet", StubFleet)
+    return reg
+
+
+def test_approve_after_revise_critic_needs_explicit_yes(project, critic_fleet):
+    write(project, "review-needed", "r1")
+    argv = ["review", "r1", "--root", str(project), "--json", "--delegate",
+            "--registry", str(critic_fleet)]
+    code, doc = cli(argv, interactive=True, answers=["approve", "no"])
+    assert code == 0 and doc["result"]["critic"]["verdict"] == "REVISE"
+    assert doc["result"]["decision"] == "skip"
+    assert (project / ".plans" / "review-needed" / "r1.md").is_file()
+
+    code, doc = cli(argv, interactive=True, answers=["approve", "yes"])
+    assert code == 0 and doc["result"]["moved_to"] == "completed/r1.md"
+
+
+def test_delegation_reports_a_bad_registry_instead_of_crashing(project, tmp_path):
+    pytest.importorskip("anchor_client")
+    write(project, "drafts", "d0")
+    bad = tmp_path / "endpoints.yaml"
+    bad.write_text("endpoints: [ {name: x, tier: mid}\n", encoding="utf-8")  # invalid YAML
+    code, doc = cli(["draft", "d9", "--root", str(project), "--json", "--delegate",
+                     "--registry", str(bad)], interactive=True)
+    assert code == 0
+    assert any("cannot load" in n for n in doc["notes"])
+
+
+def test_delegation_reports_missing_doctrine(project, stub_fleet, monkeypatch):
+    import anchor_client
+
+    ep, reg = stub_fleet
+
+    def missing(_rel):
+        raise FileNotFoundError("anchor/system-prompts/mythos-core.md")
+
+    monkeypatch.setattr(anchor_client, "load_prompt", missing)
+    code, doc = cli(["draft", "d8", "--root", str(project), "--json", "--delegate",
+                     "--registry", str(reg)], interactive=True)
+    assert code == 0 and ep.calls == 0
+    assert any("doctrine" in n for n in doc["notes"])

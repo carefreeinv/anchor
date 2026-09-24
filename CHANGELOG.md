@@ -63,7 +63,11 @@ Newest first.
   or no TTY) never prompt, always print schema-v1 JSON, never merge and never
   start a model; a step that needs an operator exits `3` naming the answer.
   `anchor review` merges only after an in-terminal Approve, only by fast-forward
-  through `merge_feature.py`'s gate, onto `dev`/`develop`, never `main`.
+  through `merge_feature.py`'s gate (new `run(..., ff_only=True)` mode, re-checked
+  at merge time so a target that moves mid-prompt never leaves a staged merge),
+  onto `dev`/`develop`, never `main`. After a delegated critic says REVISE or
+  ESCALATE, Approve also needs an explicit "approve despite critic concerns?"
+  yes; a remote-only `feature/<slug>` stops instead of archiving unmerged.
   `--delegate [ENDPOINT]` (interactive only) sends a critic pass or plan prose to
   an `endpoints.yaml` endpoint via `anchor_client.py`. Existing
   `anchor <project-dir> [flags]` scaffolding is unchanged; a project directory

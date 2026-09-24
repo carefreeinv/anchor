@@ -63,6 +63,7 @@ same place every unattended finish goes. Landing work is `anchor review`'s job
 | the review package: branch, target, head, changed files, fast-forward? | deterministic | git, via `merge_feature` helpers |
 | AI critic pass | **model** | pending `critic`; `--delegate` sends it to an endpoint |
 | **Approve / Needs Work / Skip / Defer** | **operator** | the `/review` sign-off; never inferred |
+| Approve after a critic verdict of REVISE, ESCALATE or unreadable | **operator** | a second, explicit "approve despite critic concerns?" yes; anything else leaves the plan in `review-needed/` |
 | Needs Work: which ready lane, and the notes | **operator** | notes must be real; an empty answer counts as no answer |
 | Defer: what blocks it | **operator** | same |
 | Approve → merge | deterministic, **after** the answer | `merge_feature.run`; fast-forward only; integration branch only |
@@ -70,8 +71,14 @@ same place every unattended finish goes. Landing work is `anchor review`'s job
 
 **Approve merges only by fast-forward.** A merge commit is a tree that neither
 branch was prepped in, so it needs `/commit-prep`, which is a harness skill. The
-CLI does not stage one. It stops with exit 3 and a pending `merge-commit` step
-that names `/review <slug>`. The gate gets the head **shown to the operator**
+CLI never stages one. It calls `merge_feature.run(..., ff_only=True)`, which
+refuses a non-fast-forward before any conflict probe and checks again at the
+moment of merging. So even if the integration branch moves while the operator is
+deciding, nothing is staged and the checkout is restored. Either way it stops
+with exit 3 and a pending `merge-commit` step that names `/review <slug>`.
+A `feature/<slug>` that exists only as a remote-tracking branch also stops with
+exit 3 (`local-branch`), because approving would otherwise archive the plan
+without merging it. The gate gets the head **shown to the operator**
 as `--expect-head`, so if the branch moved after they looked, the merge is
 refused. Scope is everything they were shown. `main`/`master` is never a
 target: `merge_feature` refuses mainline. A lane move is not committed; the

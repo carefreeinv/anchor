@@ -1241,3 +1241,44 @@ def test_already_contained_run_preserves_uncommitted_work_in_root(repo, tmp_path
     assert "PRECIOUS" in precious.read_text(encoding="utf-8"), (
         "uncommitted work in --root was destroyed on a run that had nothing to do"
     )
+
+
+# --- ff_only: for callers that cannot run /commit-prep (anchor review) ---------
+
+
+def _diverge_dev(repo: Path) -> str:
+    _git(repo, "checkout", "dev")
+    _commit(repo, "app/other.py", "y = 2\n", "dev moved")
+    dev = _git(repo, "rev-parse", "dev")
+    _git(repo, "checkout", "feature/my-plan")
+    return dev
+
+
+def test_ff_only_refuses_a_non_ff_merge_before_probing(repo):
+    dev_before = _diverge_dev(repo)
+    verdict, result = run(repo, "my-plan", TOUCHED, expect_head=_head(repo), ff_only=True)
+    assert not verdict.ok and verdict.reason == "not-fast-forward" and result is None
+    assert _git(repo, "rev-parse", "dev") == dev_before
+    assert _git(repo, "status", "--porcelain") == ""
+    assert _git(repo, "rev-parse", "--abbrev-ref", "HEAD") == "feature/my-plan"
+
+
+def test_land_ff_only_never_stages_when_target_moved_after_the_gate(repo):
+    """The race: the gate saw a fast-forward, then dev advanced before land()."""
+    from merge_feature import NOT_FAST_FORWARD, land
+
+    dev_before = _diverge_dev(repo)
+    assert land(repo, "feature/my-plan", "dev", ff_only=True) == NOT_FAST_FORWARD
+    assert _git(repo, "rev-parse", "dev") == dev_before
+    assert _git(repo, "status", "--porcelain") == ""
+    assert _git(repo, "rev-parse", "--abbrev-ref", "HEAD") == "feature/my-plan"
+    merge_head = subprocess.run(["git", "-C", str(repo), "rev-parse", "-q", "--verify", "MERGE_HEAD"],
+                                capture_output=True, text=True)
+    assert merge_head.returncode != 0
+
+
+def test_ff_only_still_fast_forwards(repo):
+    head = _head(repo)
+    _git(repo, "checkout", "dev")
+    verdict, result = run(repo, "my-plan", TOUCHED, expect_head=head, ff_only=True)
+    assert verdict.ok and result == head

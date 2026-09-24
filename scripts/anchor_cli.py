@@ -294,7 +294,10 @@ def delegate(
     reg = Path(registry) if registry else anchor_client.DEFAULT_REGISTRY
     if not reg.is_file():
         raise NotDelegated(f"no endpoint registry at {reg}")
-    fleet = anchor_client.Fleet(reg)
+    try:
+        fleet = anchor_client.Fleet(reg)
+    except Exception as exc:  # unreadable/invalid registry: report, never traceback
+        raise NotDelegated(f"cannot load {reg}: {exc}") from exc
     if not fleet.endpoints:
         raise NotDelegated(f"no endpoints configured in {reg}")
     if endpoint == "auto":
@@ -307,7 +310,10 @@ def delegate(
         if not matches:
             raise NotDelegated(f"no endpoint named {endpoint!r} in {reg}")
         ep = matches[0]
-    system = anchor_client.load_prompt(MYTHOS_CORE)
+    try:
+        system = anchor_client.load_prompt(MYTHOS_CORE)
+    except OSError as exc:
+        raise NotDelegated(f"doctrine {MYTHOS_CORE} not found: {exc}") from exc
     try:
         text = ep.chat(
             [{"role": "system", "content": system}, {"role": "user", "content": user}],
@@ -475,9 +481,11 @@ def _review_package(root: Path, slug: str) -> dict[str, Any]:
 
     branch = f"feature/{slug}"
     pkg: dict[str, Any] = {"branch": None, "target": None, "head": None,
-                           "fast_forward": None, "already_merged": None, "changed": []}
+                           "fast_forward": None, "already_merged": None, "changed": [],
+                           "remote_only": []}
     try:
         if branch not in mf.local_branches(root):
+            pkg["remote_only"] = _remote_branches(root, branch)
             return pkg
         target = mf.resolve_target(root)
         head = mf.head_sha(root, branch)
@@ -490,6 +498,32 @@ def _review_package(root: Path, slug: str) -> dict[str, Any]:
     except (mf.GitError, OSError):
         pass
     return pkg
+
+
+def _remote_branches(root: Path, branch: str) -> list[str]:
+    """Remote-tracking refs for ``branch`` (e.g. ``origin/feature/x``)."""
+    import subprocess
+
+    p = subprocess.run(
+        ["git", "-C", str(root), "for-each-ref", "--format=%(refname:short)",
+         f"refs/remotes/*/{branch}"],
+        capture_output=True, text=True, check=False,
+    )
+    return [line for line in p.stdout.splitlines() if line.strip()] if p.returncode == 0 else []
+
+
+def critic_verdict(text: str) -> str:
+    """ACCEPT | REVISE | ESCALATE from a critic reply (template ``**Verdict:**`` line first)."""
+    import re
+
+    m = re.search(r"verdict\W{0,6}(ACCEPT|REVISE|ESCALATE)", text, re.IGNORECASE)
+    if m:
+        return m.group(1).upper()
+    upper = text.upper()
+    for word in ("ESCALATE", "REVISE", "ACCEPT"):  # most cautious first
+        if word in upper:
+            return word
+    return "UNKNOWN"
 
 
 def cmd_review(args: argparse.Namespace, mode: Mode, ask: Prompter) -> Result:
@@ -538,6 +572,17 @@ def _decide(res: Result, ask: Prompter, root: Path, plans: Path, ref, pkg) -> Re
     if choice == "skip":
         return res
     if choice == "approve":
+        verdict = (res.data.get("critic") or {}).get("verdict")
+        if verdict in ("REVISE", "ESCALATE", "UNKNOWN"):
+            sure = ask.choose(
+                "approve-despite-critic",
+                f"The critic's verdict is {verdict}. Approve despite critic concerns?",
+                ("yes", "no"),
+            )
+            if sure != "yes":
+                res.data["decision"] = "skip"
+                res.notes.append("not approved: critic concerns stand; plan left in review-needed/")
+                return res
         return _approve(res, root, plans, ref, pkg)
     if choice == "needs-work":
         lane = ask.choose("needs-work-lane", "Return it as", READY_LANES)
@@ -584,7 +629,7 @@ def _critic(args, mode, ref, pkg, root, res: Result) -> None:
         res.need("critic", NEEDS_MODEL,
                  "AI critic pass over the plan's Done when and the branch diff")
         return
-    res.data["critic"] = {"endpoint": name, "text": out}
+    res.data["critic"] = {"endpoint": name, "verdict": critic_verdict(out), "text": out}
     if mode.interactive and not args.json:
         print(f"--- critic ({name}) ---\n{out}\n---", file=sys.stderr)
 
@@ -592,24 +637,39 @@ def _critic(args, mode, ref, pkg, root, res: Result) -> None:
 def _approve(res: Result, root: Path, plans: Path, ref, pkg: dict[str, Any]) -> Result:
     import merge_feature as mf
 
+    if pkg.get("remote_only"):
+        res.exit_code = EXIT_NEEDS_OPERATOR
+        res.need(
+            "local-branch", NEEDS_OPERATOR,
+            f"feature/{ref.slug} exists only as {', '.join(pkg['remote_only'])}: "
+            f"check it out locally (git switch feature/{ref.slug}) and re-run — "
+            "approving now would archive the plan without merging it",
+        )
+        return res
     if pkg["branch"] and not pkg["already_merged"]:
+        not_ff = (
+            f"{pkg['branch']} is not a fast-forward of {pkg['target']}: a merge commit "
+            f"needs /commit-prep on the merged tree — finish with /review {ref.slug}"
+        )
         if not pkg["fast_forward"]:
             res.exit_code = EXIT_NEEDS_OPERATOR
-            res.need(
-                "merge-commit", NEEDS_HARNESS,
-                f"{pkg['branch']} is not a fast-forward of {pkg['target']}: a merge commit "
-                f"needs /commit-prep on the merged tree — finish with /review {ref.slug}",
-            )
+            res.need("merge-commit", NEEDS_HARNESS, not_ff)
             return res
-        # Same gate /work uses. Scope = everything the operator was shown;
-        # provenance = the head they were shown, so nothing moved since.
+        # Same gate /work uses, ff-only: the target may have moved while the
+        # operator was deciding, and this CLI can never stage a merge commit.
+        # Scope = everything the operator was shown; provenance = the head shown.
         verdict, outcome = mf.run(
             root, ref.slug, tuple(pkg["changed"]),
             expect_head=pkg["head"], target=pkg["target"], title=res.data.get("title", ""),
+            ff_only=True,
         )
         res.data["merge"] = {"ok": verdict.ok, "reason": verdict.reason,
                              "message": verdict.message, "outcome": outcome}
-        if not verdict.ok or outcome in (None, mf.STAGED):
+        if verdict.reason == "not-fast-forward" or outcome == mf.NOT_FAST_FORWARD:
+            res.exit_code = EXIT_NEEDS_OPERATOR
+            res.need("merge-commit", NEEDS_HARNESS, not_ff)
+            return res
+        if not verdict.ok or outcome is None:
             res.exit_code = EXIT_ERROR
             res.error = f"merge refused: {verdict.message}"
             return res

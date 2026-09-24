@@ -49,7 +49,10 @@ No flag supplies that answer, so an unattended run can't approve its own work.
 fast-forwards onto `dev`/`develop` through `merge_feature.py`'s gate, pinned to
 the head you were shown, and never touches `main`. A merge that would need a
 merge commit stops and points you at `/review`, because that tree needs
-`/commit-prep` first.
+`/commit-prep` first. That holds even when `dev` moves while you're deciding:
+the fast-forward is checked again at the moment of merging, and if it fails
+nothing is left staged. If a delegated critic says REVISE, Approve asks once
+more before it merges anything.
 
 ## Also in this change
 
