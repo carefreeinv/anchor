@@ -43,9 +43,9 @@ import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 
+import plan_store
 from plan_select import (
     parse_release_field,
-    plan_slug,
     plans_root_for,
     safe_read_text,
     strip_code_fences,
@@ -130,7 +130,7 @@ def set_status(plans_root: Path, slug: str, status: str) -> bool:
     """
     if status not in VALID_STATUSES:
         return False
-    path = plans_root / ".releases" / f"{slug}.md"
+    path = plan_store.release_file(plans_root, slug)
     if not path.is_file():
         return False
     raw_text, parse_error = safe_read_text(path)
@@ -166,38 +166,22 @@ def scan_releases(plans_root: Path) -> dict[str, ReleaseInfo]:
     """
     releases: dict[str, ReleaseInfo] = {}
 
-    releases_dir = plans_root / ".releases"
-    if releases_dir.is_dir():
-        for path in sorted(releases_dir.glob("*.md")):
-            slug = plan_slug(path)
-            status, target, title = _read_release_file(path)
-            releases[slug] = ReleaseInfo(
-                slug=slug, file_exists=True, status=status, target=target, title=title
-            )
+    for slug, path in plan_store.list_release_files(plans_root):
+        status, target, title = _read_release_file(path)
+        releases[slug] = ReleaseInfo(
+            slug=slug, file_exists=True, status=status, target=target, title=title
+        )
 
-    if not plans_root.is_dir():
-        return releases
-
-    for lane_dir in sorted(p for p in plans_root.iterdir() if p.is_dir()):
-        if lane_dir.name.startswith("."):
+    for ref, raw_text in plan_store.scan(plans_root):
+        text = strip_code_fences(raw_text)
+        release_slug = parse_release_field(text)
+        if release_slug is None:
             continue
-        for path in sorted(lane_dir.glob("*.md")):
-            if path.name == "README.md":
-                continue
-            raw_text, parse_error = safe_read_text(path)
-            if parse_error is not None:
-                continue
-            text = strip_code_fences(raw_text)
-            release_slug = parse_release_field(text)
-            if release_slug is None:
-                continue
-            info = releases.get(release_slug)
-            if info is None:
-                info = ReleaseInfo(slug=release_slug, file_exists=False)
-                releases[release_slug] = info
-            info.members.append(
-                PlanRef(slug=plan_slug(path), lane=lane_dir.name, rel=f"{lane_dir.name}/{path.name}")
-            )
+        info = releases.get(release_slug)
+        if info is None:
+            info = ReleaseInfo(slug=release_slug, file_exists=False)
+            releases[release_slug] = info
+        info.members.append(PlanRef(slug=ref.slug, lane=ref.lane, rel=ref.rel))
 
     return releases
 

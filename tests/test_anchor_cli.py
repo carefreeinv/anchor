@@ -1,0 +1,482 @@
+"""`anchor plans|work|review|draft` — the dual-mode contract, proven rather than asserted.
+
+Headless runs (the default whenever stdio is not a terminal) must never block on
+input, never merge, never start a model, and always emit parseable JSON. Only an
+interactive run with an operator's answer may merge, and only through
+merge_feature's gate onto the integration branch.
+"""
+from __future__ import annotations
+
+import io
+import json
+import subprocess
+import sys
+from pathlib import Path
+
+import anchor_cli
+import plan_lease
+import plan_store
+import pytest
+
+SCRIPTS = Path(anchor_cli.__file__).resolve().parent
+
+PLAN = """# Plan: {slug}
+
+- **Value:** medium
+- **Priority:** {priority}
+- **Preferred models:** mid
+- **Depends on:** none
+
+## Goal
+Do {slug}.
+
+## Steps
+1. thing
+
+## Done when
+- done
+"""
+
+
+class TTY(io.StringIO):
+    def isatty(self) -> bool:
+        return True
+
+
+def cli(argv, *, interactive=False, answers=()):
+    """Run the CLI in-process. Returns (exit_code, parsed JSON or text)."""
+    out = TTY() if interactive else io.StringIO()
+    stdin = TTY() if interactive else io.StringIO()
+    feed = iter(answers)
+
+    def read(_prompt: str) -> str:
+        try:
+            return next(feed)
+        except StopIteration:
+            raise EOFError from None
+
+    code = anchor_cli.main(argv, stdin=stdin, stdout=out, env={}, read=read)
+    text = out.getvalue()
+    if not interactive or "--json" in argv:
+        return code, json.loads(text)
+    return code, text
+
+
+def write(project: Path, lane: str, slug: str, priority: str = "P2") -> Path:
+    path = project / ".plans" / lane / f"{slug}.md"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(PLAN.format(slug=slug, priority=priority), encoding="utf-8")
+    return path
+
+
+@pytest.fixture
+def project(tmp_path: Path) -> Path:
+    root = tmp_path / "proj"
+    for lane in ("bugs", "features", "in-progress", "review-needed", "drafts",
+                 "completed", "ambiguous", "blocked"):
+        (root / ".plans" / lane).mkdir(parents=True)
+    return root
+
+
+# --- mode detection -------------------------------------------------------------
+
+
+def test_mode_is_interactive_only_with_two_ttys_and_no_override():
+    assert anchor_cli.detect_mode(False, stdin=TTY(), stdout=TTY(), env={}).interactive
+
+
+@pytest.mark.parametrize(
+    "flag,stdin,stdout,env,reason",
+    [
+        (True, TTY(), TTY(), {}, "--non-interactive"),
+        (False, TTY(), TTY(), {"ANCHOR_NONINTERACTIVE": "1"}, "ANCHOR_NONINTERACTIVE"),
+        (False, io.StringIO(), TTY(), {}, "stdin is not a terminal"),
+        (False, TTY(), io.StringIO(), {}, "stdout is not a terminal"),
+        (False, object(), TTY(), {}, "stdio not inspectable"),
+    ],
+)
+def test_every_doubt_resolves_to_headless(flag, stdin, stdout, env, reason):
+    mode = anchor_cli.detect_mode(flag, stdin=stdin, stdout=stdout, env=env)
+    assert not mode.interactive and mode.reason == reason
+
+
+def test_closed_stdin_is_headless():
+    closed = io.StringIO()
+    closed.close()
+    assert not anchor_cli.detect_mode(False, stdin=closed, stdout=TTY(), env={}).interactive
+
+
+def test_headless_prompter_cannot_ask():
+    ask = anchor_cli.Prompter(anchor_cli.Mode(False, "test"), read=lambda _p: pytest.fail("asked"))
+    with pytest.raises(anchor_cli.NeedsOperator):
+        ask.choose("x", "Pick", ("a", "b"))
+    with pytest.raises(anchor_cli.NeedsOperator):
+        ask.text("x", "Say")
+
+
+# --- plans ------------------------------------------------------------------------
+
+
+def test_plans_lists_every_lane(project):
+    write(project, "bugs", "b1")
+    write(project, "drafts", "d1")
+    code, doc = cli(["plans", "--root", str(project)])
+    assert code == 0 and doc["schema_version"] == 1 and doc["mode"] == "non-interactive"
+    assert [(p["lane"], p["slug"]) for p in doc["result"]["plans"]] == [
+        ("bugs", "b1"), ("drafts", "d1"),
+    ]
+    assert doc["result"]["counts"]["bugs"] == 1
+
+
+def test_missing_plans_tree_is_a_hard_error(tmp_path):
+    code, doc = cli(["plans", "--root", str(tmp_path)])
+    assert code == 2 and "no .plans/" in doc["error"]
+
+
+# --- work -------------------------------------------------------------------------
+
+
+def test_work_list_uses_plan_select_fit(project):
+    write(project, "features", "f1")
+    code, doc = cli(["work", "--list", "--root", str(project), "--tier", "mid"])
+    assert code == 0
+    (row,) = doc["result"]["plans"]
+    assert row["rel"] == "features/f1.md" and row["fit"] == "good" and row["deps"] == "met"
+
+
+def test_work_list_empty_is_nothing_to_do(project):
+    code, doc = cli(["work", "--list", "--root", str(project)])
+    assert code == 1 and doc["result"]["plans"] == []
+
+
+def test_work_claims_and_hands_execution_back(project):
+    write(project, "features", "f1", priority="P3")
+    write(project, "bugs", "b1")
+    code, doc = cli(["work", "--root", str(project), "--agent-id", "a1"])
+    assert code == 0
+    assert doc["result"]["plan"] == "in-progress/b1.md"
+    assert plan_store.owner(project / ".plans", "in-progress/b1.md") == "a1"
+    assert [p["step"] for p in doc["pending"]] == ["execute"]
+    assert doc["pending"][0]["needs"] == "model"
+
+
+def test_work_run_is_refused_headless(project, monkeypatch):
+    import work_once
+
+    monkeypatch.setattr(work_once, "run_orchestrate", lambda *a: pytest.fail("model started"))
+    write(project, "features", "f1")
+    code, doc = cli(["work", "--root", str(project), "--agent-id", "a1", "--run"])
+    assert code == 0
+    assert any("--run ignored" in n for n in doc["notes"])
+    assert doc["pending"][0]["step"] == "execute"
+
+
+def test_work_heartbeat_finish_return(project):
+    plans = project / ".plans"
+    write(project, "features", "f1")
+    write(project, "features", "f2")
+    cli(["work", "f1", "--root", str(project), "--agent-id", "a1"])
+    cli(["work", "f2", "--root", str(project), "--agent-id", "a1"])
+
+    code, doc = cli(["work", "--heartbeat", "f1", "--root", str(project), "--agent-id", "a1"])
+    assert code == 0 and doc["result"]["plan"] == "in-progress/f1.md"
+
+    code, doc = cli(["work", "--finish", "f1", "--root", str(project), "--agent-id", "someone-else"])
+    assert code == 2 and "lease holder" in doc["error"]
+
+    code, doc = cli(["work", "--finish", "f1", "--root", str(project), "--agent-id", "a1"])
+    assert code == 0 and doc["result"]["plan"] == "review-needed/f1.md"
+    assert plan_lease.read_lease(plans, "in-progress/f1.md") is None
+
+    code, doc = cli(["work", "--return", "f2", "--root", str(project), "--agent-id", "a1"])
+    assert code == 0 and doc["result"]["plan"] == "features/f2.md"
+
+
+# --- review -----------------------------------------------------------------------
+
+
+def test_review_list(project):
+    write(project, "review-needed", "r1")
+    code, doc = cli(["review", "--root", str(project)])
+    assert code == 0 and [p["slug"] for p in doc["result"]["plans"]] == ["r1"]
+
+
+def test_review_headless_stops_for_the_decision_with_the_package(project):
+    write(project, "review-needed", "r1")
+    code, doc = cli(["review", "r1", "--root", str(project)])
+    assert code == anchor_cli.EXIT_NEEDS_OPERATOR
+    assert doc["result"]["plan"] == "review-needed/r1.md"
+    steps = {(p["step"], p["needs"]) for p in doc["pending"]}
+    assert steps == {("critic", "model"), ("review-decision", "operator")}
+    assert (project / ".plans" / "review-needed" / "r1.md").is_file()
+
+
+def test_review_interactive_skip_changes_nothing(project):
+    write(project, "review-needed", "r1")
+    code, doc = cli(["review", "r1", "--root", str(project), "--json"],
+                    interactive=True, answers=["skip"])
+    assert code == 0 and doc["result"]["decision"] == "skip"
+    assert (project / ".plans" / "review-needed" / "r1.md").is_file()
+
+
+def test_review_needs_work_requires_notes_and_moves(project):
+    write(project, "review-needed", "r1")
+    code, doc = cli(["review", "r1", "--root", str(project), "--json"],
+                    interactive=True, answers=["needs-work", "bugs", ""])
+    assert code == 3 and doc["pending"][-1]["step"] == "needs-work-notes"
+    assert (project / ".plans" / "review-needed" / "r1.md").is_file()
+
+    code, doc = cli(["review", "r1", "--root", str(project), "--json"],
+                    interactive=True, answers=["needs-work", "bugs", "Done when #1 fails"])
+    assert code == 0 and doc["result"]["moved_to"] == "bugs/r1.md"
+    body = (project / ".plans" / "bugs" / "r1.md").read_text(encoding="utf-8")
+    assert "## Review notes\nDone when #1 fails" in body
+
+
+def test_review_defer_moves_to_blocked(project):
+    write(project, "review-needed", "r1")
+    code, doc = cli(["review", "r1", "--root", str(project), "--json"],
+                    interactive=True, answers=["defer", "waiting on staging"])
+    assert code == 0 and doc["result"]["moved_to"] == "blocked/r1.md"
+
+
+def test_review_approve_without_branch_archives(project):
+    write(project, "review-needed", "r1")
+    code, doc = cli(["review", "r1", "--root", str(project), "--json"],
+                    interactive=True, answers=["approve"])
+    assert code == 0 and doc["result"]["moved_to"] == "completed/r1.md"
+    assert "merge" not in doc["result"]
+
+
+def _git(root: Path, *args: str) -> str:
+    return subprocess.run(["git", "-C", str(root), *args], check=True,
+                          capture_output=True, text=True).stdout.strip()
+
+
+@pytest.fixture
+def repo_project(git_repo: Path) -> Path:
+    """git repo on main with dev, a feature/r1 branch one commit ahead, .plans ignored."""
+    (git_repo / ".gitignore").write_text(".plans/\n", encoding="utf-8")
+    _git(git_repo, "add", ".gitignore")
+    _git(git_repo, "commit", "-m", "ignore plans")
+    _git(git_repo, "branch", "dev")
+    _git(git_repo, "checkout", "-b", "feature/r1", "dev")
+    (git_repo / "thing.txt").write_text("x\n", encoding="utf-8")
+    _git(git_repo, "add", "thing.txt")
+    _git(git_repo, "commit", "-m", "r1 work")
+    _git(git_repo, "checkout", "dev")
+    write(git_repo, "review-needed", "r1")
+    return git_repo
+
+
+def test_review_approve_fast_forwards_through_the_gate(repo_project):
+    head = _git(repo_project, "rev-parse", "feature/r1")
+    code, doc = cli(["review", "r1", "--root", str(repo_project), "--json"],
+                    interactive=True, answers=["approve"])
+    assert code == 0, doc
+    assert doc["result"]["target"] == "dev" and doc["result"]["fast_forward"] is True
+    assert doc["result"]["merge"]["ok"] and doc["result"]["merge"]["outcome"] == head
+    assert _git(repo_project, "rev-parse", "dev") == head
+    assert _git(repo_project, "rev-parse", "main") != head
+    assert doc["result"]["moved_to"] == "completed/r1.md"
+
+
+def test_review_approve_never_makes_a_merge_commit(repo_project):
+    (repo_project / "other.txt").write_text("y\n", encoding="utf-8")
+    _git(repo_project, "add", "other.txt")
+    _git(repo_project, "commit", "-m", "dev moved on")
+    dev_before = _git(repo_project, "rev-parse", "dev")
+    code, doc = cli(["review", "r1", "--root", str(repo_project), "--json"],
+                    interactive=True, answers=["approve"])
+    assert code == 3
+    assert doc["pending"][-1]["step"] == "merge-commit"
+    assert doc["pending"][-1]["needs"] == "harness"
+    assert _git(repo_project, "rev-parse", "dev") == dev_before
+    assert (repo_project / ".plans" / "review-needed" / "r1.md").is_file()
+
+
+def test_review_headless_never_merges(repo_project):
+    dev_before = _git(repo_project, "rev-parse", "dev")
+    code, _doc = cli(["review", "r1", "--root", str(repo_project)])
+    assert code == 3
+    assert _git(repo_project, "rev-parse", "dev") == dev_before
+
+
+# --- draft ------------------------------------------------------------------------
+
+
+def test_draft_scaffolds_and_hands_prose_back(project):
+    code, doc = cli(["draft", "new-thing", "--root", str(project), "--goal", "Ship it."])
+    assert code == 0 and doc["result"]["plan"] == "drafts/new-thing.md"
+    text = (project / ".plans" / "drafts" / "new-thing.md").read_text(encoding="utf-8")
+    assert "## Goal\nShip it." in text
+    assert doc["pending"][0]["step"] == "plan-prose"
+
+
+def test_draft_local_and_duplicate(project):
+    code, doc = cli(["draft", "mine", "--local", "--root", str(project)])
+    assert doc["result"]["plan"] == "drafts/mine.local.md"
+    write(project, "features", "taken")
+    code, doc = cli(["draft", "taken", "--root", str(project)])
+    assert code == 2 and "already used" in doc["error"]
+
+
+def test_draft_promote(project):
+    write(project, "drafts", "d1")
+    code, doc = cli(["draft", "--promote", "d1", "--root", str(project)])
+    assert code == 3 and doc["pending"][0]["step"] == "promote-lane"
+    code, doc = cli(["draft", "--promote", "d1", "--to", "features", "--root", str(project)])
+    assert code == 0 and doc["result"]["plan"] == "features/d1.md"
+
+
+# --- delegation -------------------------------------------------------------------
+
+
+class _StubEndpoint:
+    name = "stub"
+
+    def __init__(self, reply: str) -> None:
+        self.reply = reply
+        self.calls = 0
+
+    def chat(self, messages, **_kw) -> str:
+        self.calls += 1
+        return self.reply
+
+
+@pytest.fixture
+def stub_fleet(monkeypatch, tmp_path):
+    anchor_client = pytest.importorskip("anchor_client")
+    reply = PLAN.format(slug="delegated", priority="P2")
+    ep = _StubEndpoint(reply)
+
+    class StubFleet:
+        def __init__(self, _path):
+            self.endpoints = [ep]
+
+        def pick(self, _role):
+            return ep
+
+    reg = tmp_path / "endpoints.yaml"
+    reg.write_text("endpoints: []\n", encoding="utf-8")
+    monkeypatch.setattr(anchor_client, "Fleet", StubFleet)
+    return ep, reg
+
+
+def test_delegation_round_trips_one_step_interactively(project, stub_fleet):
+    ep, reg = stub_fleet
+    code, doc = cli(["draft", "d2", "--root", str(project), "--delegate", "--registry", str(reg),
+                     "--json"], interactive=True)
+    assert code == 0 and ep.calls == 1
+    assert doc["result"]["delegated_to"] == "stub" and doc["pending"] == []
+    text = (project / ".plans" / "drafts" / "d2.md").read_text(encoding="utf-8")
+    assert text.startswith("# Plan: delegated")
+
+
+def test_headless_never_delegates(project, stub_fleet):
+    ep, reg = stub_fleet
+    code, doc = cli(["draft", "d3", "--root", str(project), "--delegate", "--registry", str(reg)])
+    assert code == 0 and ep.calls == 0
+    assert any("non-interactive" in n for n in doc["notes"])
+    assert doc["pending"][0]["step"] == "plan-prose"
+
+
+def test_delegation_without_an_endpoint_names_the_step(project, tmp_path):
+    pytest.importorskip("anchor_client")
+    write(project, "review-needed", "r1")
+    code, doc = cli(["review", "r1", "--root", str(project), "--json", "--delegate",
+                     "--registry", str(tmp_path / "missing.yaml")],
+                    interactive=True, answers=["skip"])
+    assert code == 0
+    assert any("no endpoint registry" in n for n in doc["notes"])
+
+
+# --- no verb blocks with stdin closed (subprocess, real stdio) --------------------
+
+HEADLESS_ARGVS = [
+    ["plans"],
+    ["plans", "--board"],
+    ["work", "--list"],
+    ["work"],
+    ["work", "--run"],
+    ["review"],
+    ["review", "r1"],
+    ["review", "r1", "--delegate"],
+    ["draft"],
+    ["draft", "fresh"],
+    ["draft", "--promote", "d1"],
+]
+
+
+@pytest.mark.parametrize("close", [False, True], ids=["devnull", "closed"])
+@pytest.mark.parametrize("argv", HEADLESS_ARGVS, ids=lambda a: " ".join(a))
+def test_no_verb_blocks_with_stdin_closed(project, argv, close):
+    write(project, "features", "f1")
+    write(project, "review-needed", "r1")
+    write(project, "drafts", "d1")
+    cmd = [sys.executable, str(SCRIPTS / "anchor.py"), *argv, "--root", str(project),
+           "--agent-id", "sub"] if argv[0] == "work" else [
+        sys.executable, str(SCRIPTS / "anchor.py"), *argv, "--root", str(project)]
+    proc = subprocess.Popen(cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                            stderr=subprocess.PIPE, text=True)
+    if close:
+        proc.stdin.close()
+        proc.stdin = None  # the child sees EOF on a closed pipe; communicate must not flush it
+        out, _err = proc.communicate(timeout=30)
+    else:
+        out, _err = proc.communicate(input="", timeout=30)
+    assert proc.returncode in (0, 1, 3), _err
+    doc = json.loads(out)
+    if "--board" not in argv:
+        assert doc["mode"] == "non-interactive" and doc["exit_code"] == proc.returncode
+
+
+# --- a pip-installed `anchor` can import everything it uses -------------------------
+
+
+def _script_imports(name: str) -> set[str]:
+    import ast
+
+    tree = ast.parse((SCRIPTS / f"{name}.py").read_text(encoding="utf-8"))
+    found: set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            found |= {a.name.split(".")[0] for a in node.names}
+        elif isinstance(node, ast.ImportFrom) and node.module and node.level == 0:
+            found.add(node.module.split(".")[0])
+    return {m for m in found if (SCRIPTS / f"{m}.py").is_file()}
+
+
+def test_pyproject_ships_the_whole_import_closure():
+    import re
+
+    text = (SCRIPTS.parent / "pyproject.toml").read_text(encoding="utf-8")
+    block = re.search(r"py-modules\s*=\s*\[(.*?)\]", text, re.DOTALL)
+    assert block, "py-modules list not found"
+    shipped = set(re.findall(r'"([^"]+)"', block.group(1)))
+
+    closure: set[str] = set()
+    todo = ["anchor", "anchor_cli"]
+    while todo:
+        mod = todo.pop()
+        if mod not in closure:
+            closure.add(mod)
+            todo.extend(_script_imports(mod) - closure)
+    assert closure <= shipped, f"imported but not packaged: {sorted(closure - shipped)}"
+
+
+# --- documented commands match --help exactly ------------------------------------
+
+
+@pytest.mark.parametrize("verb", anchor_cli.VERBS)
+def test_docs_quote_help_verbatim(verb):
+    page = (SCRIPTS.parent / "docs" / "docs" / "tooling" / "plan-verbs.md").read_text(encoding="utf-8")
+    help_text = subprocess.run(
+        [sys.executable, str(SCRIPTS / "anchor.py"), verb, "--help"],
+        capture_output=True, text=True, check=True,
+        env={"COLUMNS": "80", "PATH": "/usr/bin:/bin"},
+    ).stdout.rstrip("\n")
+    assert f"```text\n{help_text}\n```" in page, (
+        f"docs/docs/tooling/plan-verbs.md is stale for `anchor {verb} --help`; "
+        "regenerate its Command reference section"
+    )

@@ -37,6 +37,8 @@ import time
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
+import plan_store
+
 # Integration candidates in priority order; a feature branch targets the first
 # that exists, and an integration branch targets the first *mainline* below it.
 INTEGRATION_ORDER = ("dev", "develop", "main", "master")
@@ -128,17 +130,8 @@ def _slug_from_branch(branch: str) -> str | None:
 
 def completed_slugs(root: Path) -> set[str]:
     """Slugs of plans under .plans/completed/ (date prefix and .local stripped)."""
-    comp = root / ".plans" / "completed"
-    slugs: set[str] = set()
-    if not comp.is_dir():
-        return slugs
-    for path in comp.glob("*.md"):
-        if path.name == "README.md":
-            continue
-        stem = path.name[:-9] if path.name.endswith(".local.md") else path.name[:-3]
-        stem = re.sub(r"^\d{4}-\d{2}-\d{2}-", "", stem)  # drop YYYY-MM-DD- prefix
-        slugs.add(stem)
-    return slugs
+    plans = plan_store.plans_root_for(root)
+    return {ref.base_slug for ref in plan_store.list_lane(plans, "completed")}
 
 
 PLAN_LANES = (
@@ -192,14 +185,11 @@ def worktree_dirty(path: str) -> bool:
 
 def plan_file(root: Path, slug: str) -> Path | None:
     """The plan file for ``slug`` in whatever lane currently holds it."""
+    plans = plan_store.plans_root_for(root)
     for lane in PLAN_LANES:
-        lane_dir = root / ".plans" / lane
-        if not lane_dir.is_dir():
-            continue
-        for path in lane_dir.glob("*.md"):
-            stem = path.name[:-9] if path.name.endswith(".local.md") else path.name[:-3]
-            if re.sub(r"^\d{4}-\d{2}-\d{2}-", "", stem) == slug:
-                return path
+        for ref in plan_store.list_lane(plans, lane):
+            if ref.base_slug == slug:
+                return ref.path
     return None
 
 

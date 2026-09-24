@@ -37,6 +37,8 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 
+import plan_store
+
 SCRIPTS_DIR = Path(__file__).resolve().parent
 DEFAULT_PYTHON = sys.executable
 DEFAULT_INTERVAL = "5m"
@@ -206,9 +208,9 @@ def cmd_status(project: Path, scripts: Path) -> int:
             "drafts",
             "completed",
         ):
-            d = plans / lane
-            n = len(list(d.glob("*.md"))) if d.is_dir() else 0
-            print(f"  {lane:12s} {n} plan(s)" + ("" if d.is_dir() else " (no dir)"))
+            present = plan_store.lane_exists(plans, lane)
+            n = plan_store.count(plans, lane)
+            print(f"  {lane:12s} {n} plan(s)" + ("" if present else " (no dir)"))
     conv = None
     for rel in (".anchor/conventions.md", "ANCHOR-CONVENTIONS.md"):
         p = project / rel

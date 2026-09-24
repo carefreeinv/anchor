@@ -17,12 +17,33 @@ Homepage = "https://carefreeinv.com/anchor"
 anchor = "anchor:main"
 
 # scripts/anchor.py is exposed as the top-level "anchor" module without restructuring
-# scripts/ — the fleet scripts (anchor_client.py, orchestrate.py, ...) are deliberately
-# left alone here; they're designed to be copied standalone into other repos, not
-# imported from an installed package.
+# scripts/. Alongside it ships every module `anchor` imports — the scaffolder's own
+# helpers and the plan-workflow scripts the `anchor plans|work|review|draft` verbs wrap
+# (tests/test_anchor_cli.py checks this list against the real import graph). The rest of the
+# fleet tooling (orchestrate.py, router.py, ...) is deliberately left alone here; it is
+# designed to be copied standalone into other repos, not imported from an installed
+# package. anchor_client is included for `--delegate`, which also needs `requests` and
+# `pyyaml` — not declared, so the deterministic verbs install with no dependencies.
 [tool.setuptools]
 package-dir = { "" = "scripts" }
-py-modules = ["anchor"]
+py-modules = [
+    "anchor",
+    "anchor_cli",
+    "anchor_client",
+    "fit_device",
+    "merge_feature",
+    "pending_merges",
+    "plan_board",
+    "plan_lease",
+    "plan_parse",
+    "plan_select",
+    "plan_store",
+    "release_progress",
+    "scope_gate",
+    "work_once",
+    "worktree_for_agent",
+    "write_aider_env",
+]
 
 [tool.ruff]
 line-length = 120

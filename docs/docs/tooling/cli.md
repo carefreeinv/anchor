@@ -9,6 +9,8 @@ sidebar_label: The anchor CLI
 
 **Hard rule (all projects):** docs describe **current shipped state**, not plan backlog. Never document the **contents** of `.plans/` as product docs or roadmap; when plan work ships, document the code. Documenting the `.plans/` **workflow** is fine when it is a shipped feature. See doctrine and mythos-core rule 12.
 
+The same command also runs the `.plans/` workflow: `anchor plans`, `anchor work`, `anchor review`, `anchor draft`. See [Plan workflow verbs](/tooling/plan-verbs). This page covers scaffolding.
+
 ## Install
 
 **Easiest:** run [**`/install-anchor`**](/skills/install-anchor) in a coding agent
@@ -19,7 +21,7 @@ before writing).
 Manual options (same script):
 
 - **Symlink (preferred):** `mkdir -p ~/.local/bin && ln -sfn "$(pwd)/bin/anchor" ~/.local/bin/anchor` (ensure `~/.local/bin` is on `PATH`), or call `python3 scripts/anchor.py` directly.
-- **`pip install -e .`** (or `pipx install .`) from the repo root gives a console-script `anchor`. This only installs the scaffolder — the fleet scripts (`orchestrate.py`, `router.py`, ...) stay copy-paste by design, since they're meant to be dropped standalone into other repos.
+- **`pip install -e .`** (or `pipx install .`) from the repo root gives a console-script `anchor`: the scaffolder plus the plan-workflow modules its verbs wrap. The rest of the fleet scripts (`orchestrate.py`, `router.py`, ...) stay copy-paste by design, since they're meant to be dropped standalone into other repos — so `anchor work --run`, which hands a plan to `orchestrate.py`, needs a checkout (`bin/anchor`). `--delegate` also needs `requests` and `pyyaml`.
 
 ## Set defaults (optional)
 

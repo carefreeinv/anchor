@@ -43,6 +43,7 @@ from typing import Any
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
+import plan_store  # noqa: E402
 from plan_select import (  # noqa: E402
     PlanRecord,
     is_agent_assignable,
@@ -53,7 +54,6 @@ from plan_select import (  # noqa: E402
     parse_release_field,
     parse_title,
     parse_value,
-    plan_slug,
     plan_sort_key,
     release_completion_map,
 )
@@ -213,7 +213,7 @@ def entered_lane_time(project_root: Path, path: Path) -> datetime.datetime | Non
     checkout mtime resets); falls back to filesystem mtime for ``.local.md``
     (no git history) or when git has nothing for the path.
     """
-    if not path.name.endswith(".local.md"):
+    if not plan_store.is_local_path(path):
         t = git_commit_time(project_root, path)
         if t is not None:
             return t
@@ -250,14 +250,9 @@ def compute_throughput(
         return completed, processed
 
     def _count(lane: str) -> int:
-        lane_dir = plans_root / lane
-        if not lane_dir.is_dir():
-            return 0
         n = 0
-        for path in lane_dir.glob("*.md"):
-            if path.name == "README.md":
-                continue
-            t = entered_lane_time(project_root, path)
+        for ref in plan_store.list_lane(plans_root, lane):
+            t = entered_lane_time(project_root, ref.path)
             if t is not None and t >= window_start:
                 n += 1
         return n
@@ -266,27 +261,22 @@ def compute_throughput(
 
 
 def scan_lane(plans_root: Path, lane: str) -> list[PlanRecord]:
-    lane_dir = plans_root / lane
-    if not lane_dir.is_dir():
-        return []
     records: list[PlanRecord] = []
-    for path in sorted(lane_dir.glob("*.md")):
-        if path.name == "README.md":
-            continue
+    for ref in plan_store.list_lane(plans_root, lane):
         try:
-            text = path.read_text(encoding="utf-8")
+            text = ref.path.read_text(encoding="utf-8")
         except OSError:
             continue
         records.append(
             PlanRecord(
-                path=path.resolve(),
-                rel=f"{lane}/{path.name}",
+                path=ref.path.resolve(),
+                rel=ref.rel,
                 lane=lane,
-                slug=plan_slug(path),
+                slug=ref.slug,
                 value=parse_value(text),
                 priority=parse_priority(text),
                 preferred=parse_preferred(text),
-                title=parse_title(text, path.name),
+                title=parse_title(text, ref.name),
                 depends_on=tuple(parse_depends_on(text)),
                 assignee=parse_assignee(text),
                 agent_assignable=is_agent_assignable(text),

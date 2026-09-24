@@ -14,6 +14,7 @@ from typing import Any
 
 import plan_lease
 import plan_select
+import plan_store
 import yaml
 from plan_lease import ClaimError
 from plan_select import Worker, normalize_fit_tier, plan_slug
@@ -354,14 +355,14 @@ def _resolve_plan_path(cfg: CoordinatorConfig, plan_ref: str) -> Path:
     if Path(ref).is_absolute():
         return plans_rel_under(cfg, ref)
     # slug only
-    if "/" not in ref and not ref.endswith(".md"):
-        hits = plan_select.find_slug_paths(cfg.plans_root, ref)
+    if "/" not in ref and not plan_store.is_entry_name(ref):
+        hits = plan_store.find_slug(cfg.plans_root, ref)
         if not hits:
             raise CoordinatorError(f"no plan with slug {ref!r}")
         if len(hits) > 1:
-            locs = ", ".join(f"{lane}/{p.name}" for lane, p in hits)
+            locs = ", ".join(h.rel for h in hits)
             raise CoordinatorError(f"ambiguous slug {ref!r}: {locs}")
-        return hits[0][1].resolve()
+        return hits[0].path.resolve()
     # strip leading .plans/
     if ref.startswith(".plans/"):
         ref = ref[len(".plans/") :]
@@ -518,142 +519,129 @@ def plans_stale_report(cfg: CoordinatorConfig) -> dict[str, Any]:
     capacity = "known" if known else "unknown"
     now = time.time()
 
-    for lane in ("bugs", "features"):
-        lane_dir = cfg.plans_root / lane
-        if not lane_dir.is_dir():
+    for ref in plan_store.list_lanes(cfg.plans_root, ("bugs", "features")):
+        path = ref.path
+        try:
+            age_h = (now - path.stat().st_mtime) / 3600.0
+            text = path.read_text(encoding="utf-8")
+        except OSError:
             continue
-        for path in sorted(lane_dir.glob("*.md")):
-            if path.name == "README.md":
-                continue
-            try:
-                age_h = (now - path.stat().st_mtime) / 3600.0
-                text = path.read_text(encoding="utf-8")
-            except OSError:
-                continue
-            if age_h < cfg.stale_after_hours:
-                continue
-            preferred = plan_select.parse_preferred(text)
-            pref_tiers = _preferred_tiers(preferred)
-            deps = plan_select.parse_depends_on(text)
-            met, unmet, _notes = plan_select.evaluate_dependencies(
-                cfg.plans_root, deps, git_check=False
+        if age_h < cfg.stale_after_hours:
+            continue
+        preferred = plan_select.parse_preferred(text)
+        pref_tiers = _preferred_tiers(preferred)
+        deps = plan_select.parse_depends_on(text)
+        met, unmet, _notes = plan_select.evaluate_dependencies(
+            cfg.plans_root, deps, git_check=False
+        )
+        rel = ref.rel
+        slug = ref.slug
+        if not met and unmet:
+            warnings.append(
+                {
+                    "code": "STALE-DEPS",
+                    "cause": "unmet_deps",
+                    "rel": rel,
+                    "slug": slug,
+                    "age_hours": round(age_h, 1),
+                    "preferred": preferred,
+                    "hint": f"Depends on unmet: {', '.join(unmet)} — not a capacity issue",
+                }
             )
-            rel = f"{lane}/{path.name}"
-            slug = plan_slug(path)
-            if not met and unmet:
-                warnings.append(
-                    {
-                        "code": "STALE-DEPS",
-                        "cause": "unmet_deps",
-                        "rel": rel,
-                        "slug": slug,
-                        "age_hours": round(age_h, 1),
-                        "preferred": preferred,
-                        "hint": f"Depends on unmet: {', '.join(unmet)} — not a capacity issue",
-                    }
-                )
-                continue
-            if pref_tiers and known and not any(t in known for t in pref_tiers):
-                warnings.append(
-                    {
-                        "code": "STALE-TIER-GAP",
-                        "cause": "tier_gap",
-                        "rel": rel,
-                        "slug": slug,
-                        "age_hours": round(age_h, 1),
-                        "preferred": preferred,
-                        "preferred_tiers": pref_tiers,
-                        "known_tiers": sorted(known),
-                        "hint": (
-                            f"prefers {pref_tiers}; known workers {sorted(known)} — "
-                            "start a matching tier or lower Preferred models"
-                        ),
-                    }
-                )
-            elif not known:
-                warnings.append(
-                    {
-                        "code": "STALE-UNCLAIMED",
-                        "cause": "no_workers",
-                        "rel": rel,
-                        "slug": slug,
-                        "age_hours": round(age_h, 1),
-                        "preferred": preferred,
-                        "capacity": "unknown",
-                        "hint": "ready past threshold; declare worker_tiers in .anchor/mcp.yaml",
-                    }
-                )
-            else:
-                warnings.append(
-                    {
-                        "code": "STALE-UNCLAIMED",
-                        "cause": "idle_capacity",
-                        "rel": rel,
-                        "slug": slug,
-                        "age_hours": round(age_h, 1),
-                        "preferred": preferred,
-                        "hint": "capacity present but idle — check fleet_watch / human /work",
-                    }
-                )
+            continue
+        if pref_tiers and known and not any(t in known for t in pref_tiers):
+            warnings.append(
+                {
+                    "code": "STALE-TIER-GAP",
+                    "cause": "tier_gap",
+                    "rel": rel,
+                    "slug": slug,
+                    "age_hours": round(age_h, 1),
+                    "preferred": preferred,
+                    "preferred_tiers": pref_tiers,
+                    "known_tiers": sorted(known),
+                    "hint": (
+                        f"prefers {pref_tiers}; known workers {sorted(known)} — "
+                        "start a matching tier or lower Preferred models"
+                    ),
+                }
+            )
+        elif not known:
+            warnings.append(
+                {
+                    "code": "STALE-UNCLAIMED",
+                    "cause": "no_workers",
+                    "rel": rel,
+                    "slug": slug,
+                    "age_hours": round(age_h, 1),
+                    "preferred": preferred,
+                    "capacity": "unknown",
+                    "hint": "ready past threshold; declare worker_tiers in .anchor/mcp.yaml",
+                }
+            )
+        else:
+            warnings.append(
+                {
+                    "code": "STALE-UNCLAIMED",
+                    "cause": "idle_capacity",
+                    "rel": rel,
+                    "slug": slug,
+                    "age_hours": round(age_h, 1),
+                    "preferred": preferred,
+                    "hint": "capacity present but idle — check fleet_watch / human /work",
+                }
+            )
 
     # Expired leases on in-progress
-    ip = cfg.plans_root / "in-progress"
-    if ip.is_dir():
-        for path in sorted(ip.glob("*.md")):
-            if path.name == "README.md":
-                continue
-            rel = f"in-progress/{path.name}"
-            lease = plan_lease.read_lease(cfg.plans_root, rel)
-            if lease and lease.expired:
-                age_h = (now - path.stat().st_mtime) / 3600.0
+    for ip_ref in plan_store.list_lane(cfg.plans_root, "in-progress"):
+        path = ip_ref.path
+        rel = ip_ref.rel
+        lease = plan_lease.read_lease(cfg.plans_root, rel)
+        if lease and lease.expired:
+            age_h = (now - path.stat().st_mtime) / 3600.0
+            warnings.append(
+                {
+                    "code": "STALE-LEASE",
+                    "cause": "expired_lease",
+                    "rel": rel,
+                    "slug": ip_ref.slug,
+                    "age_hours": round(age_h, 1),
+                    "owner": lease.agent_id,
+                    "hint": "lease expired; claimer gone — release or resume",
+                }
+            )
+        elif lease is None:
+            age_h = (now - path.stat().st_mtime) / 3600.0
+            if age_h >= cfg.stale_after_hours:
                 warnings.append(
                     {
                         "code": "STALE-LEASE",
                         "cause": "expired_lease",
                         "rel": rel,
-                        "slug": plan_slug(path),
+                        "slug": ip_ref.slug,
                         "age_hours": round(age_h, 1),
-                        "owner": lease.agent_id,
-                        "hint": "lease expired; claimer gone — release or resume",
+                        "hint": "in-progress with no active lease — orphan claim",
                     }
                 )
-            elif lease is None:
-                age_h = (now - path.stat().st_mtime) / 3600.0
-                if age_h >= cfg.stale_after_hours:
-                    warnings.append(
-                        {
-                            "code": "STALE-LEASE",
-                            "cause": "expired_lease",
-                            "rel": rel,
-                            "slug": plan_slug(path),
-                            "age_hours": round(age_h, 1),
-                            "hint": "in-progress with no active lease — orphan claim",
-                        }
-                    )
 
-    for lane in ("ambiguous", "blocked"):
-        lane_dir = cfg.plans_root / lane
-        if not lane_dir.is_dir():
+    for parked in plan_store.list_lanes(cfg.plans_root, ("ambiguous", "blocked")):
+        lane = parked.lane
+        try:
+            age_h = (now - parked.path.stat().st_mtime) / 3600.0
+        except OSError:
             continue
-        for path in sorted(lane_dir.glob("*.md")):
-            if path.name == "README.md":
-                continue
-            try:
-                age_h = (now - path.stat().st_mtime) / 3600.0
-            except OSError:
-                continue
-            if age_h < cfg.parked_stale_hours:
-                continue
-            warnings.append(
-                {
-                    "code": "STALE-PARKED",
-                    "cause": "parked",
-                    "rel": f"{lane}/{path.name}",
-                    "slug": plan_slug(path),
-                    "age_hours": round(age_h, 1),
-                    "hint": f"parked in {lane}/ too long — human unpark when ready",
-                }
-            )
+        if age_h < cfg.parked_stale_hours:
+            continue
+        warnings.append(
+            {
+                "code": "STALE-PARKED",
+                "cause": "parked",
+                "rel": parked.rel,
+                "slug": parked.slug,
+                "age_hours": round(age_h, 1),
+                "hint": f"parked in {lane}/ too long — human unpark when ready",
+            }
+        )
 
     return {
         "warnings": warnings,

@@ -3,5 +3,13 @@
 # path, the CLI scaffolds the current working directory. Symlink this file onto
 # your PATH as `anchor` (or `ln -s "$(pwd)/bin/anchor" /usr/local/bin/anchor`).
 set -euo pipefail
-DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# Follow the symlink chain first: the install puts a *symlink* on PATH, and
+# dirname of the link would point at the bin dir, not this checkout.
+SOURCE="${BASH_SOURCE[0]}"
+while [ -L "$SOURCE" ]; do
+  LINK_DIR="$(cd -P "$(dirname "$SOURCE")" && pwd)"
+  SOURCE="$(readlink "$SOURCE")"
+  case "$SOURCE" in /*) ;; *) SOURCE="$LINK_DIR/$SOURCE" ;; esac
+done
+DIR="$(cd -P "$(dirname "$SOURCE")/.." && pwd)"
 exec python3 "$DIR/scripts/anchor.py" "$@"

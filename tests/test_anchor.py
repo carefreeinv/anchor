@@ -1,4 +1,7 @@
 import json
+import subprocess
+import sys
+from pathlib import Path
 
 import pytest
 
@@ -807,3 +810,81 @@ def test_every_script_a_scaffolded_skill_names_is_shipped_to_consumers():
         "scaffolded skills name scripts that FLEET_FILES does not ship to consumer "
         f"projects: {missing}"
     )
+
+
+# --- the plan-workflow verbs must not change the scaffolding invocation --------
+
+ANCHOR_PY = Path(anchor.__file__).resolve()
+
+
+@pytest.mark.parametrize(
+    "argv",
+    [
+        [],
+        ["proj"],
+        ["proj", "--platform", "claude", "--dry-run"],
+        ["./work", "--platform", "claude"],
+        ["work/"],
+        ["--list"],
+        ["--check"],
+        ["--upgrade", "--yes"],
+        ["proj", "--set-orchestrator", "claude:opus"],
+    ],
+)
+def test_non_verb_argv_goes_to_the_scaffolder_unchanged(monkeypatch, argv):
+    seen = []
+    monkeypatch.setattr(anchor, "scaffold_main", lambda a: seen.append(a))
+    anchor.main(argv)
+    assert seen == [argv]
+
+
+@pytest.mark.parametrize("verb", ["plans", "work", "review", "draft"])
+def test_verb_argv_goes_to_the_workflow_cli(monkeypatch, verb):
+    import anchor_cli
+
+    monkeypatch.setattr(anchor, "scaffold_main", lambda a: pytest.fail("scaffolded"))
+    monkeypatch.setattr(anchor_cli, "main", lambda a: 7)
+    with pytest.raises(SystemExit) as exc:
+        anchor.main([verb, "--list"])
+    assert exc.value.code == 7
+
+
+def _run_anchor(tmp_path, *args):
+    env = {"PATH": "/usr/bin:/bin", "ANCHOR_CONFIG_DIR": str(tmp_path / "cfg"), "HOME": str(tmp_path)}
+    return subprocess.run(
+        [sys.executable, str(ANCHOR_PY), *args],
+        cwd=tmp_path, env=env, stdin=subprocess.DEVNULL,
+        capture_output=True, text=True, timeout=60,
+    )
+
+
+def test_scaffold_dry_run_still_works_end_to_end(tmp_path):
+    (tmp_path / "proj").mkdir()
+    p = _run_anchor(tmp_path, "proj", "--platform", "claude", "--dry-run")
+    assert p.returncode == 0, p.stderr
+    assert "(dry run — nothing written)" in p.stdout
+    assert not (tmp_path / "proj" / ".anchor-manifest.json").exists()
+
+
+def test_dir_named_like_a_verb_is_scaffolded_via_dot_slash(tmp_path):
+    (tmp_path / "work").mkdir()
+    p = _run_anchor(tmp_path, "./work", "--platform", "claude", "--dry-run")
+    assert p.returncode == 0, p.stderr
+    assert "(dry run — nothing written)" in p.stdout
+
+
+def test_scaffold_ships_plan_store_with_fleet_tooling():
+    assert "scripts/plan_store.py" in anchor.FLEET_FILES
+
+
+def test_bin_anchor_works_through_a_symlink(tmp_path):
+    """/install-anchor puts a symlink to bin/anchor on PATH; it must find scripts/."""
+    link = tmp_path / "bin" / "anchor"
+    link.parent.mkdir()
+    link.symlink_to(ANCHOR_PY.parent.parent / "bin" / "anchor")
+    chained = tmp_path / "bin" / "anchor-again"
+    chained.symlink_to("anchor")  # relative link to a link
+    for exe in (link, chained):
+        p = subprocess.run([str(exe), "--list"], capture_output=True, text=True, timeout=60)
+        assert p.returncode == 0, p.stderr
+        assert "claude" in p.stdout

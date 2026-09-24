@@ -41,6 +41,7 @@ import subprocess
 import sys
 from pathlib import Path
 
+import plan_store
 from plan_lease import (
     DEFAULT_TTL_SECONDS,
     ClaimError,
@@ -159,15 +160,12 @@ def _in_progress_rel(
                     break
         if not p.is_file():
             return None
-        try:
-            rel = str(p.resolve().relative_to(plans_root.resolve())).replace("\\", "/")
-        except ValueError:
-            return None
-        return rel if rel.startswith("in-progress/") else None
+        ref = plan_store.ref_for_path(plans_root, p)
+        return ref.rel if ref is not None and ref.lane == "in-progress" else None
     if slug:
-        for name in (f"{slug}.md", f"{slug}.local.md"):
-            if (plans_root / "in-progress" / name).is_file():
-                return f"in-progress/{name}"
+        hits = plan_store.lookup(plans_root, "in-progress", slug)
+        if hits:
+            return hits[0].rel
     return None
 
 
@@ -554,12 +552,11 @@ def main(argv: list[str] | None = None) -> int:
                             p = c
                             break
                 if p.is_file():
-                    try:
-                        rel = p.resolve().relative_to(plans_root.resolve())
-                        rec_rel = str(rel).replace("\\", "/")
-                    except ValueError:
+                    ref = plan_store.ref_for_path(plans_root, p)
+                    if ref is None:
                         print(f"[work_once] path outside .plans/: {p}", file=sys.stderr)
                         return 2
+                    rec_rel = ref.rel
                 else:
                     print(f"[work_once] plan not found: {args.path}", file=sys.stderr)
                     return 2
@@ -570,14 +567,10 @@ def main(argv: list[str] | None = None) -> int:
                 if rec is None:
                     # try in-progress by slug without ownership for error message
                     for lane in ("in-progress", "bugs", "features", "ambiguous", "blocked"):
-                        for name in (f"{args.slug}.md", f"{args.slug}.local.md"):
-                            cand = plans_root / lane / name
-                            if cand.is_file():
-                                rec_rel = f"{lane}/{name}"
-                                break
-                        else:
-                            continue
-                        break
+                        hits = plan_store.lookup(plans_root, lane, args.slug)
+                        if hits:
+                            rec_rel = hits[0].rel
+                            break
                     else:
                         print(f"[work_once] no plan for slug {args.slug!r}", file=sys.stderr)
                         return 1

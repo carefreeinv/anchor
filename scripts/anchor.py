@@ -51,6 +51,13 @@ upstream content, restore missing managed files, migrate legacy layout
 for the project's recorded platforms. Locally modified files are kept unless
 ``--force``. Nothing is overwritten without ``--upgrade`` (and confirmation / ``--yes``).
 
+Plan workflow (no model needed for the deterministic parts; see anchor/cli.md):
+  anchor plans                      # every plan, by lane
+  anchor work --list | anchor work [<slug>] | anchor work --finish <slug>
+  anchor review --list | anchor review <slug>
+  anchor draft <slug> | anchor draft --promote <slug> --to features
+A project directory named plans/work/review/draft is scaffolded as ./work etc.
+
 Typical shell alias so it can be run as `anchor project/bar`:
   alias anchor="python3 /path/to/Anchor/scripts/anchor.py"
 (or symlink bin/anchor, included alongside this script, onto your PATH)
@@ -140,6 +147,7 @@ FLEET_FILES: list[str] = [
     "scripts/work_once.py",
     "scripts/plan_select.py",
     "scripts/plan_parse.py",
+    "scripts/plan_store.py",
     "scripts/plan_lease.py",
     "scripts/lease_branch.py",
     "scripts/plan_board.py",
@@ -1644,7 +1652,17 @@ def upgrade_project(
     print(f"Applied {len(applied)} change(s). Done.")
 
 
-def main() -> None:
+def main(argv: list[str] | None = None) -> None:
+    """``anchor <verb> …`` runs the plan workflow; anything else scaffolds."""
+    import anchor_cli
+
+    argv = sys.argv[1:] if argv is None else argv
+    if anchor_cli.is_verb_invocation(argv):
+        raise SystemExit(anchor_cli.main(argv))
+    scaffold_main(argv)
+
+
+def scaffold_main(argv: list[str] | None = None) -> None:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("project_dir", nargs="?",
                     help="target project folder (default: current working directory)")
@@ -1682,7 +1700,7 @@ def main() -> None:
                          "(layout + content + new managed files); confirm or pass --yes")
     ap.add_argument("--update", action="store_true",
                     help="alias for --upgrade")
-    args = ap.parse_args()
+    args = ap.parse_args(argv)
 
     if args.list:
         print_platform_list()

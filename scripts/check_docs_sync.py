@@ -38,6 +38,7 @@ SYNC_MAP: dict[object, str] = {
     "anchor/ANCHOR.md": "docs/docs/doctrine.md",
     "anchor/model-fitness.md": "docs/docs/model-fitness.md",
     "anchor/capacity-routing.md": "docs/docs/capacity-routing.md",
+    "anchor/cli.md": "docs/docs/tooling/plan-verbs.md",
     "platforms/claude-code/CLAUDE.md": "docs/docs/platforms/claude-code.md",
     "platforms/grok-build/GROK.md": "docs/docs/platforms/grok-build.md",
     "platforms/nvidia-nim/NEMOTRON.md": "docs/docs/platforms/nvidia-nim.md",

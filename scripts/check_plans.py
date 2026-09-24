@@ -18,6 +18,8 @@ import re
 import sys
 from pathlib import Path
 
+import plan_store
+
 KNOWN_LANES = (
     "bugs",
     "features",
@@ -47,25 +49,20 @@ def check_plans(root: Path) -> list[str]:
     if not plans.is_dir():
         return [f"no .plans/ directory under {root}"]
 
-    for path in sorted(plans.rglob("*.md")):
-        rel = path.relative_to(plans)
-        if path.name == "README.md" and rel.parts == ("README.md",):
-            continue
-        if path.name == ".gitkeep":
-            continue
-        parts = rel.parts
-        if len(parts) < 2:
-            problems.append(
-                f"{rel}: not under a known lane "
-                f"(bugs|features|in-progress|ambiguous|blocked|drafts|completed)"
-            )
-            continue
-        lane = parts[0]
+    for name in plan_store.stray_entries(plans):
+        problems.append(
+            f"{name}: not under a known lane "
+            f"(bugs|features|in-progress|ambiguous|blocked|drafts|completed)"
+        )
+
+    for ref in plan_store.list_all(plans):
+        rel = ref.rel
+        lane = ref.lane
         if lane not in KNOWN_LANES:
             problems.append(f"{rel}: unknown lane '{lane}'")
             continue
 
-        text = path.read_text(encoding="utf-8")
+        text = ref.path.read_text(encoding="utf-8")
 
         if LANE_HEADER_RE.search(text) or LANE_BARE_RE.search(text):
             problems.append(

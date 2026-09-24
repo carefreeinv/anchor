@@ -53,6 +53,29 @@ Newest first.
 
 ### Added
 
+- **`anchor plans | work | review | draft` — the plan workflow from a terminal.**
+  `anchor work --list` / `anchor work [<slug>]` / `--heartbeat` / `--finish` /
+  `--return`, `anchor review [--list | <slug>]`, `anchor draft <slug>` /
+  `--promote <slug> --to features|bugs`, and `anchor plans [--board]` do the
+  deterministic parts (pick, claim, lane moves, the merge gate) by calling
+  `plan_select`, `plan_lease`, `work_once` and `merge_feature`, with no model on
+  any default path. Headless runs (`--non-interactive`, `ANCHOR_NONINTERACTIVE=1`,
+  or no TTY) never prompt, always print schema-v1 JSON, never merge and never
+  start a model; a step that needs an operator exits `3` naming the answer.
+  `anchor review` merges only after an in-terminal Approve, only by fast-forward
+  through `merge_feature.py`'s gate, onto `dev`/`develop`, never `main`.
+  `--delegate [ENDPOINT]` (interactive only) sends a critic pass or plan prose to
+  an `endpoints.yaml` endpoint via `anchor_client.py`. Existing
+  `anchor <project-dir> [flags]` scaffolding is unchanged; a project directory
+  named like a verb is `./work`. Contract: `anchor/cli.md`, docs
+  *Tooling → Plan workflow verbs*.
+
+- **`scripts/plan_store.py` — one module for plans on disk.** Every workflow
+  script (and the project-orchestrator MCP) now lists lanes, finds slugs, reads
+  and moves plans through it instead of globbing `.plans/` itself; callers see
+  lanes, slugs and `<lane>/<name>` only. Scaffolded with `--fleet` as
+  `.anchor/scripts/plan_store.py`.
+
 - **`/work --batch` is documented on the published skill page** —
   `docs/docs/skills/work.md` now covers the flag its Claude and Grok surfaces
   already shipped: what `scripts/batch_dispatch.py` selects, that it never
@@ -171,6 +194,19 @@ Newest first.
   `/local-models`. Shipped via `FLEET_FILES`.
 
 ### Fixed
+
+- **`bin/anchor` works when symlinked onto `PATH`** — the install
+  `/install-anchor` performs. It resolved `scripts/anchor.py` next to the
+  *link*, so a symlinked `anchor` failed with "can't open file"; it now follows
+  the link chain first.
+
+- **`pip install -e .` ships every module `anchor` imports.** `anchor --platform
+  aider` from a pip install failed on the missing `write_aider_env` /
+  `fit_device`; `pyproject.toml` now lists those and the plan-workflow modules
+  the verbs wrap (a test checks the list against the real import graph).
+
+- **`check_plans.py` no longer reports `.plans/.releases/*.md` as an "unknown
+  lane"** — dot-directories under `.plans/` are sidecars, not lanes.
 
 - **Aider + Ollama guidance no longer tells operators to type `/no_think`** —
   Ollama 0.34.0 and 0.34.2 ignored that suffix when measured, so a session

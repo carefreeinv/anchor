@@ -35,6 +35,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import lease_branch
+import plan_store
 
 DEFAULT_TTL_SECONDS = 86400  # 24h: long enough that a live agent never looks
 # orphaned; refreshed by renew() heartbeat. Only leases untouched past this are
@@ -43,6 +44,7 @@ IN_PROGRESS = "in-progress"
 READY_LANES = ("bugs", "features")
 READY_PREFIXES = ("bugs/", "features/")
 PARK_LANES = frozenset({"ambiguous", "blocked"})
+REVIEW_LANE = "review-needed"
 
 
 @dataclass(frozen=True)
@@ -286,7 +288,7 @@ def claim_and_move(
                 ttl_seconds=ttl_seconds,
                 origin_rel=existing.origin_rel,
             )
-            return lease, (plans_root / plan_rel).resolve()
+            return lease, _doc_path(plans_root, plan_rel)
         if existing:
             raise ClaimError(
                 f"in-progress plan owned by {existing.agent_id!r} — ignore unless you are that agent"
@@ -309,21 +311,19 @@ def claim_and_move(
             ttl_seconds=ttl_seconds,
             origin_rel=None,
         )
-        return lease, (plans_root / plan_rel).resolve()
+        return lease, _doc_path(plans_root, plan_rel)
 
     if not plan_rel.startswith(READY_PREFIXES):
         raise ClaimError(
             f"claim_and_move only accepts bugs/|features/ (or own in-progress/); got {plan_rel}"
         )
 
-    src = plans_root / plan_rel
-    if not src.is_file():
+    src = plan_store.get(plans_root, plan_rel)
+    if src is None:
         raise ClaimError(f"plan file missing: {plan_rel}")
 
-    dest_name = src.name
-    dest_rel = f"{IN_PROGRESS}/{dest_name}"
-    dest = plans_root / dest_rel
-    if dest.exists() and dest.resolve() != src.resolve():
+    dest_rel = f"{IN_PROGRESS}/{src.name}"
+    if plan_store.destination_taken(plans_root, plan_rel, IN_PROGRESS):
         other = active_lease(plans_root, dest_rel)
         if other and other.agent_id != agent_id and not other.expired:
             raise ClaimError(
@@ -348,16 +348,15 @@ def claim_and_move(
                          blocking=False)
         raise
 
-    dest.parent.mkdir(parents=True, exist_ok=True)
     try:
-        src.rename(dest)
-    except OSError as exc:
+        dest = plan_store.move(plans_root, plan_rel, IN_PROGRESS)
+    except plan_store.PlanMoveError as exc:
         _release_local(plans_root, plan_rel, force=True)
         if published:
             _branch_call(plans_root, plan_rel,
                          lambda root, slug: lease_branch.release(root, slug, agent_id),
                          blocking=False)
-        raise ClaimError(f"could not move {plan_rel} → {dest_rel}: {exc}") from exc
+        raise ClaimError(str(exc)) from exc
 
     # Move lease key from ready path → in-progress path
     _release_local(plans_root, plan_rel, force=True)
@@ -378,7 +377,7 @@ def claim_and_move(
             raise ClaimError(f"lease race on {dest_rel}")
         lp.unlink(missing_ok=True)
     _write_lease_force(lp, lease)
-    return lease, dest.resolve()
+    return lease, dest.path.resolve()
 
 
 def renew(
@@ -527,17 +526,11 @@ def claimed_rels(plans_root: Path) -> set[str]:
 
 def in_progress_owned_by(plans_root: Path, agent_id: str) -> list[str]:
     """Relative paths under in-progress/ owned by agent_id (active lease)."""
-    ip = plans_root / IN_PROGRESS
-    if not ip.is_dir():
-        return []
     owned: list[str] = []
-    for path in sorted(ip.glob("*.md")):
-        if path.name == "README.md":
-            continue
-        rel = f"{IN_PROGRESS}/{path.name}"
-        lease = active_lease(plans_root, rel)
+    for ref in plan_store.list_lane(plans_root, IN_PROGRESS):
+        lease = active_lease(plans_root, ref.rel)
         if lease and lease.agent_id == agent_id:
-            owned.append(rel)
+            owned.append(ref.rel)
     return owned
 
 
@@ -561,22 +554,18 @@ def _assert_owner_if_in_progress(
     return existing
 
 
+def _doc_path(plans_root: Path, plan_rel: str) -> Path:
+    ref = plan_store.get(plans_root, plan_rel)
+    return ref.path.resolve() if ref else (plans_root / plan_rel).resolve()
+
+
 def _move_file(plans_root: Path, plan_rel: str, dest_lane: str) -> tuple[str, Path]:
     """Rename plan into dest_lane; return (new_rel, absolute path)."""
-    plan_rel = plan_rel.replace("\\", "/")
-    src = plans_root / plan_rel
-    if not src.is_file():
-        raise ClaimError(f"plan file missing: {plan_rel}")
-    dest_rel = f"{dest_lane}/{src.name}"
-    dest = plans_root / dest_rel
-    if dest.exists() and dest.resolve() != src.resolve():
-        raise ClaimError(f"destination already exists: {dest_rel}")
-    dest.parent.mkdir(parents=True, exist_ok=True)
     try:
-        src.rename(dest)
-    except OSError as exc:
-        raise ClaimError(f"could not move {plan_rel} → {dest_rel}: {exc}") from exc
-    return dest_rel, dest.resolve()
+        ref = plan_store.move(plans_root, plan_rel.replace("\\", "/"), dest_lane)
+    except plan_store.PlanMoveError as exc:
+        raise ClaimError(str(exc)) from exc
+    return ref.rel, ref.path.resolve()
 
 
 def park(
@@ -653,6 +642,25 @@ def return_to_ready(
 
     release(plans_root, plan_rel, force=True)
     _dest_rel, dest_path = _move_file(plans_root, plan_rel, dest_lane)
+    return dest_path
+
+
+def finish_to_review(plans_root: Path, plan_rel: str, agent_id: str) -> Path:
+    """Move your own in-progress plan to ``review-needed/`` and drop the lease.
+
+    The default agent finish ("Done when holds"). Only the lease holder may do
+    it; ``review-needed/`` → ``completed/`` stays a human ``/review`` decision.
+    """
+    plans_root = plans_root.resolve()
+    plan_rel = plan_rel.replace("\\", "/")
+    if not plan_rel.startswith(f"{IN_PROGRESS}/"):
+        raise ClaimError(f"finish only from {IN_PROGRESS}/, got {plan_rel}")
+    lease = active_lease(plans_root, plan_rel)
+    if lease is None or lease.agent_id != agent_id:
+        who = f"held by {lease.agent_id!r}" if lease else "has no active lease"
+        raise ClaimError(f"{plan_rel} {who}; only its lease holder may finish it")
+    release(plans_root, plan_rel, force=True)
+    _dest_rel, dest_path = _move_file(plans_root, plan_rel, REVIEW_LANE)
     return dest_path
 
 

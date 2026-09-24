@@ -35,6 +35,7 @@ import sys
 import time
 from pathlib import Path
 
+import plan_store
 from anchor_client import Endpoint, Fleet, has_required_footer, load_prompt
 from fleet_metrics import (
     DEFAULT_FOOTER_MAX_LINES,
@@ -841,13 +842,7 @@ def main() -> None:
 
     task_slug = args.task_slug
     if task_slug is None and args.plan_file:
-        stem = Path(args.plan_file).name
-        if stem.endswith(".local.md"):
-            task_slug = stem[: -len(".local.md")]
-        elif stem.endswith(".md"):
-            task_slug = stem[:-3]
-        else:
-            task_slug = Path(args.plan_file).stem
+        task_slug = plan_store.slug_of_path(Path(args.plan_file))
 
     if args.plan_file:
         plan_path = Path(args.plan_file)

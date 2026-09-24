@@ -45,7 +45,9 @@ from dataclasses import dataclass, replace
 from enum import Enum
 from pathlib import Path
 
+import plan_store
 from plan_parse import GOAL_RE, has_goal_section, safe_read_text, strip_code_fences
+from plan_store import PlanRef
 
 READY_LANES = ("bugs", "features")
 IN_PROGRESS_LANE = "in-progress"
@@ -225,16 +227,11 @@ def normalize_fit_tier(tier: str) -> str:
 
 
 def plans_root_for(project_root: Path) -> Path:
-    return project_root / ".plans"
+    return plan_store.plans_root_for(project_root)
 
 
 def plan_slug(path: Path) -> str:
-    name = path.name
-    if name.endswith(".local.md"):
-        return name[: -len(".local.md")]
-    if name.endswith(".md"):
-        return name[:-3]
-    return path.stem
+    return plan_store.slug_of_path(path)
 
 
 def parse_value(text: str) -> str:
@@ -321,8 +318,8 @@ def parse_depends_on(text: str) -> list[str]:
         # drop path prefixes if someone wrote features/foo
         if "/" in s:
             s = s.rsplit("/", 1)[-1]
-        if s.endswith(".md"):
-            s = plan_slug(Path(s))
+        if plan_store.is_entry_name(s):
+            s = plan_store.slug_of_name(s)
         key = s.lower()
         if key not in seen:
             seen.add(key)
@@ -343,43 +340,14 @@ def parse_depends_on(text: str) -> list[str]:
 
 def find_slug_paths(plans_root: Path, slug: str) -> list[tuple[str, Path]]:
     """Return (lane, path) for every plan file whose slug matches."""
-    found: list[tuple[str, Path]] = []
-    if not plans_root.is_dir():
-        return found
-    needle = slug.lower()
-    for lane_dir in sorted(p for p in plans_root.iterdir() if p.is_dir()):
-        if lane_dir.name.startswith("."):
-            continue
-        for path in lane_dir.glob("*.md"):
-            if path.name == "README.md":
-                continue
-            if plan_slug(path).lower() == needle:
-                found.append((lane_dir.name, path))
-            # dated completion names: YYYY-MM-DD-slug.md
-            stem = path.name
-            if stem.endswith(".local.md"):
-                body = stem[: -len(".local.md")]
-            elif stem.endswith(".md"):
-                body = stem[:-3]
-            else:
-                body = path.stem
-            if re.match(r"^\d{4}-\d{2}-\d{2}-", body):
-                body_slug = re.sub(r"^\d{4}-\d{2}-\d{2}-", "", body)
-                if body_slug.lower() == needle:
-                    found.append((lane_dir.name, path))
-    return found
+    return [(ref.lane, ref.path) for ref in plan_store.find_slug(plans_root, slug)]
 
 
 def _git_completed_evidence(project_root: Path, slug: str) -> tuple[bool, str]:
     """True if git history shows the plan under .plans/completed/ (incl. deleted)."""
     if not project_root.is_dir():
         return False, "no project root for git check"
-    patterns = [
-        f".plans/completed/{slug}.md",
-        f".plans/completed/{slug}.local.md",
-        f".plans/completed/*-{slug}.md",
-        f".plans/completed/*-{slug}.local.md",
-    ]
+    patterns = list(plan_store.git_pathspecs("completed", slug))
     try:
         # Any commit that touched a completed path for this slug
         r = subprocess.run(
@@ -422,16 +390,16 @@ def dependency_status(
     deleted) and it is not open now. Unsatisfied if still in any open lane or
     never evidenced complete.
     """
-    paths = find_slug_paths(plans_root, dep_slug)
-    open_hits = [(lane, p) for lane, p in paths if lane in OPEN_LANES]
-    completed_hits = [(lane, p) for lane, p in paths if lane == "completed"]
+    refs = plan_store.find_slug(plans_root, dep_slug)
+    open_hits = [r for r in refs if r.lane in OPEN_LANES]
+    completed_hits = [r for r in refs if r.lane == "completed"]
 
     if open_hits:
-        locs = ", ".join(f"{lane}/{p.name}" for lane, p in open_hits)
+        locs = ", ".join(r.rel for r in open_hits)
         return False, f"still open: {locs}"
 
     if completed_hits:
-        locs = ", ".join(p.name for _, p in completed_hits)
+        locs = ", ".join(r.name for r in completed_hits)
         return True, f"in completed/: {locs}"
 
     if git_check:
@@ -466,31 +434,21 @@ def inventory_all_plan_summaries(plans_root: Path) -> list[dict[str, str]]:
 
     Used when evaluating whether a plan under discussion should Depend on others.
     """
-    if not plans_root.is_dir():
-        return []
     out: list[dict[str, str]] = []
-    for lane_dir in sorted(p for p in plans_root.iterdir() if p.is_dir()):
-        if lane_dir.name.startswith("."):
-            continue
-        for path in sorted(lane_dir.glob("*.md")):
-            if path.name == "README.md":
-                continue
-            raw_text, parse_error = safe_read_text(path)
-            if parse_error is not None:
-                continue
-            text = strip_code_fences(raw_text)
-            gm = GOAL_RE.search(text)
-            goal = " ".join((gm.group(1) if gm else "").split())[:240]
-            out.append(
-                {
-                    "slug": plan_slug(path),
-                    "lane": lane_dir.name,
-                    "rel": f"{lane_dir.name}/{path.name}",
-                    "title": parse_title(text, path.name),
-                    "goal": goal,
-                    "depends_on": ", ".join(parse_depends_on(text)) or "none",
-                }
-            )
+    for ref, raw_text in plan_store.scan(plans_root):
+        text = strip_code_fences(raw_text)
+        gm = GOAL_RE.search(text)
+        goal = " ".join((gm.group(1) if gm else "").split())[:240]
+        out.append(
+            {
+                "slug": ref.slug,
+                "lane": ref.lane,
+                "rel": ref.rel,
+                "title": parse_title(text, ref.name),
+                "goal": goal,
+                "depends_on": ", ".join(parse_depends_on(text)) or "none",
+            }
+        )
     return out
 
 
@@ -761,29 +719,28 @@ def classify_effort(current: str | None, preferred: str | None) -> EffortAdvice:
     return EffortAdvice(Effort.UNDERPOWERED, suggested, band, now)
 
 
-def _record_from_path(
-    path: Path,
-    lane: str,
+def _record_from_ref(
+    ref: PlanRef,
     worker: Worker,
     *,
+    plans_root: Path,
     owner: str | None = None,
-    plans_root: Path | None = None,
     git_check: bool = True,
 ) -> PlanRecord:
-    raw_text, parse_error = safe_read_text(path)
+    raw_text, parse_error = plan_store.read_text(ref)
     if parse_error is not None:
         # Corrupt/unreadable file: never crash the daemon loop over one bad plan.
         # Every field below falls back to a safe default; triage_plan's
         # parse_error check rejects this record before any other field matters.
         return PlanRecord(
-            path=path.resolve(),
-            rel=f"{lane}/{path.name}",
-            lane=lane,
-            slug=plan_slug(path),
+            path=ref.path.resolve(),
+            rel=ref.rel,
+            lane=ref.lane,
+            slug=ref.slug,
             value="medium",
             priority=DEFAULT_PRIORITY,
             preferred=None,
-            title=path.name,
+            title=ref.name,
             fit=Fit.UNKNOWN,
             owner=owner,
             parse_error=parse_error,
@@ -795,17 +752,16 @@ def _record_from_path(
     text = strip_code_fences(raw_text)
     preferred = parse_preferred(text)
     deps = tuple(parse_depends_on(text))
-    root = plans_root if plans_root is not None else path.parent.parent
-    met, unmet, notes = evaluate_dependencies(root, deps, git_check=git_check)
+    met, unmet, notes = evaluate_dependencies(plans_root, deps, git_check=git_check)
     return PlanRecord(
-        path=path.resolve(),
-        rel=f"{lane}/{path.name}",
-        lane=lane,
-        slug=plan_slug(path),
+        path=ref.path.resolve(),
+        rel=ref.rel,
+        lane=ref.lane,
+        slug=ref.slug,
         value=parse_value(text),
         priority=parse_priority(text),
         preferred=preferred,
-        title=parse_title(text, path.name),
+        title=parse_title(text, ref.name),
         fit=classify_fit(worker, preferred),
         owner=owner,
         depends_on=deps,
@@ -853,7 +809,7 @@ def plan_sort_key(r: PlanRecord, release_bias: dict[str, float] | None = None) -
         mtime = r.path.stat().st_mtime
     except OSError:
         mtime = 0.0
-    return (lane_i, pri_i, val_i, bias, mtime, r.path.name.lower())
+    return (lane_i, pri_i, val_i, bias, mtime, r.rel.rsplit("/", 1)[-1].lower())
 
 
 def _release_completion_map(plans_root: Path) -> dict[str, float]:
@@ -901,15 +857,10 @@ def inventory_ready(plans_root: Path, worker: Worker | None = None) -> list[Plan
         return []
 
     w = worker or Worker(name="unknown", tier="mid")
-    records: list[PlanRecord] = []
-    for lane in READY_LANES:
-        lane_dir = plans_root / lane
-        if not lane_dir.is_dir():
-            continue
-        for path in sorted(lane_dir.glob("*.md")):
-            if path.name == "README.md":
-                continue
-            records.append(_record_from_path(path, lane, w, plans_root=plans_root))
+    records = [
+        _record_from_ref(ref, w, plans_root=plans_root)
+        for ref in plan_store.list_lanes(plans_root, READY_LANES)
+    ]
 
     release_bias = _release_completion_map(plans_root)
     records.sort(key=lambda r: plan_sort_key(r, release_bias))
@@ -931,25 +882,15 @@ def inventory_in_progress(
     # Local import avoids circular import at module load for pure select tests
     from plan_lease import active_lease
 
-    ip = plans_root / IN_PROGRESS_LANE
-    if not ip.is_dir():
-        return []
     w = worker or Worker(name="unknown", tier="mid")
     records: list[PlanRecord] = []
-    for path in sorted(ip.glob("*.md")):
-        if path.name == "README.md":
-            continue
-        rel = f"{IN_PROGRESS_LANE}/{path.name}"
-        lease = active_lease(plans_root, rel)
+    for ref in plan_store.list_lane(plans_root, IN_PROGRESS_LANE):
+        lease = active_lease(plans_root, ref.rel)
         owner = lease.agent_id if lease else None
         if only_mine:
             if not agent_id or owner != agent_id:
                 continue
-        records.append(
-            _record_from_path(
-                path, IN_PROGRESS_LANE, w, owner=owner, plans_root=plans_root
-            )
-        )
+        records.append(_record_from_ref(ref, w, owner=owner, plans_root=plans_root))
     return records
 
 
@@ -1053,10 +994,16 @@ def resolve_target(
         resolved = assert_executable_path(p, plans_root)
         if not resolved.is_file():
             raise FileNotFoundError(f"plan not found: {path}")
-        try:
-            rel = resolved.relative_to(plans_root.resolve())
-            lane = rel.parts[0] if rel.parts else ""
-        except ValueError:
+        ref = plan_store.ref_for_path(plans_root, resolved)
+        if ref is None:
+            try:
+                inside = resolved.relative_to(plans_root.resolve())
+            except ValueError:
+                pass
+            else:
+                raise ValueError(
+                    f"plan not under ready lane bugs|features (or own in-progress/): {inside}"
+                )
             assert_executable_path(resolved)
             text = resolved.read_text(encoding="utf-8")
             return PlanRecord(
@@ -1071,7 +1018,8 @@ def resolve_target(
                 assignee=parse_assignee(text),
                 agent_assignable=is_agent_assignable(text),
             )
-        rel_s = str(rel).replace("\\", "/")
+        rel_s = ref.rel
+        lane = ref.lane
         if lane == IN_PROGRESS_LANE:
             lease = active_lease(plans_root, rel_s)
             owner = lease.agent_id if lease else None
@@ -1087,43 +1035,36 @@ def resolve_target(
                     f"in-progress plan {rel_s} has no active lease for "
                     f"{agent_id!r}; recover explicitly instead of resuming"
                 )
-            return _record_from_path(
-                resolved, lane, w, owner=owner, plans_root=plans_root
-            )
+            return _record_from_ref(ref, w, owner=owner, plans_root=plans_root)
         if lane not in READY_LANES:
             raise ValueError(
-                f"plan not under ready lane bugs|features (or own in-progress/): {rel}"
+                f"plan not under ready lane bugs|features (or own in-progress/): {rel_s}"
             )
-        return _record_from_path(resolved, lane, w, plans_root=plans_root)
+        return _record_from_ref(ref, w, plans_root=plans_root)
 
     if slug is not None:
-        matches: list[Path] = []
+        matches: list[PlanRef] = []
         # Prefer own in-progress match for resume
         if agent_id:
-            for name in (f"{slug}.md", f"{slug}.local.md"):
-                cand = plans_root / IN_PROGRESS_LANE / name
-                if cand.is_file():
-                    lease = active_lease(plans_root, f"{IN_PROGRESS_LANE}/{name}")
-                    if lease and lease.agent_id == agent_id:
-                        matches.append(cand)
-        for lane in READY_LANES:
-            for name in (f"{slug}.md", f"{slug}.local.md"):
-                cand = plans_root / lane / name
-                if cand.is_file():
+            for cand in plan_store.lookup(plans_root, IN_PROGRESS_LANE, slug):
+                lease = active_lease(plans_root, cand.rel)
+                if lease and lease.agent_id == agent_id:
                     matches.append(cand)
+        for lane in READY_LANES:
+            matches.extend(plan_store.lookup(plans_root, lane, slug))
         if not matches:
             return None
         if len(matches) > 1:
             # Prefer in-progress own over ready if both somehow listed
-            ip = [m for m in matches if m.parent.name == IN_PROGRESS_LANE]
+            ip = [m for m in matches if m.lane == IN_PROGRESS_LANE]
             if len(ip) == 1 and agent_id:
-                return resolve_target(plans_root, path=ip[0], agent_id=agent_id)
+                return resolve_target(plans_root, path=ip[0].path, agent_id=agent_id)
             raise ValueError(
                 "ambiguous slug "
                 f"{slug!r}: "
-                + ", ".join(str(m.relative_to(plans_root)) for m in matches)
+                + ", ".join(m.rel for m in matches)
             )
-        return resolve_target(plans_root, path=matches[0], agent_id=agent_id)
+        return resolve_target(plans_root, path=matches[0].path, agent_id=agent_id)
 
     return None
 
