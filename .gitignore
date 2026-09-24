@@ -37,3 +37,7 @@ var/
 .aider.input.history
 .aider.llm.history
 .aider.tags.cache.v*/
+
+# This repo keeps its release-group files private (they describe unshipped work).
+# Scaffolded projects still track .plans/.releases/ per the shipped README.
+.plans/.releases/
