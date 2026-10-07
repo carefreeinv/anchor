@@ -84,9 +84,10 @@ class Lease:
 _warned: set[str] = set()
 
 
-def _warn_once(msg: str) -> None:
-    if msg not in _warned:
-        _warned.add(msg)
+def _warn_once(key: str, msg: str) -> None:
+    """Warn once per process per *reason* (``key``), not per distinct message text."""
+    if key not in _warned:
+        _warned.add(key)
         print(f"plan_lease: warning: {msg}", file=sys.stderr)
 
 
@@ -98,9 +99,11 @@ def _branch_call(plans_root: Path, plan_rel: str | None, fn, *, blocking: bool =
     """Run ``fn(project_root, slug)`` against the leases branch.
 
     Returns ``(ran, result)``. Skips private (``*.local``) plans and a disabled
-    layer. ``LeaseConflict`` becomes :class:`ClaimError`. Unavailability degrades
-    to the local store with a warning, or raises under strict mode when
-    ``blocking`` (release never blocks).
+    layer. When ``blocking`` (claims), a conflict or error becomes
+    :class:`ClaimError` and unavailability degrades to the local store with a
+    warning (strict mode raises instead). When not ``blocking`` (renew, release,
+    reads) nothing ever raises: every failure is a one-line warning and the local
+    result stands.
     """
     if not _branch_enabled():
         return False, None
@@ -111,15 +114,19 @@ def _branch_call(plans_root: Path, plan_rel: str | None, fn, *, blocking: bool =
     try:
         return True, fn(root, slug)
     except lease_branch.LeaseConflict as exc:
-        raise ClaimError(str(exc)) from exc
+        if blocking:
+            raise ClaimError(str(exc)) from exc
+        _warn_once("conflict", f"shared lease not changed ({exc})")
     except lease_branch.LeaseBranchUnavailable as exc:
         if lease_branch.strict_mode() and blocking:
             raise ClaimError(f"strict mode: shared lease unavailable ({exc})") from exc
         if "not a git repository" not in str(exc):
-            _warn_once(f"shared leases unavailable, using local lease only ({exc})")
-        return False, None
+            _warn_once("unavailable", f"shared leases unavailable, using local lease only ({exc})")
     except lease_branch.LeaseBranchError as exc:
-        raise ClaimError(f"shared lease error: {exc}") from exc
+        if blocking:
+            raise ClaimError(f"shared lease error: {exc}") from exc
+        _warn_once("error", f"shared lease error, ignored ({exc})")
+    return False, None
 
 
 def _remote_claim(plans_root: Path, plan_rel: str, agent_id: str, ttl: int, recover: bool = False) -> bool:
@@ -329,7 +336,7 @@ def claim_and_move(
     except ClaimError:
         if published:
             _branch_call(plans_root, plan_rel,
-                         lambda root, slug: lease_branch.release(root, slug, agent_id, force=True),
+                         lambda root, slug: lease_branch.release(root, slug, agent_id),
                          blocking=False)
         raise
 
@@ -340,7 +347,7 @@ def claim_and_move(
         _release_local(plans_root, plan_rel, force=True)
         if published:
             _branch_call(plans_root, plan_rel,
-                         lambda root, slug: lease_branch.release(root, slug, agent_id, force=True),
+                         lambda root, slug: lease_branch.release(root, slug, agent_id),
                          blocking=False)
         raise ClaimError(f"could not move {plan_rel} → {dest_rel}: {exc}") from exc
 
@@ -449,13 +456,16 @@ def release(
 ) -> bool:
     """Drop a lease locally and on the shared branch. True if a local file was removed.
 
-    Does not move plan files. A shared-branch failure never blocks the release.
+    Does not move plan files. ``force`` applies to the local store only: the
+    shared lease is released only when this host (and agent, if given) owns it,
+    so a forced local release can never delete another machine's live lease. A
+    shared-branch failure never blocks or raises.
     """
     plan_rel = plan_rel.replace("\\", "/")
     removed = _release_local(plans_root, plan_rel, agent_id=agent_id, force=force)
     _branch_call(
         plans_root, plan_rel,
-        lambda root, slug: lease_branch.release(root, slug, agent_id, force=force or agent_id is None),
+        lambda root, slug: lease_branch.release(root, slug, agent_id),
         blocking=False,
     )
     return removed

@@ -71,8 +71,12 @@ lists live leases after a fetch. With no remote or an unreachable one, the local
 lease still works with a one-line warning (`ANCHOR_LEASE_STRICT=1` refuses
 instead). `*.local.md` plans are not published unless
 `ANCHOR_LEASE_PUBLISH_LOCAL=1`; `ANCHOR_LEASE_BRANCH=0` turns the layer off.
-Heartbeats push at most every 2h; treat an expired shared lease as reclaimable only
-after a 5 min clock-skew slack and an explicit recover.
+Ownership is agent id **plus host** (`ANCHOR_LEASE_HOST` overrides the hostname), so
+same-named agents on different machines never share a lease, and a forced local
+release never deletes another host's live lease. Heartbeats push at most every
+`min(2h, ttl/3)`; treat an expired shared lease as reclaimable only after a 5 min
+clock-skew slack and an explicit recover. A remote `leases` branch that is not an
+isolated orphan is never adopted — claims fall back to local with a warning.
 
 Agents must **never**:
 

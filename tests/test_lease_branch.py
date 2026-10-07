@@ -27,6 +27,7 @@ def _clean_env(monkeypatch):
     for var in (
         "ANCHOR_LEASE_REMOTE", "ANCHOR_LEASE_STRICT", "ANCHOR_LEASE_PUBLISH_LOCAL",
         "ANCHOR_LEASE_SKEW_SECONDS", "ANCHOR_LEASE_HEARTBEAT_SECONDS",
+        "ANCHOR_LEASE_HOST", "ANCHOR_LEASE_BRANCH", "ANCHOR_LEASE_NET_TIMEOUT",
     ):
         monkeypatch.delenv(var, raising=False)
 
@@ -92,8 +93,11 @@ def test_simultaneous_claim_exactly_one_winner(clones):
           threading.Thread(target=go, args=(b, "agent-b"))]
     [t.start() for t in ts]
     [t.join() for t in ts]
+    assert set(results) == {"agent-a", "agent-b"}  # neither thread crashed
     winners = [k for k, v in results.items() if isinstance(v, lb.BranchLease)]
+    losers = [v for v in results.values() if not isinstance(v, lb.BranchLease)]
     assert len(winners) == 1
+    assert len(losers) == 1 and isinstance(losers[0], lb.LeaseConflict)
     assert lb.holder_of(a, "race").agent_id == winners[0]
 
 
@@ -337,3 +341,195 @@ def test_next_skips_plan_leased_on_another_clone(clones):
         skip_rels=skip,
     )
     assert rec is not None and rec.slug == "second"
+
+
+# --- review round 1 regressions --------------------------------------------
+
+
+def _as_host(monkeypatch, name):
+    monkeypatch.setenv("ANCHOR_LEASE_HOST", name)
+
+
+def test_same_agent_id_on_another_host_does_not_steal_or_delete(clones, monkeypatch):
+    a, b, _ = clones
+    _as_host(monkeypatch, "host-a")
+    lb.claim(a, "alpha", "mcp-agent")
+    _as_host(monkeypatch, "host-b")
+    with pytest.raises(lb.LeaseConflict, match="host-a"):
+        lb.claim(b, "alpha", "mcp-agent")
+    with pytest.raises(lb.LeaseConflict):
+        lb.renew(b, "alpha", "mcp-agent", force=True)
+    with pytest.raises(lb.LeaseConflict):
+        lb.release(b, "alpha", "mcp-agent")
+    with pytest.raises(lb.LeaseConflict):
+        lb.release(b, "alpha")  # no agent id: host must still match
+    _as_host(monkeypatch, "host-a")
+    assert lb.holder_of(a, "alpha").host == "host-a"
+    assert lb.release(a, "alpha", "mcp-agent") is True
+
+
+def test_same_agent_other_host_expired_needs_recover(clones, monkeypatch):
+    a, b, _ = clones
+    monkeypatch.setenv("ANCHOR_LEASE_SKEW_SECONDS", "0")
+    _as_host(monkeypatch, "host-a")
+    lb.claim(a, "old", "mcp-agent", ttl_seconds=1)
+    time.sleep(1.2)
+    _as_host(monkeypatch, "host-b")
+    with pytest.raises(lb.LeaseConflict, match="recover"):
+        lb.claim(b, "old", "mcp-agent")
+    assert lb.claim(b, "old", "mcp-agent", recover=True).host == "host-b"
+
+
+def test_git_runs_with_c_locale(clones, monkeypatch):
+    a, _, _ = clones
+    seen = {}
+    real = lb.subprocess.run
+
+    def spy(*args, **kwargs):
+        seen["env"] = kwargs.get("env")
+        return real(*args, **kwargs)
+
+    monkeypatch.setenv("LC_ALL", "de_DE.UTF-8")
+    monkeypatch.setattr(lb.subprocess, "run", spy)
+    lb._git(a, "status")
+    assert seen["env"]["LC_ALL"] == "C" and seen["env"]["LANGUAGE"] == "C"
+
+
+def test_non_orphan_remote_leases_branch_is_not_adopted(clones, tmp_path):
+    a, b, bare = clones
+    _run(a, "push", "-q", "origin", "HEAD:refs/heads/leases")  # shares history with HEAD
+    before = _run(bare, "rev-parse", "refs/heads/leases")
+    with pytest.raises(lb.LeaseBranchUnavailable, match="not a lease branch"):
+        lb.claim(b, "alpha", "agent-b")
+    assert _run(bare, "rev-parse", "refs/heads/leases") == before
+
+
+def test_clean_tree_but_shared_history_is_not_an_orphan(clones):
+    a, b, bare = clones
+    head = _run(a, "rev-parse", "HEAD")
+    tree = lb._build_tree(a, None, {"leases/x.json": b"{}"})
+    sha = lb._commit(a, tree, head, "tree is clean, history is not")
+    _run(a, "push", "-q", "origin", f"{sha}:refs/heads/leases")
+    with pytest.raises(lb.LeaseBranchUnavailable, match="not an orphan"):
+        lb.claim(b, "alpha", "agent-b")
+    assert _run(bare, "rev-parse", "refs/heads/leases") == sha
+
+
+def test_non_isolated_orphan_remote_branch_is_not_adopted(clones):
+    a, _, bare = clones
+    tree = lb._build_tree(a, None, {"README.md": b"x"})
+    sha = lb._commit(a, tree, None, "foreign orphan")
+    _run(a, "push", "-q", "origin", f"{sha}:refs/heads/leases")
+    with pytest.raises(lb.LeaseBranchUnavailable, match="not a lease branch"):
+        lb.claim(a, "alpha", "agent-a")
+    assert _run(bare, "rev-parse", "refs/heads/leases") == sha
+
+
+def test_foreign_remote_branch_degrades_claim_and_move_to_local(clones, capsys):
+    a, _, bare = clones
+    _run(a, "push", "-q", "origin", "HEAD:refs/heads/leases")
+    plan_lease._warned.clear()
+    pa = _plan(a, "features/fb.md")
+    lease, dest = plan_lease.claim_and_move(pa, "features/fb.md", "agent-a")
+    assert dest.is_file() and lease.agent_id == "agent-a"
+    assert "using local lease only" in capsys.readouterr().err
+
+
+def test_unrelated_local_leases_branch_is_left_alone(clones):
+    a, b, _ = clones
+    _run(a, "branch", "leases", "HEAD")  # a user's own, unrelated branch
+    mine = _run(a, "rev-parse", "refs/heads/leases")
+    lb.claim(a, "alpha", "agent-a")
+    assert _run(a, "rev-parse", "refs/heads/leases") == mine
+    assert lb.holder_of(b, "alpha") is not None
+
+
+def test_local_leases_branch_follows_ours(clones):
+    a, _, bare = clones
+    lb.claim(a, "alpha", "agent-a")
+    first = _run(a, "rev-parse", "refs/heads/leases")
+    lb.claim(a, "beta", "agent-a")
+    assert _run(a, "rev-parse", "refs/heads/leases") == _run(bare, "rev-parse", "refs/heads/leases")
+    assert _run(a, "rev-parse", "refs/heads/leases") != first
+
+
+def test_forced_local_release_never_deletes_foreign_shared_lease(clones, monkeypatch):
+    a, b, _ = clones
+    pa = _plan(a, "features/fx.md")
+    pb = _plan(b, "features/fx.md")
+    _as_host(monkeypatch, "host-a")
+    plan_lease.claim_and_move(pa, "features/fx.md", "mcp-agent")
+    _as_host(monkeypatch, "host-b")
+    (pb / ".leases").mkdir(exist_ok=True)
+    plan_lease.release(pb, "in-progress/fx.md", agent_id="mcp-agent", force=True)
+    plan_lease.release(pb, "features/fx.md", force=True)
+    assert lb.holder_of(b, "fx").host == "host-a"
+
+
+def test_non_blocking_calls_warn_instead_of_raising(clones, monkeypatch, capsys):
+    a, b, _ = clones
+    pa = _plan(a, "features/nb.md")
+    pb = _plan(b, "features/nb.md")
+    _as_host(monkeypatch, "host-a")
+    plan_lease.claim_and_move(pa, "features/nb.md", "agent-a")
+    _as_host(monkeypatch, "host-b")
+    plan_lease.claim(pb, "in-progress/nb.md", "agent-b")  # local-only lease
+    plan_lease._warned.clear()
+    plan_lease.renew(pb, "in-progress/nb.md", "agent-b")  # shared holder differs: warn, no raise
+    plan_lease.release(pb, "in-progress/nb.md", agent_id="agent-b")
+    assert "shared lease not changed" in capsys.readouterr().err
+    assert lb.holder_of(a, "nb").agent_id == "agent-a"
+
+    def boom(root):
+        raise lb.LeaseBranchError("git rev-parse failed")
+
+    monkeypatch.setattr(lb, "list_leases", boom)
+    assert plan_lease.claimed_rels(pb) == set()
+    assert plan_lease.owner_of(pb, "features/zzz.md") is None
+
+
+def test_warn_once_dedupes_per_reason(clones, tmp_path, capsys):
+    a, _, _ = clones
+    _run(a, "remote", "set-url", "origin", str(tmp_path / "gone.git"))
+    plan_lease._warned.clear()
+    plan_lease.claimed_rels(_plan(a, "features/w1.md"))
+    plan_lease.claimed_rels(_plan(a, "features/w2.md"))
+    plan_lease.owner_of(_plan(a, "features/w3.md"), "features/w3.md")
+    assert capsys.readouterr().err.count("using local lease only") == 1
+
+
+def test_heartbeat_interval_capped_by_ttl(clones):
+    a, _, bare = clones
+    lb.claim(a, "short", "agent-a", ttl_seconds=3)
+    before = _run(bare, "rev-parse", "refs/heads/leases")
+    lb.renew(a, "short", "agent-a", ttl_seconds=3)  # inside ttl/3 = 1s: throttled
+    assert _run(bare, "rev-parse", "refs/heads/leases") == before
+    time.sleep(1.2)
+    lb.renew(a, "short", "agent-a", ttl_seconds=3)  # past ttl/3: pushes despite the 2h default
+    assert _run(bare, "rev-parse", "refs/heads/leases") != before
+
+
+def test_network_timeout_is_unavailable(clones, monkeypatch):
+    a, _, _ = clones
+
+    def hang(*args, **kwargs):
+        raise lb.subprocess.TimeoutExpired(cmd="git fetch", timeout=1)
+
+    monkeypatch.setattr(lb.subprocess, "run", hang)
+    with pytest.raises(lb.LeaseBranchUnavailable, match="timed out"):
+        lb.fetch(a)
+
+
+def test_payload_has_no_branch_name(clones):
+    a, _, bare = clones
+    _run(a, "checkout", "-q", "-b", "feature/secret.local")
+    lb.claim(a, "alpha", "agent-a")
+    blob = _run(bare, "show", "refs/heads/leases:leases/alpha.json")
+    assert "branch" not in json.loads(blob) and "secret" not in blob
+
+
+def test_one_round_trip_fetch_and_first_write_bootstraps(clones):
+    a, b, bare = clones
+    assert lb.fetch(a) is None  # no branch yet: absent, not an error
+    lb.claim(a, "alpha", "agent-a")  # first writer creates the orphan branch
+    assert _run(bare, "rev-list", "--count", "refs/heads/leases") == "2"  # init + claim

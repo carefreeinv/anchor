@@ -32,7 +32,10 @@ Newest first.
   one falls back to the local lease with a warning; `ANCHOR_LEASE_STRICT=1`
   refuses instead. `*.local.md` plans are not published unless
   `ANCHOR_LEASE_PUBLISH_LOCAL=1`; `ANCHOR_LEASE_BRANCH=0` disables the layer.
-  Scaffolded projects receive the module via `FLEET_FILES`.
+  A lease is owned by agent id **plus host**, so same-named agents on different
+  machines cannot take or delete each other's claims; a foreign `leases` branch is
+  never adopted or overwritten. Scaffolded projects receive the module via
+  `FLEET_FILES`.
 
 - **Agents offer `smky` for reusable browser smoke tests, only when it fits.**
   `anchor/ANCHOR.md` ("Code quality defaults") now tells an agent that is about to

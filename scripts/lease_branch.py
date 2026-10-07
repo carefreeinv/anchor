@@ -13,8 +13,14 @@ Protocol
   and ``/release`` never touch it.
 * **Key** is the plan *slug* (file basename without ``.md``), not its lane path,
   because a plan moves ``bugs/`` -> ``in-progress/`` -> ``review-needed/``.
-* **Payload**: ``slug, agent_id, host, branch, claimed_at, expires_at,
-  heartbeat_at``. No secrets, no plan bodies.
+* **Payload**: ``slug, agent_id, host, claimed_at, expires_at, heartbeat_at``.
+  No secrets, no plan bodies, and no branch names (a branch name can itself leak
+  a private slug).
+* **Ownership is (agent_id, host).** Default agent ids (``mcp-agent``,
+  ``work-once-$USER``) repeat across machines, so an equal agent id alone never
+  proves a lease is yours. Only the same agent on the same host may refresh,
+  renew or release; the host is ``ANCHOR_LEASE_HOST`` or the machine hostname.
+  ``force`` never lets a caller delete another host's live lease.
 * **No checkout.** Writes use git plumbing (temporary index + ``commit-tree``) and
   push the new commit SHA to ``refs/heads/leases``. The user's HEAD, index and
   working tree are never touched, so every agent worktree of a clone can use it.
@@ -23,15 +29,16 @@ Protocol
   only. A non-fast-forward rejection means someone else moved the branch:
   re-fetch, re-evaluate, retry a bounded number of times with jitter. Never
   force-push (``--compact`` is the lone, operator-invoked exception and uses
-  ``--force-with-lease``).
+  ``--force-with-lease``). Git runs with ``LC_ALL=C`` so rejection is recognised
+  on any locale.
 * **Expiry**: a lease is expired only after ``expires_at + skew`` (default 5
   min) to tolerate clock skew; assume NTP. A live foreign lease refuses a claim.
-  An *expired* foreign lease is **not** silently reclaimed: it needs
-  ``recover=True`` (explicit crashed-agent takeover), same doctrine as the local
-  store.
-* **Heartbeat** (:func:`renew`) pushes only when ``heartbeat_interval`` (default
-  2h) has passed since the lease's last push, so history does not flood; the TTL
-  stays 24h.
+  An *expired* lease owned by someone else (another agent, or the same agent id
+  on another host) is **not** silently reclaimed: it needs ``recover=True``
+  (explicit crashed-agent takeover), same doctrine as the local store.
+* **Heartbeat** (:func:`renew`) pushes only when ``min(heartbeat interval, ttl/3)``
+  (interval default 2h) has passed since the lease's last push, so history does
+  not flood and a short TTL is never outrun; the default TTL stays 24h.
 * **History growth**: every claim/renew/release is a commit. Release deletes
   the file; heartbeats are throttled; ``--compact`` re-roots the orphan branch
   into a single commit.
@@ -40,13 +47,17 @@ Protocol
 * **Isolation guard**: before every push the new tip is verified to contain only
   ``leases/*.json`` (:func:`assert_isolated`); also runnable via
   ``--check-isolation``.
+* **Foreign branch**: a remote ``leases`` branch that is not isolated and orphan is
+  never adopted or overwritten; it counts as unavailable (degrade or strict-refuse).
+  A pre-existing *local* ``leases`` branch that is not ours is left alone.
 * **Degradation**: no repo / no remote / unreachable remote raises
   :class:`LeaseBranchUnavailable`; callers fall back to the local store with a
   one-line warning, or refuse when ``ANCHOR_LEASE_STRICT=1`` (strict).
 
 Environment: ``ANCHOR_LEASE_REMOTE`` (default ``origin``), ``ANCHOR_LEASE_STRICT``,
 ``ANCHOR_LEASE_PUBLISH_LOCAL``, ``ANCHOR_LEASE_SKEW_SECONDS``,
-``ANCHOR_LEASE_HEARTBEAT_SECONDS``.
+``ANCHOR_LEASE_HEARTBEAT_SECONDS``, ``ANCHOR_LEASE_HOST``,
+``ANCHOR_LEASE_NET_TIMEOUT`` (seconds per network git call, default 30).
 """
 from __future__ import annotations
 
@@ -68,6 +79,7 @@ LEASE_DIR = "leases"
 DEFAULT_TTL_SECONDS = 86400
 DEFAULT_SKEW_SECONDS = 300
 DEFAULT_HEARTBEAT_SECONDS = 7200
+DEFAULT_NET_TIMEOUT_SECONDS = 30
 MAX_PUSH_ATTEMPTS = 6
 _SLUG_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
 _REJECTED_MARKERS = ("rejected", "non-fast-forward", "fetch first", "stale info")
@@ -116,6 +128,14 @@ def heartbeat_seconds() -> int:
     return _env_int("ANCHOR_LEASE_HEARTBEAT_SECONDS", DEFAULT_HEARTBEAT_SECONDS)
 
 
+def net_timeout_seconds() -> int:
+    return max(1, _env_int("ANCHOR_LEASE_NET_TIMEOUT", DEFAULT_NET_TIMEOUT_SECONDS))
+
+
+def host_id() -> str:
+    return os.environ.get("ANCHOR_LEASE_HOST", "").strip() or socket.gethostname()
+
+
 def slug_of(plan_rel: str) -> str:
     """``features/foo.local.md`` -> ``foo.local``."""
     name = plan_rel.replace("\\", "/").rsplit("/", 1)[-1]
@@ -135,7 +155,6 @@ class BranchLease:
     slug: str
     agent_id: str
     host: str
-    branch: str
     claimed_at: float
     expires_at: float
     heartbeat_at: float
@@ -143,12 +162,15 @@ class BranchLease:
     def expired(self, now: float | None = None) -> bool:
         return (now if now is not None else time.time()) >= self.expires_at + skew_seconds()
 
+    def owned_by(self, agent_id: str | None) -> bool:
+        """Same host, and the same agent (any agent when ``agent_id`` is None)."""
+        return self.host == host_id() and (agent_id is None or self.agent_id == agent_id)
+
     def to_dict(self) -> dict:
         return {
             "slug": self.slug,
             "agent_id": self.agent_id,
             "host": self.host,
-            "branch": self.branch,
             "claimed_at": self.claimed_at,
             "expires_at": self.expires_at,
             "heartbeat_at": self.heartbeat_at,
@@ -160,7 +182,6 @@ class BranchLease:
             slug=str(data["slug"]),
             agent_id=str(data["agent_id"]),
             host=str(data.get("host", "")),
-            branch=str(data.get("branch", "")),
             claimed_at=float(data["claimed_at"]),
             expires_at=float(data["expires_at"]),
             heartbeat_at=float(data.get("heartbeat_at", data["claimed_at"])),
@@ -175,15 +196,25 @@ def _git(
     env: dict | None = None,
     stdin: bytes | None = None,
     check: bool = True,
+    network: bool = False,
 ) -> subprocess.CompletedProcess:
     full_env = {**os.environ, **(env or {})}
     full_env.setdefault("GIT_TERMINAL_PROMPT", "0")
-    proc = subprocess.run(
-        ["git", "-C", str(root), *args],
-        input=stdin,
-        capture_output=True,
-        env=full_env,
-    )
+    # Stable, English git messages: push rejection is recognised from stderr.
+    full_env["LC_ALL"] = "C"
+    full_env["LANGUAGE"] = "C"
+    try:
+        proc = subprocess.run(
+            ["git", "-C", str(root), *args],
+            input=stdin,
+            capture_output=True,
+            env=full_env,
+            timeout=net_timeout_seconds() if network else None,
+        )
+    except subprocess.TimeoutExpired as exc:
+        raise LeaseBranchUnavailable(
+            f"git {args[0]} timed out after {net_timeout_seconds()}s"
+        ) from exc
     if check and proc.returncode != 0:
         raise LeaseBranchError(
             f"git {' '.join(args)} failed: {proc.stderr.decode(errors='replace').strip()}"
@@ -215,26 +246,47 @@ def _require_remote(root: Path) -> None:
         raise LeaseBranchUnavailable(f"no git remote {remote_name()!r}")
 
 
-def fetch(root: Path) -> str | None:
-    """Fetch the leases branch; return the remote tip SHA, or None if absent."""
-    _require_remote(root)
-    probe = _git(root, "ls-remote", "--heads", remote_name(), BRANCH, check=False)
-    if probe.returncode != 0:
+def _validate_remote(root: Path, tip: str) -> None:
+    """Refuse to treat a foreign ``leases`` branch as ours (never adopt, never overwrite)."""
+    try:
+        assert_isolated(root, tip)
+    except IsolationError as exc:
         raise LeaseBranchUnavailable(
-            f"cannot reach remote {remote_name()!r}: "
-            f"{probe.stderr.decode(errors='replace').strip()}"
+            f"remote {remote_name()!r} has a {BRANCH!r} branch that is not a lease branch ({exc})"
+        ) from exc
+    if _git(root, "merge-base", tip, "HEAD", check=False).returncode == 0:
+        raise LeaseBranchUnavailable(
+            f"remote {remote_name()!r} {BRANCH!r} branch shares history with HEAD; not an orphan lease branch"
         )
-    if not _out(probe):
-        return None
+
+
+def fetch(root: Path, *, validate: bool = True) -> str | None:
+    """Fetch the leases branch (one round trip); return the remote tip SHA, or None if absent."""
+    _require_remote(root)
     got = _git(
         root, "fetch", "--quiet", remote_name(),
-        f"+refs/heads/{BRANCH}:{_remote_ref()}", check=False,
+        f"+refs/heads/{BRANCH}:{_remote_ref()}", check=False, network=True,
     )
     if got.returncode != 0:
-        raise LeaseBranchUnavailable(
-            f"fetch failed: {got.stderr.decode(errors='replace').strip()}"
-        )
-    return _out(_git(root, "rev-parse", _remote_ref()))
+        err = got.stderr.decode(errors="replace").strip()
+        if "couldn't find remote ref" in err.lower():
+            return None
+        raise LeaseBranchUnavailable(f"cannot fetch from remote {remote_name()!r}: {err}")
+    tip = _out(_git(root, "rev-parse", _remote_ref()))
+    if validate:
+        _validate_remote(root, tip)
+    return tip
+
+
+def _sync_local_branch(root: Path, sha: str, *, replaces: str | None = None) -> None:
+    """Keep a local ``leases`` branch for ``git log leases`` — but only ever move one that is ours."""
+    ref = f"refs/heads/{BRANCH}"
+    cur = _out(_git(root, "rev-parse", "-q", "--verify", ref, check=False))
+    if cur == sha:
+        return
+    if (not cur or cur == replaces
+            or _git(root, "merge-base", "--is-ancestor", cur, sha, check=False).returncode == 0):
+        _git(root, "update-ref", ref, sha)
 
 
 def _empty_tree(root: Path) -> str:
@@ -285,10 +337,10 @@ def _push(root: Path, sha: str, *, force_with_lease: str | None = None) -> bool:
     if force_with_lease:
         args.append(f"--force-with-lease=refs/heads/{BRANCH}:{force_with_lease}")
     args += [remote_name(), f"{sha}:refs/heads/{BRANCH}"]
-    proc = _git(root, *args, check=False)
+    proc = _git(root, *args, check=False, network=True)
     if proc.returncode == 0:
-        _git(root, "update-ref", f"refs/heads/{BRANCH}", sha)
         _git(root, "update-ref", _remote_ref(), sha)
+        _sync_local_branch(root, sha, replaces=force_with_lease)
         return True
     err = proc.stderr.decode(errors="replace").lower()
     if any(m in err for m in _REJECTED_MARKERS):
@@ -302,7 +354,7 @@ def bootstrap(root: Path) -> str:
     for _ in range(MAX_PUSH_ATTEMPTS):
         tip = fetch(root)
         if tip:
-            _git(root, "update-ref", f"refs/heads/{BRANCH}", tip)
+            _sync_local_branch(root, tip)
             return tip
         root_commit = _commit(root, _empty_tree(root), None, "leases: init orphan branch")
         if _push(root, root_commit):
@@ -365,21 +417,23 @@ def _blob(lease: BranchLease) -> bytes:
     return (json.dumps(lease.to_dict(), indent=2) + "\n").encode()
 
 
-def _local_branch(root: Path) -> str:
-    return _out(_git(root, "rev-parse", "--abbrev-ref", "HEAD", check=False))
-
-
 def _mutate(root: Path, slug: str, decide) -> BranchLease | None:
-    """CAS loop. ``decide(existing_or_None)`` -> (lease_or_None, message); None deletes."""
+    """CAS loop. ``decide(existing_or_None)`` -> (lease_or_None, message).
+
+    A returned lease replaces the file, ``None`` deletes it, and returning
+    ``existing`` unchanged means "nothing to push".
+    """
     root = git_root(root)
     _check_slug(slug)
-    bootstrap(root)
     for attempt in range(MAX_PUSH_ATTEMPTS):
         tip = fetch(root)
         existing = _read_all(root, tip).get(slug)
         new, message = decide(existing)
-        if new is None and existing is None:
-            return None
+        if new is existing:
+            return existing
+        if tip is None:
+            bootstrap(root)  # first writer creates the orphan branch, then retry on top of it
+            continue
         changes = {_path(slug): None if new is None else _blob(new)}
         sha = _commit(root, _build_tree(root, tip, changes), tip, message)
         if _push(root, sha):
@@ -397,11 +451,9 @@ def claim(
     recover: bool = False,
 ) -> BranchLease:
     """Publish a lease. Raises :class:`LeaseConflict` on a live foreign lease."""
-    branch = _local_branch(git_root(root))
-
     def decide(existing: BranchLease | None):
         now = time.time()
-        if existing and existing.agent_id != agent_id:
+        if existing and not existing.owned_by(agent_id):
             if not existing.expired(now):
                 raise LeaseConflict(
                     f"{slug!r} is leased by {existing.agent_id!r}@{existing.host} "
@@ -409,15 +461,14 @@ def claim(
                 )
             if not recover:
                 raise LeaseConflict(
-                    f"{slug!r} has an expired lease from {existing.agent_id!r}; "
+                    f"{slug!r} has an expired lease from {existing.agent_id!r}@{existing.host}; "
                     "explicit recover required"
                 )
         lease = BranchLease(
             slug=slug,
             agent_id=agent_id,
-            host=socket.gethostname(),
-            branch=branch,
-            claimed_at=existing.claimed_at if existing and existing.agent_id == agent_id else now,
+            host=host_id(),
+            claimed_at=existing.claimed_at if existing and existing.owned_by(agent_id) else now,
             expires_at=now + max(1, int(ttl_seconds)),
             heartbeat_at=now,
         )
@@ -436,46 +487,50 @@ def renew(
     ttl_seconds: int = DEFAULT_TTL_SECONDS,
     force: bool = False,
 ) -> BranchLease:
-    """Heartbeat. Pushes only when the heartbeat interval has elapsed (or ``force``)."""
-    outcome: dict[str, BranchLease] = {}
+    """Heartbeat. Pushes only when the throttle interval has elapsed (or ``force``).
+
+    The interval is ``min(heartbeat interval, ttl/3)`` so a short TTL is never outrun.
+    """
 
     def decide(existing: BranchLease | None):
         if existing is None:
             raise LeaseConflict(f"cannot renew {slug!r}: no lease on the branch")
-        if existing.agent_id != agent_id:
-            raise LeaseConflict(f"cannot renew lease held by {existing.agent_id!r}")
+        if not existing.owned_by(agent_id):
+            raise LeaseConflict(
+                f"cannot renew lease held by {existing.agent_id!r}@{existing.host}"
+            )
         now = time.time()
-        if not force and now - existing.heartbeat_at < heartbeat_seconds():
-            outcome["lease"] = existing
+        interval = min(heartbeat_seconds(), max(1, int(ttl_seconds)) / 3)
+        if not force and now - existing.heartbeat_at < interval:
             return existing, ""
         lease = BranchLease(
-            slug=slug, agent_id=agent_id, host=existing.host, branch=existing.branch,
+            slug=slug, agent_id=agent_id, host=existing.host,
             claimed_at=existing.claimed_at,
             expires_at=now + max(1, int(ttl_seconds)), heartbeat_at=now,
         )
-        outcome["lease"] = lease
         return lease, f"lease: heartbeat {slug}"
 
-    root = git_root(root)
-    _check_slug(slug)
-    tip = fetch(root)
-    current = _read_all(root, tip).get(slug)
-    probe_new, _ = decide(current)
-    if probe_new is current:  # throttled: nothing to push
-        return current  # type: ignore[return-value]
-    return _mutate(root, slug, decide) or outcome["lease"]
+    result = _mutate(root, slug, decide)
+    assert result is not None
+    return result
 
 
 def release(root: Path, slug: str, agent_id: str | None = None, *, force: bool = False) -> bool:
-    """Delete the lease file. True if one was removed."""
+    """Delete the lease file. True if one was removed.
+
+    Needs ownership (same host, same agent when given) unless the lease expired.
+    ``force`` is an operator override for the CLI only; library callers must not
+    forward a *local* force here.
+    """
     removed = {"hit": False}
 
     def decide(existing: BranchLease | None):
         if existing is None:
             return None, ""
-        if (not force and agent_id is not None and existing.agent_id != agent_id
-                and not existing.expired()):
-            raise LeaseConflict(f"cannot release lease held by {existing.agent_id!r}")
+        if not force and not existing.owned_by(agent_id) and not existing.expired():
+            raise LeaseConflict(
+                f"cannot release lease held by {existing.agent_id!r}@{existing.host}"
+            )
         removed["hit"] = True
         return None, f"lease: release {slug}"
 
@@ -498,7 +553,7 @@ def check_isolation(root: Path) -> None:
     """Standalone guard: the tip is isolated, no lease file is tracked elsewhere,
     and ``.plans/.leases/`` is still gitignored."""
     root = git_root(root)
-    tip = fetch(root)
+    tip = fetch(root, validate=False)
     if tip:
         assert_isolated(root, tip)
     tracked = _out(_git(root, "ls-files", "--", ".plans/.leases", f"{LEASE_DIR}/")).splitlines()
