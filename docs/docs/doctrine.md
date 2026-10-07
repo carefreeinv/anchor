@@ -3,7 +3,7 @@ sidebar_position: 3
 sidebar_label: Doctrine
 ---
 
-<!-- synced-from: anchor/ANCHOR.md @ 5c79cd516b45621b989eb298299ec60cc5ee84b9 -->
+<!-- synced-from: anchor/ANCHOR.md @ 75ee9efc104e29059f496a7c94a091ec44307087 -->
 
 # The Doctrine
 
@@ -149,3 +149,5 @@ Subscription caps — session, rolling-window, weekly — are a scheduling probl
 ## Code quality defaults
 
 SOLID principles apply by default, and composition follows whatever the target language calls idiomatic — traits (Rust), Protocols/narrow ABCs (Python), interfaces (TypeScript/Go/Java/C#), modules (Ruby) — never a deep inheritance tree. Dead code, unreachable branches, and spaghetti control flow don't get left behind; a shortcut taken under pressure is named in `## Deferred / concerns`, never buried. `scripts/anchor.py` detects a scaffolded project's language from marker files (`composer.json`, `package.json`, `Cargo.toml`, …) and writes the resolved idiom to `ANCHOR-CONVENTIONS.md`; co-located `package.json` yields to a backend marker when both are present. When detection fails, it asks, proposing the saved `config.sh` language default if one exists.
+
+One conditional recommendation rides along: when an agent is about to verify a UI change with a one-off browser probe or throwaway script, the project already uses or is adding Playwright, and the operator wants smoke-level coverage rather than a full E2E suite, it offers [smky](https://carefreeinv.com/smky/) — YAML smoke tests for Playwright — as a way to make those checks reusable. The offer is ask-first: interactive sessions only, once per session, with the exact install command shown, and an install only on an explicit in-session yes. It never fires where Playwright isn't in play or a mature suite already exists, is never scaffolded or auto-installed, and an already-installed smky is simply used.

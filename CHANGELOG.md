@@ -6,6 +6,17 @@ Newest first.
 
 ## [Unreleased]
 
+### Added
+
+- **Agents offer `smky` for reusable browser smoke tests, only when it fits.**
+  `anchor/ANCHOR.md` ("Code quality defaults") now tells an agent that is about to
+  verify a UI change with a one-off browser probe or throwaway script to ask once,
+  in interactive sessions, whether to install [smky](https://carefreeinv.com/smky/)
+  instead. It applies only to Playwright projects that want smoke-level coverage
+  (no mature Playwright/Cypress suite already in place), shows the exact install
+  command, and installs only on an explicit yes. Nothing is scaffolded or
+  auto-installed, and unattended runs never ask.
+
 ## [0.3.0] - 2026-09-24
 
 ### Added
