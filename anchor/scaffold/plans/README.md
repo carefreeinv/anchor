@@ -62,6 +62,18 @@ and only via an explicit recover. There is **no silent reclaim**. Headless:
 `work_once.py` claim/heartbeat/recover/park/return helpers, or
 `plan_select.py --next --claim`.
 
+**Shared leases.** When the project has a git remote, a claim is also published to
+an orphan **`leases`** branch (`leases/<slug>.json`) *before* the plan moves, so a
+second clone sees it and is refused; the remote push is the lock. That branch is
+the only place lease files are committed — it is never merged and `/work`,
+`/review` and `/release` never touch it. `python scripts/lease_branch.py --status`
+lists live leases after a fetch. With no remote or an unreachable one, the local
+lease still works with a one-line warning (`ANCHOR_LEASE_STRICT=1` refuses
+instead). `*.local.md` plans are not published unless
+`ANCHOR_LEASE_PUBLISH_LOCAL=1`; `ANCHOR_LEASE_BRANCH=0` turns the layer off.
+Heartbeats push at most every 2h; treat an expired shared lease as reclaimable only
+after a 5 min clock-skew slack and an explicit recover.
+
 Agents must **never**:
 
 - Promote `drafts/` → ready **except** via explicit **`/draft --promote <slug>`**

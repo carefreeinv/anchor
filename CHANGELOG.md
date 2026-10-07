@@ -22,6 +22,18 @@ Newest first.
 
 ### Added
 
+- **Shared plan leases on an orphan `leases` branch** (`scripts/lease_branch.py`).
+  With a git remote, a claim is published to `leases/<slug>.json` before the plan
+  leaves `bugs/`|`features/`, so a plan already leased from another clone is
+  refused and `plan_select.py --next` skips it; the fast-forward push is the lock.
+  `python scripts/lease_branch.py --status [--json]` lists live leases,
+  `--check-isolation` verifies the branch holds only `leases/*.json`, and
+  `--compact` (operator only) re-roots its history. No remote or an unreachable
+  one falls back to the local lease with a warning; `ANCHOR_LEASE_STRICT=1`
+  refuses instead. `*.local.md` plans are not published unless
+  `ANCHOR_LEASE_PUBLISH_LOCAL=1`; `ANCHOR_LEASE_BRANCH=0` disables the layer.
+  Scaffolded projects receive the module via `FLEET_FILES`.
+
 - **Agents offer `smky` for reusable browser smoke tests, only when it fits.**
   `anchor/ANCHOR.md` ("Code quality defaults") now tells an agent that is about to
   verify a UI change with a one-off browser probe or throwaway script to ask once,

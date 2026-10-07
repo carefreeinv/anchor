@@ -15,14 +15,26 @@ with the move, so ownership is never skipped. The TTL is long (24h) and a live
 agent refreshes it via :func:`renew` (heartbeat); only a lease left untouched
 past the TTL is reclaimable, and only via an **explicit** recover (``recover=True``)
 — never a silent side effect. An unleased in-progress plan is *not* auto-claimed.
+
+**Shared leases.** When the project has a git remote, claims are also published
+to the orphan ``leases`` branch (see ``lease_branch.py``) *before* the local file
+is written, so another machine sees the claim before it claims. :func:`renew`,
+:func:`release`, :func:`claimed_rels` and :func:`owner_of` mirror/consult that
+branch. With no remote or an unreachable one the local store still works, with a
+one-line warning; ``ANCHOR_LEASE_STRICT=1`` refuses instead. ``*.local.md`` plans
+are never published unless ``ANCHOR_LEASE_PUBLISH_LOCAL=1``;
+``ANCHOR_LEASE_BRANCH=0`` disables the branch layer entirely.
 """
 from __future__ import annotations
 
 import json
 import os
+import sys
 import time
 from dataclasses import dataclass
 from pathlib import Path
+
+import lease_branch
 
 DEFAULT_TTL_SECONDS = 86400  # 24h: long enough that a live agent never looks
 # orphaned; refreshed by renew() heartbeat. Only leases untouched past this are
@@ -65,6 +77,65 @@ class Lease:
             expires_at=float(data["expires_at"]),
             origin_rel=(str(data["origin"]) if data.get("origin") else None),
         )
+
+
+# --- shared (git-branch) layer --------------------------------------------
+
+_warned: set[str] = set()
+
+
+def _warn_once(msg: str) -> None:
+    if msg not in _warned:
+        _warned.add(msg)
+        print(f"plan_lease: warning: {msg}", file=sys.stderr)
+
+
+def _branch_enabled() -> bool:
+    return os.environ.get("ANCHOR_LEASE_BRANCH", "1").strip().lower() not in ("0", "off", "false", "no")
+
+
+def _branch_call(plans_root: Path, plan_rel: str | None, fn, *, blocking: bool = True):
+    """Run ``fn(project_root, slug)`` against the leases branch.
+
+    Returns ``(ran, result)``. Skips private (``*.local``) plans and a disabled
+    layer. ``LeaseConflict`` becomes :class:`ClaimError`. Unavailability degrades
+    to the local store with a warning, or raises under strict mode when
+    ``blocking`` (release never blocks).
+    """
+    if not _branch_enabled():
+        return False, None
+    slug = lease_branch.slug_of(plan_rel) if plan_rel else ""
+    if plan_rel and not lease_branch.publishable(slug):
+        return False, None
+    root = plans_root.parent
+    try:
+        return True, fn(root, slug)
+    except lease_branch.LeaseConflict as exc:
+        raise ClaimError(str(exc)) from exc
+    except lease_branch.LeaseBranchUnavailable as exc:
+        if lease_branch.strict_mode() and blocking:
+            raise ClaimError(f"strict mode: shared lease unavailable ({exc})") from exc
+        if "not a git repository" not in str(exc):
+            _warn_once(f"shared leases unavailable, using local lease only ({exc})")
+        return False, None
+    except lease_branch.LeaseBranchError as exc:
+        raise ClaimError(f"shared lease error: {exc}") from exc
+
+
+def _remote_claim(plans_root: Path, plan_rel: str, agent_id: str, ttl: int, recover: bool = False) -> bool:
+    ran, _ = _branch_call(
+        plans_root, plan_rel,
+        lambda root, slug: lease_branch.claim(root, slug, agent_id, ttl_seconds=ttl, recover=recover),
+    )
+    return ran
+
+
+def _remote_live_slugs(plans_root: Path) -> dict[str, str]:
+    """slug -> agent_id for unexpired shared leases (empty when unavailable)."""
+    ran, leases = _branch_call(
+        plans_root, None, lambda root, _slug: lease_branch.list_leases(root), blocking=False
+    )
+    return {lz.slug: lz.agent_id for lz in leases or [] if not lz.expired()} if ran else {}
 
 
 def leases_dir(plans_root: Path) -> Path:
@@ -137,7 +208,7 @@ def claim(
     existing = read_lease(plans_root, plan_rel)
     if existing is not None and not existing.expired:
         if existing.agent_id == agent_id:
-            release(plans_root, plan_rel, agent_id=agent_id, force=True)
+            _release_local(plans_root, plan_rel, agent_id=agent_id, force=True)
         else:
             raise ClaimError(
                 f"plan already claimed by {existing.agent_id!r} until "
@@ -195,7 +266,8 @@ def claim_and_move(
     if plan_rel.startswith(f"{IN_PROGRESS}/"):
         existing = active_lease(plans_root, plan_rel)
         if existing and existing.agent_id == agent_id:
-            release(plans_root, plan_rel, agent_id=agent_id, force=True)
+            _remote_claim(plans_root, plan_rel, agent_id, ttl_seconds)
+            _release_local(plans_root, plan_rel, agent_id=agent_id, force=True)
             lease = claim(
                 plans_root,
                 plan_rel,
@@ -218,6 +290,7 @@ def claim_and_move(
                 f"in-progress plan {plan_rel} has no active lease{who}; pass "
                 "recover=True to take over abandoned/expired work, or leave it"
             )
+        _remote_claim(plans_root, plan_rel, agent_id, ttl_seconds, recover=True)
         lease = claim(
             plans_root,
             plan_rel,
@@ -247,18 +320,32 @@ def claim_and_move(
             )
         raise ClaimError(f"destination already exists: {dest_rel}")
 
-    # Exclusive lease on the ready path first (coordination)
-    claim(plans_root, plan_rel, agent_id, ttl_seconds=ttl_seconds)
+    # Shared lease first: refuses before the plan leaves bugs|features/ when
+    # another machine already holds it.
+    published = _remote_claim(plans_root, plan_rel, agent_id, ttl_seconds)
+    try:
+        # Exclusive lease on the ready path (coordination)
+        claim(plans_root, plan_rel, agent_id, ttl_seconds=ttl_seconds)
+    except ClaimError:
+        if published:
+            _branch_call(plans_root, plan_rel,
+                         lambda root, slug: lease_branch.release(root, slug, agent_id, force=True),
+                         blocking=False)
+        raise
 
     dest.parent.mkdir(parents=True, exist_ok=True)
     try:
         src.rename(dest)
     except OSError as exc:
-        release(plans_root, plan_rel, force=True)
+        _release_local(plans_root, plan_rel, force=True)
+        if published:
+            _branch_call(plans_root, plan_rel,
+                         lambda root, slug: lease_branch.release(root, slug, agent_id, force=True),
+                         blocking=False)
         raise ClaimError(f"could not move {plan_rel} → {dest_rel}: {exc}") from exc
 
     # Move lease key from ready path → in-progress path
-    release(plans_root, plan_rel, force=True)
+    _release_local(plans_root, plan_rel, force=True)
     now = time.time()
     lease = Lease(
         plan_rel=dest_rel,
@@ -312,17 +399,30 @@ def renew(
         origin_rel=existing.origin_rel,
     )
     _write_lease_force(lease_path(plans_root, plan_rel), lease)
+    _remote_renew(plans_root, plan_rel, agent_id, ttl_seconds)
     return lease
 
 
-def release(
+def _remote_renew(plans_root: Path, plan_rel: str, agent_id: str, ttl: int) -> None:
+    def go(root: Path, slug: str):
+        try:
+            return lease_branch.renew(root, slug, agent_id, ttl_seconds=ttl)
+        except lease_branch.LeaseConflict as exc:
+            if "no lease" not in str(exc):
+                raise
+            return lease_branch.claim(root, slug, agent_id, ttl_seconds=ttl)
+
+    _branch_call(plans_root, plan_rel, go, blocking=False)
+
+
+def _release_local(
     plans_root: Path,
     plan_rel: str,
     *,
     agent_id: str | None = None,
     force: bool = False,
 ) -> bool:
-    """Drop a lease. Returns True if a file was removed. Does not move plan files."""
+    """Drop the machine-local lease file. Returns True if a file was removed."""
     plan_rel = plan_rel.replace("\\", "/")
     path = lease_path(plans_root, plan_rel)
     if not path.is_file():
@@ -340,18 +440,48 @@ def release(
         return False
 
 
+def release(
+    plans_root: Path,
+    plan_rel: str,
+    *,
+    agent_id: str | None = None,
+    force: bool = False,
+) -> bool:
+    """Drop a lease locally and on the shared branch. True if a local file was removed.
+
+    Does not move plan files. A shared-branch failure never blocks the release.
+    """
+    plan_rel = plan_rel.replace("\\", "/")
+    removed = _release_local(plans_root, plan_rel, agent_id=agent_id, force=force)
+    _branch_call(
+        plans_root, plan_rel,
+        lambda root, slug: lease_branch.release(root, slug, agent_id, force=force or agent_id is None),
+        blocking=False,
+    )
+    return removed
+
+
 def owner_of(plans_root: Path, plan_rel: str) -> str | None:
     """Return agent_id holding an active lease, or None."""
-    lease = active_lease(plans_root, plan_rel.replace("\\", "/"))
-    return lease.agent_id if lease else None
+    plan_rel = plan_rel.replace("\\", "/")
+    lease = active_lease(plans_root, plan_rel)
+    if lease:
+        return lease.agent_id
+    return _remote_live_slugs(plans_root).get(lease_branch.slug_of(plan_rel))
 
 
 def claimed_rels(plans_root: Path) -> set[str]:
-    """Set of plan_rel strings with unexpired leases."""
+    """Set of plan_rel strings with unexpired leases (local, plus ready plans leased on the shared branch)."""
+    out: set[str] = set()
+    remote = _remote_live_slugs(plans_root)
+    if remote:
+        for lane in READY_LANES:
+            for plan in (plans_root / lane).glob("*.md"):
+                if lease_branch.slug_of(plan.name) in remote:
+                    out.add(f"{lane}/{plan.name}")
     d = leases_dir(plans_root)
     if not d.is_dir():
-        return set()
-    out: set[str] = set()
+        return out
     for p in d.glob("*.json"):
         try:
             data = json.loads(p.read_text(encoding="utf-8"))

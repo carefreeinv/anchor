@@ -1255,11 +1255,14 @@ def _next_main(argv: list[str] | None = None) -> int:
     worker = worker_with_effort(
         args.model or args.tier, args.tier, getattr(args, "effort", None)
     )
+    from plan_lease import claimed_rels
+
     rec = select_one(
         plans_root,
         worker,
         no_fit_check=args.no_fit_check,
         no_dep_check=args.no_dep_check,
+        skip_rels={r for r in claimed_rels(plans_root) if not r.startswith(f"{IN_PROGRESS_LANE}/")},
     )
     if rec is None:
         if args.json:
