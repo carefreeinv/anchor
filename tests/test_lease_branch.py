@@ -488,14 +488,20 @@ def test_non_blocking_calls_warn_instead_of_raising(clones, monkeypatch, capsys)
     assert plan_lease.owner_of(pb, "features/zzz.md") is None
 
 
-def test_warn_once_dedupes_per_reason(clones, tmp_path, capsys):
+def test_warn_once_dedupes_per_reason(clones, monkeypatch, capsys):
     a, _, _ = clones
-    _run(a, "remote", "set-url", "origin", str(tmp_path / "gone.git"))
+    msgs = iter(("gone-one", "gone-two"))
+
+    def boom(_root):
+        raise lb.LeaseBranchUnavailable(next(msgs))
+
+    monkeypatch.setattr(lb, "list_leases", boom)
     plan_lease._warned.clear()
     plan_lease.claimed_rels(_plan(a, "features/w1.md"))
     plan_lease.claimed_rels(_plan(a, "features/w2.md"))
-    plan_lease.owner_of(_plan(a, "features/w3.md"), "features/w3.md")
-    assert capsys.readouterr().err.count("using local lease only") == 1
+    err = capsys.readouterr().err
+    assert err.count("using local lease only") == 1
+    assert "gone-one" in err and "gone-two" not in err
 
 
 def test_heartbeat_interval_capped_by_ttl(clones):
@@ -511,6 +517,27 @@ def test_heartbeat_interval_capped_by_ttl(clones):
 
 def test_network_timeout_is_unavailable(clones, monkeypatch):
     a, _, _ = clones
+    lb.claim(a, "alpha", "agent-a")
+    calls: list[tuple[list, object]] = []
+    real = lb.subprocess.run
+
+    def spy(*args, **kwargs):
+        argv = list(args[0]) if args else list(kwargs.get("args") or [])
+        calls.append((argv, kwargs.get("timeout")))
+        return real(*args, **kwargs)
+
+    monkeypatch.setattr(lb.subprocess, "run", spy)
+    lb.fetch(a)
+
+    def verb(argv: list) -> str:
+        if len(argv) > 3 and argv[0] == "git" and argv[1] == "-C":
+            return argv[3]
+        return argv[1] if len(argv) > 1 else ""
+
+    fetch_t = [t for argv, t in calls if verb(argv) == "fetch"]
+    remote_t = [t for argv, t in calls if verb(argv) == "remote"]
+    assert fetch_t and all(t == lb.net_timeout_seconds() for t in fetch_t)
+    assert all(t is None for t in remote_t)
 
     def hang(*args, **kwargs):
         raise lb.subprocess.TimeoutExpired(cmd="git fetch", timeout=1)
@@ -518,6 +545,22 @@ def test_network_timeout_is_unavailable(clones, monkeypatch):
     monkeypatch.setattr(lb.subprocess, "run", hang)
     with pytest.raises(lb.LeaseBranchUnavailable, match="timed out"):
         lb.fetch(a)
+
+
+def test_mutate_attempt_does_one_fetch(clones, monkeypatch):
+    a, _, _ = clones
+    lb.claim(a, "alpha", "agent-a")
+    fetches: list = []
+    real = lb._git
+
+    def spy(root, *args, **kwargs):
+        if args and args[0] == "fetch":
+            fetches.append(args)
+        return real(root, *args, **kwargs)
+
+    monkeypatch.setattr(lb, "_git", spy)
+    lb.claim(a, "beta", "agent-a")
+    assert len(fetches) == 1
 
 
 def test_payload_has_no_branch_name(clones):
@@ -533,3 +576,108 @@ def test_one_round_trip_fetch_and_first_write_bootstraps(clones):
     assert lb.fetch(a) is None  # no branch yet: absent, not an error
     lb.claim(a, "alpha", "agent-a")  # first writer creates the orphan branch
     assert _run(bare, "rev-list", "--count", "refs/heads/leases") == "2"  # init + claim
+
+
+def test_claim_and_move_expired_ready_lease_is_reclaimable(clones, monkeypatch):
+    a, b, _ = clones
+    monkeypatch.setenv("ANCHOR_LEASE_SKEW_SECONDS", "0")
+    _as_host(monkeypatch, "host-a")
+    _plan(a, "features/old.md")
+    pb = _plan(b, "features/old.md")
+    lb.claim(a, "old", "agent-a", ttl_seconds=1)
+    time.sleep(1.2)
+    _as_host(monkeypatch, "host-b")
+    lease, dest = plan_lease.claim_and_move(pb, "features/old.md", "agent-b")
+    assert dest.name == "old.md" and lease.agent_id == "agent-b"
+    assert lb.holder_of(b, "old").host == "host-b"
+
+
+def test_claim_and_move_expired_in_progress_needs_recover(clones, monkeypatch):
+    a, _, _ = clones
+    monkeypatch.setenv("ANCHOR_LEASE_SKEW_SECONDS", "0")
+    pa = _plan(a, "features/ip.md")
+    plan_lease.claim_and_move(pa, "features/ip.md", "agent-a", ttl_seconds=1)
+    time.sleep(1.2)
+    with pytest.raises(plan_lease.ClaimError, match="recover"):
+        plan_lease.claim_and_move(pa, "in-progress/ip.md", "agent-b")
+    lease, _dest = plan_lease.claim_and_move(
+        pa, "in-progress/ip.md", "agent-b", recover=True
+    )
+    assert lease.agent_id == "agent-b"
+
+
+def test_expired_own_lease_resets_claimed_at(clones, monkeypatch):
+    a, _, _ = clones
+    monkeypatch.setenv("ANCHOR_LEASE_SKEW_SECONDS", "0")
+    first = lb.claim(a, "old", "agent-a", ttl_seconds=1)
+    time.sleep(1.2)
+    second = lb.claim(a, "old", "agent-a")
+    assert second.claimed_at > first.claimed_at
+
+
+def test_owner_of_surfaces_foreign_host(clones, monkeypatch):
+    a, b, _ = clones
+    pa = _plan(a, "features/fx.md")
+    pb = _plan(b, "features/fx.md")
+    _as_host(monkeypatch, "host-a")
+    plan_lease.claim_and_move(pa, "features/fx.md", "mcp-agent")
+    _as_host(monkeypatch, "host-b")
+    assert plan_lease.owner_of(pb, "features/fx.md") == "mcp-agent@host-a"
+
+
+def test_local_leases_branch_follows_compact(clones):
+    a, b, bare = clones
+    lb.claim(a, "alpha", "agent-a")
+    lb.claim(b, "beta", "agent-b")
+    before = _run(b, "rev-parse", "refs/heads/leases")
+    lb.compact(a)
+    lb.bootstrap(b)
+    after = _run(b, "rev-parse", "refs/heads/leases")
+    assert after == _run(bare, "rev-parse", "refs/heads/leases")
+    assert after != before
+
+
+def test_hook_rejection_is_unavailable_not_contention(clones, monkeypatch):
+    a, _, _ = clones
+    real = lb._git
+
+    def spy(root, *args, **kwargs):
+        if args and args[0] == "push":
+            class _P:
+                returncode = 1
+                stdout = b""
+                stderr = (
+                    b"! [remote rejected] sha -> leases "
+                    b"(pre-receive hook declined)\n"
+                )
+            return _P()
+        return real(root, *args, **kwargs)
+
+    monkeypatch.setattr(lb, "_git", spy)
+    with pytest.raises(lb.LeaseBranchUnavailable, match="pre-receive hook declined"):
+        lb.claim(a, "alpha", "agent-a")
+
+
+def test_ref_lock_race_is_contention_not_unavailable(clones, monkeypatch):
+    """Bare-remote CAS loser: ref lock / failed to update ref → retry, not unavailable."""
+    a, _, _ = clones
+    lb.bootstrap(a)
+    sha = _run(a, "rev-parse", "refs/heads/leases")
+    real = lb._git
+
+    def spy(root, *args, **kwargs):
+        if args and args[0] == "push":
+            class _P:
+                returncode = 1
+                stdout = b""
+                stderr = (
+                    b"remote: error: cannot lock ref 'refs/heads/leases': "
+                    b"is at abc but expected def\n"
+                    b"! [remote rejected] sha -> leases (failed to update ref)\n"
+                    b"error: failed to push some refs to 'origin'\n"
+                )
+            return _P()
+        return real(root, *args, **kwargs)
+
+    monkeypatch.setattr(lb, "_git", spy)
+    assert lb._push(a, sha) is False

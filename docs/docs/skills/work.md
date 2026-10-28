@@ -195,7 +195,7 @@ When the user types `/work` without tool access: ask them to `ls .plans/bugs .pl
 
 Interactive `/work` stays one-plan-per-invocation (not a daemon). For always-on or multi-tier workers that **pull** work, see the full guide: **[Multi-agent fleet workers](/tooling/fleet-workers)** (cron/systemd, capability tiers, leases, git isolation).
 
-**Cross-machine claims:** with a git remote, a claim is first published to the orphan `leases` branch, so a plan already leased on another machine is refused *before* it leaves `bugs/`|`features/`, and bare `plan_select.py --next` skips it. Offline, the local lease is used with a warning (`ANCHOR_LEASE_STRICT=1` refuses). Private `*.local.md` plans are not published by default. See [fleet workers](/tooling/fleet-workers).
+**Cross-machine claims:** with a git remote, a claim is first published to the orphan `leases` branch, so a plan already leased on another machine is refused *before* it leaves `bugs/`|`features/`, and bare `plan_select.py --next` skips it. An expired shared lease on a ready plan is reclaimable; an expired lease on `in-progress/` still needs `--recover`. Offline, the local lease is used with a warning (`ANCHOR_LEASE_STRICT=1` refuses). Private `*.local.md` plans are not published by default. See [fleet workers](/tooling/fleet-workers).
 
 ```bash
 python scripts/work_once.py --list --tier mid --agent-id worker-1

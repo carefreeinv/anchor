@@ -74,8 +74,10 @@ instead). `*.local.md` plans are not published unless
 Ownership is agent id **plus host** (`ANCHOR_LEASE_HOST` overrides the hostname), so
 same-named agents on different machines never share a lease, and a forced local
 release never deletes another host's live lease. Heartbeats push at most every
-`min(2h, ttl/3)`; treat an expired shared lease as reclaimable only after a 5 min
-clock-skew slack and an explicit recover. A remote `leases` branch that is not an
+`min(2h, ttl/3)`. A live foreign lease is never taken. Same agent+host may
+refresh without recover. An *expired* shared lease on a **ready** plan
+(`bugs/`/`features/`) is reclaimable after the 5 min clock-skew slack; an
+expired lease on **in-progress/** still needs an explicit recover. A remote `leases` branch that is not an
 isolated orphan is never adopted — claims fall back to local with a warning.
 
 Agents must **never**:

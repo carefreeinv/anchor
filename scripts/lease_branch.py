@@ -33,9 +33,11 @@ Protocol
   on any locale.
 * **Expiry**: a lease is expired only after ``expires_at + skew`` (default 5
   min) to tolerate clock skew; assume NTP. A live foreign lease refuses a claim.
-  An *expired* lease owned by someone else (another agent, or the same agent id
-  on another host) is **not** silently reclaimed: it needs ``recover=True``
-  (explicit crashed-agent takeover), same doctrine as the local store.
+  An *expired* lease on an **in-progress** plan still needs ``recover=True``
+  (explicit crashed-agent takeover). An expired lease on a **ready-lane** plan
+  (``bugs/`` / ``features/``) is reclaimable without recover — a ready plan is
+  not live in-progress anywhere. Same agent+host may always refresh a live
+  lease; an expired own lease resets ``claimed_at``.
 * **Heartbeat** (:func:`renew`) pushes only when ``min(heartbeat interval, ttl/3)``
   (interval default 2h) has passed since the lease's last push, so history does
   not flood and a short TTL is never outrun; the default TTL stays 24h.
@@ -82,7 +84,19 @@ DEFAULT_HEARTBEAT_SECONDS = 7200
 DEFAULT_NET_TIMEOUT_SECONDS = 30
 MAX_PUSH_ATTEMPTS = 6
 _SLUG_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
-_REJECTED_MARKERS = ("rejected", "non-fast-forward", "fetch first", "stale info")
+# Retry only a lost CAS race. GitHub/GitLab non-ff says "non-fast-forward";
+# a local bare remote racing two pushes says "cannot lock ref" /
+# "failed to update ref". Hook / permission refusals
+# ("[remote rejected] … pre-receive hook declined") must not look like
+# contention — they are unavailability, with the remote's message.
+_NON_FF_MARKERS = (
+    "non-fast-forward",
+    "fetch first",
+    "stale info",
+    "cannot lock ref",
+    "failed to update ref",
+)
+_HOOK_MARKERS = ("hook declined", "pre-receive hook", "protected branch")
 
 
 class LeaseBranchError(Exception):
@@ -215,6 +229,10 @@ def _git(
         raise LeaseBranchUnavailable(
             f"git {args[0]} timed out after {net_timeout_seconds()}s"
         ) from exc
+    except FileNotFoundError as exc:
+        raise LeaseBranchUnavailable("git is not installed") from exc
+    except OSError as exc:
+        raise LeaseBranchUnavailable(f"cannot run git: {exc}") from exc
     if check and proc.returncode != 0:
         raise LeaseBranchError(
             f"git {' '.join(args)} failed: {proc.stderr.decode(errors='replace').strip()}"
@@ -227,10 +245,15 @@ def _out(proc: subprocess.CompletedProcess) -> str:
 
 
 def git_root(path: Path) -> Path:
-    proc = subprocess.run(
-        ["git", "-C", str(path), "rev-parse", "--show-toplevel"],
-        capture_output=True,
-    )
+    try:
+        proc = subprocess.run(
+            ["git", "-C", str(path), "rev-parse", "--show-toplevel"],
+            capture_output=True,
+        )
+    except FileNotFoundError as exc:
+        raise LeaseBranchUnavailable("git is not installed") from exc
+    except OSError as exc:
+        raise LeaseBranchUnavailable(f"cannot run git: {exc}") from exc
     if proc.returncode != 0:
         raise LeaseBranchUnavailable(f"not a git repository: {path}")
     return Path(proc.stdout.decode().strip())
@@ -246,6 +269,33 @@ def _require_remote(root: Path) -> None:
         raise LeaseBranchUnavailable(f"no git remote {remote_name()!r}")
 
 
+def _code_branch_refs(root: Path) -> list[str]:
+    """Refs that must not share history with an orphan leases tip.
+
+    Skip HEAD when it *is* the local ``leases`` branch (operator has it checked
+    out): merge-base against that HEAD would always succeed.
+    """
+    refs = [
+        "refs/heads/dev",
+        "refs/heads/develop",
+        "refs/heads/main",
+        "refs/heads/master",
+    ]
+    head = _out(_git(root, "symbolic-ref", "-q", "HEAD", check=False))
+    if head and not head.endswith(f"/{BRANCH}"):
+        refs.append("HEAD")
+    return refs
+
+
+def _shares_code_history(root: Path, tip: str) -> bool:
+    for ref in _code_branch_refs(root):
+        if _git(root, "rev-parse", "-q", "--verify", ref, check=False).returncode != 0:
+            continue
+        if _git(root, "merge-base", tip, ref, check=False).returncode == 0:
+            return True
+    return False
+
+
 def _validate_remote(root: Path, tip: str) -> None:
     """Refuse to treat a foreign ``leases`` branch as ours (never adopt, never overwrite)."""
     try:
@@ -254,9 +304,9 @@ def _validate_remote(root: Path, tip: str) -> None:
         raise LeaseBranchUnavailable(
             f"remote {remote_name()!r} has a {BRANCH!r} branch that is not a lease branch ({exc})"
         ) from exc
-    if _git(root, "merge-base", tip, "HEAD", check=False).returncode == 0:
+    if _shares_code_history(root, tip):
         raise LeaseBranchUnavailable(
-            f"remote {remote_name()!r} {BRANCH!r} branch shares history with HEAD; not an orphan lease branch"
+            f"remote {remote_name()!r} {BRANCH!r} branch shares history with a code branch; not an orphan lease branch"
         )
 
 
@@ -279,14 +329,30 @@ def fetch(root: Path, *, validate: bool = True) -> str | None:
 
 
 def _sync_local_branch(root: Path, sha: str, *, replaces: str | None = None) -> None:
-    """Keep a local ``leases`` branch for ``git log leases`` — but only ever move one that is ours."""
+    """Keep a local ``leases`` branch for ``git log leases`` — but only ever move one that is ours.
+
+    Follows a re-rooted tip (``--compact`` from another clone) when the local
+    ref still looks like our isolated orphan. Leaves a user's unrelated
+    ``leases`` branch (non-isolated or shares code history) untouched.
+    """
     ref = f"refs/heads/{BRANCH}"
     cur = _out(_git(root, "rev-parse", "-q", "--verify", ref, check=False))
     if cur == sha:
         return
-    if (not cur or cur == replaces
-            or _git(root, "merge-base", "--is-ancestor", cur, sha, check=False).returncode == 0):
-        _git(root, "update-ref", ref, sha)
+    if cur and cur != replaces:
+        try:
+            assert_isolated(root, cur)
+        except IsolationError:
+            return
+        if _shares_code_history(root, cur):
+            return
+        ancestor = _git(
+            root, "merge-base", "--is-ancestor", cur, sha, check=False
+        ).returncode == 0
+        if not ancestor:
+            # Stale isolated orphan (compact / re-bootstrap) — still ours; follow.
+            pass
+    _git(root, "update-ref", ref, sha)
 
 
 def _empty_tree(root: Path) -> str:
@@ -342,8 +408,11 @@ def _push(root: Path, sha: str, *, force_with_lease: str | None = None) -> bool:
         _git(root, "update-ref", _remote_ref(), sha)
         _sync_local_branch(root, sha, replaces=force_with_lease)
         return True
-    err = proc.stderr.decode(errors="replace").lower()
-    if any(m in err for m in _REJECTED_MARKERS):
+    err = proc.stderr.decode(errors="replace")
+    err_l = err.lower()
+    if any(m in err_l for m in _HOOK_MARKERS):
+        raise LeaseBranchUnavailable(f"push failed: {err.strip()}")
+    if any(m in err_l for m in _NON_FF_MARKERS):
         return False
     raise LeaseBranchUnavailable(f"push failed: {err.strip()}")
 
@@ -464,11 +533,16 @@ def claim(
                     f"{slug!r} has an expired lease from {existing.agent_id!r}@{existing.host}; "
                     "explicit recover required"
                 )
+        keep_claimed = (
+            existing is not None
+            and existing.owned_by(agent_id)
+            and not existing.expired(now)
+        )
         lease = BranchLease(
             slug=slug,
             agent_id=agent_id,
             host=host_id(),
-            claimed_at=existing.claimed_at if existing and existing.owned_by(agent_id) else now,
+            claimed_at=existing.claimed_at if keep_claimed else now,
             expires_at=now + max(1, int(ttl_seconds)),
             heartbeat_at=now,
         )
@@ -522,20 +596,20 @@ def release(root: Path, slug: str, agent_id: str | None = None, *, force: bool =
     ``force`` is an operator override for the CLI only; library callers must not
     forward a *local* force here.
     """
-    removed = {"hit": False}
+    last_had = {"v": False}
 
     def decide(existing: BranchLease | None):
+        last_had["v"] = existing is not None
         if existing is None:
             return None, ""
         if not force and not existing.owned_by(agent_id) and not existing.expired():
             raise LeaseConflict(
                 f"cannot release lease held by {existing.agent_id!r}@{existing.host}"
             )
-        removed["hit"] = True
         return None, f"lease: release {slug}"
 
     _mutate(root, slug, decide)
-    return removed["hit"]
+    return last_had["v"]
 
 
 def compact(root: Path) -> str:

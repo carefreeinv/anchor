@@ -34,6 +34,4 @@ with a one-line warning. Set `ANCHOR_LEASE_STRICT=1` to refuse instead. Plans
 named `*.local.md` are private and are not published unless
 `ANCHOR_LEASE_PUBLISH_LOCAL=1`. `ANCHOR_LEASE_BRANCH=0` turns the layer off.
 
-A lease belongs to an agent id *and* a host, so two machines that both use the default agent id never share or delete each other's claims; `ANCHOR_LEASE_HOST` overrides the host name if your machines share one. An expired shared lease is still never reclaimed silently. It needs an explicit
-recover, and a 5 minute clock-skew slack applies, so keep your hosts on NTP. The
-identity that pushes needs write access to the `leases` branch.
+A lease belongs to an agent id *and* a host, so two machines that both use the default agent id never share or delete each other's claims; `ANCHOR_LEASE_HOST` overrides the host name if your machines share one. An expired shared lease on a **ready** plan (`bugs/`/`features/`) is reclaimable after a 5 minute clock-skew slack. An expired lease on `in-progress/` still needs an explicit recover. Keep hosts on NTP. The identity that pushes needs write access to the `leases` branch.

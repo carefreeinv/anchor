@@ -126,6 +126,10 @@ def _branch_call(plans_root: Path, plan_rel: str | None, fn, *, blocking: bool =
         if blocking:
             raise ClaimError(f"shared lease error: {exc}") from exc
         _warn_once("error", f"shared lease error, ignored ({exc})")
+    except OSError as exc:
+        if blocking:
+            raise ClaimError(f"shared lease error: {exc}") from exc
+        _warn_once("error", f"shared lease error, ignored ({exc})")
     return False, None
 
 
@@ -328,8 +332,12 @@ def claim_and_move(
         raise ClaimError(f"destination already exists: {dest_rel}")
 
     # Shared lease first: refuses before the plan leaves bugs|features/ when
-    # another machine already holds it.
-    published = _remote_claim(plans_root, plan_rel, agent_id, ttl_seconds)
+    # another machine already holds a *live* lease. An *expired* shared lease
+    # on a ready-lane plan is reclaimable (the plan is not in-progress anywhere
+    # live) — recover=True only unlocks expired foreign leases, never live ones.
+    published = _remote_claim(
+        plans_root, plan_rel, agent_id, ttl_seconds, recover=True
+    )
     try:
         # Exclusive lease on the ready path (coordination)
         claim(plans_root, plan_rel, agent_id, ttl_seconds=ttl_seconds)
@@ -472,12 +480,26 @@ def release(
 
 
 def owner_of(plans_root: Path, plan_rel: str) -> str | None:
-    """Return agent_id holding an active lease, or None."""
+    """Return who holds an active lease, or None.
+
+    Local leases return ``agent_id``. A shared lease on **this** host returns
+    ``agent_id`` too. A live shared lease on another host returns
+    ``agent_id@host`` so a same-named agent here does not look like the owner.
+    """
     plan_rel = plan_rel.replace("\\", "/")
     lease = active_lease(plans_root, plan_rel)
     if lease:
         return lease.agent_id
-    return _remote_live_slugs(plans_root).get(lease_branch.slug_of(plan_rel))
+    ran, leases = _branch_call(
+        plans_root, None, lambda root, _slug: lease_branch.list_leases(root), blocking=False
+    )
+    slug = lease_branch.slug_of(plan_rel)
+    for lz in leases or []:
+        if lz.slug == slug and not lz.expired():
+            if lz.owned_by(None):
+                return lz.agent_id
+            return f"{lz.agent_id}@{lz.host}"
+    return None
 
 
 def claimed_rels(plans_root: Path) -> set[str]:

@@ -34,8 +34,11 @@ Newest first.
   `ANCHOR_LEASE_PUBLISH_LOCAL=1`; `ANCHOR_LEASE_BRANCH=0` disables the layer.
   A lease is owned by agent id **plus host**, so same-named agents on different
   machines cannot take or delete each other's claims; a foreign `leases` branch is
-  never adopted or overwritten. Scaffolded projects receive the module via
-  `FLEET_FILES`.
+  never adopted or overwritten. An expired shared lease on a **ready** plan
+  (`bugs/`/`features/`) is reclaimable after clock-skew slack; an expired lease
+  on `in-progress/` still needs explicit recover. Push retries treat ref-lock /
+  `failed to update ref` as a lost CAS race; hook and protected-branch refusals
+  stay unavailable. Scaffolded projects receive the module via `FLEET_FILES`.
 
 - **Agents offer `smky` for reusable browser smoke tests, only when it fits.**
   `anchor/ANCHOR.md` ("Code quality defaults") now tells an agent that is about to
