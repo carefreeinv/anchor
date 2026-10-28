@@ -515,11 +515,13 @@ def _remote_branches(root: Path, branch: str) -> list[str]:
 def critic_verdict(text: str) -> str:
     """ACCEPT | REVISE | ESCALATE from a critic reply.
 
-    First-match fails open when the template options line or a struck-through
-    ACCEPT appears before the real verdict. Collect every remaining verdict
-    word in the ``## Verdict`` section (and every ``verdict … WORD`` label in
-    the whole reply), ignore option lists and ``~~strike~~``, and return the
-    most cautious of what is left (ESCALATE > REVISE > ACCEPT).
+    A ``## Verdict`` section is the current verdict. Option lists
+    (``ACCEPT | REVISE | ESCALATE``) and ``~~strike~~`` are ignored; of what
+    remains, the most cautious word wins (ESCALATE > REVISE > ACCEPT). A
+    heading with nothing left is ``UNKNOWN`` — a prior-round
+    ``verdict: ACCEPT`` outside the section is not the current verdict.
+    Without a heading, labeled ``Verdict:`` lines (then any remaining word)
+    are used the same way.
     """
     import re
 
@@ -532,23 +534,32 @@ def critic_verdict(text: str) -> str:
         cleaned,
         flags=re.IGNORECASE,
     )
-    found = {
-        m.group(1).upper()
-        for m in re.finditer(r"verdict\W{0,12}(ACCEPT|REVISE|ESCALATE)", cleaned, re.IGNORECASE)
-    }
+
+    def _pick(words: set[str]) -> str:
+        if not words:
+            return "UNKNOWN"
+        return max(words, key=lambda w: rank[w])
+
     section = re.search(
         r"^##[^\n]*\bverdict\b.*?(?=^##\s|\Z)", cleaned,
         re.IGNORECASE | re.MULTILINE | re.DOTALL,
     )
     if section:
-        found.update(w.upper() for w in re.findall(r"\b(ACCEPT|REVISE|ESCALATE)\b",
-                                                   section.group(0), re.IGNORECASE))
-    if not found:
-        found.update(w.upper() for w in re.findall(r"\b(ACCEPT|REVISE|ESCALATE)\b",
-                                                   cleaned, re.IGNORECASE))
-    if not found:
-        return "UNKNOWN"
-    return max(found, key=lambda w: rank[w])
+        return _pick({
+            w.upper()
+            for w in re.findall(r"\b(ACCEPT|REVISE|ESCALATE)\b",
+                                section.group(0), re.IGNORECASE)
+        })
+    labeled = {
+        m.group(1).upper()
+        for m in re.finditer(r"verdict\W{0,12}(ACCEPT|REVISE|ESCALATE)", cleaned, re.IGNORECASE)
+    }
+    if labeled:
+        return _pick(labeled)
+    return _pick({
+        w.upper()
+        for w in re.findall(r"\b(ACCEPT|REVISE|ESCALATE)\b", cleaned, re.IGNORECASE)
+    })
 
 
 def cmd_review(args: argparse.Namespace, mode: Mode, ask: Prompter) -> Result:

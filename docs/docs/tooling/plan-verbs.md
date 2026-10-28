@@ -5,8 +5,6 @@ sidebar_label: Plan workflow verbs
 
 <!-- synced-from: anchor/cli.md @ 28b9fa3b4781546e8edab9a3bf3e6bff48164be0 -->
 
-<!-- synced-from: anchor/cli.md @ 0 -->
-
 # The plan-workflow CLI: what `anchor` does itself, and what it hands back
 
 `anchor plans | work | review | draft` runs the `.plans/` workflow from a

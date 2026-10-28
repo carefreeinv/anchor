@@ -312,12 +312,16 @@ CALLERS = [
     "scripts/merge_feature.py",
     "scripts/orchestrate.py",
     "mcp/project-orchestrator/coordinator.py",
+    "scripts/anchor_cli.py",
+    "scripts/lease_branch.py",
 ]
 
 # Non-plan markdown these callers legitimately name (not a plan layout leak).
 ALLOWED = {
     ("scripts/orchestrate.py", "human-reports"),  # human report file, not a plan
     ("scripts/release_progress.py", ".releases/"),  # release definition, not a plan
+    # leases branch key is basename-without-.md (keeps `.local`); not a lane glob
+    ("scripts/lease_branch.py", 'endswith(".md")'),
 }
 
 _PLAN_TOKENS = {".md", ".local.md", "*.md", "*.local.md", "README.md"}

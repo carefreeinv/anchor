@@ -542,6 +542,10 @@ def test_review_approve_with_remote_only_branch_does_not_archive(repo_project, t
         ("## Verdict\n~~ACCEPT~~ **REVISE**", "REVISE"),
         ("Prior round verdict: ACCEPT was premature.\n**Verdict: REVISE**", "REVISE"),
         ("## Verdict\nACCEPT | REVISE | ESCALATE\n\nESCALATE — needs a bigger model", "ESCALATE"),
+        # M-A: a prior-round ACCEPT must not fill an empty ## Verdict section
+        ("Prior round verdict: ACCEPT was premature.\n## Verdict\n", "UNKNOWN"),
+        ("Prior round verdict: ACCEPT was premature.\n## Verdict\nLooks fine.\n\n"
+         "## Notes for next task\nACCEPT this later", "UNKNOWN"),
     ],
 )
 def test_critic_verdict(text, verdict):

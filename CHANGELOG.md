@@ -80,9 +80,11 @@ Newest first.
 
 - **`anchor review --delegate` no longer treats a template options line or a
   struck-through ACCEPT as the critic verdict.** `critic_verdict` ignores
-  `ACCEPT | REVISE | ESCALATE` option lists and `~~strike~~`, then takes the
-  most cautious remaining word (ESCALATE > REVISE > ACCEPT) so Approve cannot
-  skip the "despite critic concerns?" gate.
+  `ACCEPT | REVISE | ESCALATE` option lists and `~~strike~~`, then reads only
+  the `## Verdict` section (or labeled `Verdict:` lines when there is no
+  heading). Of what remains, the most cautious word wins (ESCALATE > REVISE >
+  ACCEPT). An empty heading is `UNKNOWN`, so a prior-round `verdict: ACCEPT`
+  cannot skip the "despite critic concerns?" gate.
 
 ## [0.3.0] - 2026-09-24
 
