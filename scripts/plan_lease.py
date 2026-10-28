@@ -506,10 +506,9 @@ def claimed_rels(plans_root: Path) -> set[str]:
     out: set[str] = set()
     remote = _remote_live_slugs(plans_root)
     if remote:
-        for lane in READY_LANES:
-            for plan in (plans_root / lane).glob("*.md"):
-                if lease_branch.slug_of(plan.name) in remote:
-                    out.add(f"{lane}/{plan.name}")
+        for ref in plan_store.list_lanes(plans_root, READY_LANES):
+            if lease_branch.slug_of(ref.name) in remote:
+                out.add(ref.rel)
     d = leases_dir(plans_root)
     if not d.is_dir():
         return out

@@ -22,6 +22,33 @@ Newest first.
 
 ### Added
 
+- **`anchor plans | work | review | draft` — the plan workflow from a terminal.**
+  `anchor work --list` / `anchor work [<slug>]` / `--heartbeat` / `--finish` /
+  `--return`, `anchor review [--list | <slug>]`, `anchor draft <slug>` /
+  `--promote <slug> --to features|bugs`, and `anchor plans [--board]` do the
+  deterministic parts (pick, claim, lane moves, the merge gate) by calling
+  `plan_select`, `plan_lease`, `work_once` and `merge_feature`, with no model on
+  any default path. Headless runs (`--non-interactive`, `ANCHOR_NONINTERACTIVE=1`,
+  or no TTY) never prompt, always print schema-v1 JSON, never merge and never
+  start a model; a step that needs an operator exits `3` naming the answer.
+  `anchor review` merges only after an in-terminal Approve, only by fast-forward
+  through `merge_feature.py`'s gate (new `run(..., ff_only=True)` mode, re-checked
+  at merge time so a target that moves mid-prompt never leaves a staged merge),
+  onto `dev`/`develop`, never `main`. After a delegated critic says REVISE or
+  ESCALATE, Approve also needs an explicit "approve despite critic concerns?"
+  yes; a remote-only `feature/<slug>` stops instead of archiving unmerged.
+  `--delegate [ENDPOINT]` (interactive only) sends a critic pass or plan prose to
+  an `endpoints.yaml` endpoint via `anchor_client.py`. Existing
+  `anchor <project-dir> [flags]` scaffolding is unchanged; a project directory
+  named like a verb is `./work`. Contract: `anchor/cli.md`, docs
+  *Tooling → Plan workflow verbs*.
+
+- **`scripts/plan_store.py` — one module for plans on disk.** Every workflow
+  script (and the project-orchestrator MCP) now lists lanes, finds slugs, reads
+  and moves plans through it instead of globbing `.plans/` itself; callers see
+  lanes, slugs and `<lane>/<name>` only. Scaffolded with `--fleet` as
+  `.anchor/scripts/plan_store.py`.
+
 - **Shared plan leases on an orphan `leases` branch** (`scripts/lease_branch.py`).
   With a git remote, a claim is published to `leases/<slug>.json` before the plan
   leaves `bugs/`|`features/`, so a plan already leased from another clone is
@@ -49,36 +76,17 @@ Newest first.
   command, and installs only on an explicit yes. Nothing is scaffolded or
   auto-installed, and unattended runs never ask.
 
+### Fixed
+
+- **`anchor review --delegate` no longer treats a template options line or a
+  struck-through ACCEPT as the critic verdict.** `critic_verdict` ignores
+  `ACCEPT | REVISE | ESCALATE` option lists and `~~strike~~`, then takes the
+  most cautious remaining word (ESCALATE > REVISE > ACCEPT) so Approve cannot
+  skip the "despite critic concerns?" gate.
+
 ## [0.3.0] - 2026-09-24
 
 ### Added
-
-- **`anchor plans | work | review | draft` — the plan workflow from a terminal.**
-  `anchor work --list` / `anchor work [<slug>]` / `--heartbeat` / `--finish` /
-  `--return`, `anchor review [--list | <slug>]`, `anchor draft <slug>` /
-  `--promote <slug> --to features|bugs`, and `anchor plans [--board]` do the
-  deterministic parts (pick, claim, lane moves, the merge gate) by calling
-  `plan_select`, `plan_lease`, `work_once` and `merge_feature`, with no model on
-  any default path. Headless runs (`--non-interactive`, `ANCHOR_NONINTERACTIVE=1`,
-  or no TTY) never prompt, always print schema-v1 JSON, never merge and never
-  start a model; a step that needs an operator exits `3` naming the answer.
-  `anchor review` merges only after an in-terminal Approve, only by fast-forward
-  through `merge_feature.py`'s gate (new `run(..., ff_only=True)` mode, re-checked
-  at merge time so a target that moves mid-prompt never leaves a staged merge),
-  onto `dev`/`develop`, never `main`. After a delegated critic says REVISE or
-  ESCALATE, Approve also needs an explicit "approve despite critic concerns?"
-  yes; a remote-only `feature/<slug>` stops instead of archiving unmerged.
-  `--delegate [ENDPOINT]` (interactive only) sends a critic pass or plan prose to
-  an `endpoints.yaml` endpoint via `anchor_client.py`. Existing
-  `anchor <project-dir> [flags]` scaffolding is unchanged; a project directory
-  named like a verb is `./work`. Contract: `anchor/cli.md`, docs
-  *Tooling → Plan workflow verbs*.
-
-- **`scripts/plan_store.py` — one module for plans on disk.** Every workflow
-  script (and the project-orchestrator MCP) now lists lanes, finds slugs, reads
-  and moves plans through it instead of globbing `.plans/` itself; callers see
-  lanes, slugs and `<lane>/<name>` only. Scaffolded with `--fleet` as
-  `.anchor/scripts/plan_store.py`.
 
 - **`/work --batch` is documented on the published skill page** —
   `docs/docs/skills/work.md` now covers the flag its Claude and Grok surfaces

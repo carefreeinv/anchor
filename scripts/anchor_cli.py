@@ -513,17 +513,42 @@ def _remote_branches(root: Path, branch: str) -> list[str]:
 
 
 def critic_verdict(text: str) -> str:
-    """ACCEPT | REVISE | ESCALATE from a critic reply (template ``**Verdict:**`` line first)."""
+    """ACCEPT | REVISE | ESCALATE from a critic reply.
+
+    First-match fails open when the template options line or a struck-through
+    ACCEPT appears before the real verdict. Collect every remaining verdict
+    word in the ``## Verdict`` section (and every ``verdict … WORD`` label in
+    the whole reply), ignore option lists and ``~~strike~~``, and return the
+    most cautious of what is left (ESCALATE > REVISE > ACCEPT).
+    """
     import re
 
-    m = re.search(r"verdict\W{0,6}(ACCEPT|REVISE|ESCALATE)", text, re.IGNORECASE)
-    if m:
-        return m.group(1).upper()
-    upper = text.upper()
-    for word in ("ESCALATE", "REVISE", "ACCEPT"):  # most cautious first
-        if word in upper:
-            return word
-    return "UNKNOWN"
+    rank = {"ESCALATE": 3, "REVISE": 2, "ACCEPT": 1}
+    cleaned = re.sub(r"~~[^~]*~~", " ", text)
+    cleaned = re.sub(
+        r"\bACCEPT(?:\s*\([^)]*\))?\s*\|\s*REVISE(?:\s*\([^)]*\))?\s*\|\s*ESCALATE"
+        r"(?:\s*\([^)]*\))?",
+        " ",
+        cleaned,
+        flags=re.IGNORECASE,
+    )
+    found = {
+        m.group(1).upper()
+        for m in re.finditer(r"verdict\W{0,12}(ACCEPT|REVISE|ESCALATE)", cleaned, re.IGNORECASE)
+    }
+    section = re.search(
+        r"^##[^\n]*\bverdict\b.*?(?=^##\s|\Z)", cleaned,
+        re.IGNORECASE | re.MULTILINE | re.DOTALL,
+    )
+    if section:
+        found.update(w.upper() for w in re.findall(r"\b(ACCEPT|REVISE|ESCALATE)\b",
+                                                   section.group(0), re.IGNORECASE))
+    if not found:
+        found.update(w.upper() for w in re.findall(r"\b(ACCEPT|REVISE|ESCALATE)\b",
+                                                   cleaned, re.IGNORECASE))
+    if not found:
+        return "UNKNOWN"
+    return max(found, key=lambda w: rank[w])
 
 
 def cmd_review(args: argparse.Namespace, mode: Mode, ask: Prompter) -> Result:

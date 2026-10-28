@@ -537,6 +537,11 @@ def test_review_approve_with_remote_only_branch_does_not_archive(repo_project, t
         ("**Verdict:** escalate", "ESCALATE"),
         ("looks fine but I would REVISE the docs; ACCEPT otherwise", "REVISE"),
         ("no verdict here", "UNKNOWN"),
+        # M-A: template options / strikethrough / prior ACCEPT must not fail open
+        ("## Verdict\nACCEPT | REVISE (with …) | ESCALATE\n\nREVISE: fix H1", "REVISE"),
+        ("## Verdict\n~~ACCEPT~~ **REVISE**", "REVISE"),
+        ("Prior round verdict: ACCEPT was premature.\n**Verdict: REVISE**", "REVISE"),
+        ("## Verdict\nACCEPT | REVISE | ESCALATE\n\nESCALATE — needs a bigger model", "ESCALATE"),
     ],
 )
 def test_critic_verdict(text, verdict):
