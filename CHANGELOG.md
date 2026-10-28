@@ -22,6 +22,15 @@ Newest first.
 
 ### Added
 
+- **`scripts/anchor_ops.py` — transport-neutral operations registry under the CLI.**
+  Every `anchor plans|work|review|draft` verb/action is a named handler
+  (`plans.list`, `work.claim`, `review.review`, …) with typed params, a
+  `mutates` flag, and a `requires` class. `anchor_cli.py` is the terminal
+  adapter (parser, prompts, JSON/text). Adapters supply an `Answers` port;
+  a headless or future MCP adapter that never answers cannot merge or
+  substitute an operator flag. Golden `--json` snapshots pin the envelope.
+  Scaffolded with `--fleet` as `.anchor/scripts/anchor_ops.py`.
+
 - **`anchor plans | work | review | draft` — the plan workflow from a terminal.**
   `anchor work --list` / `anchor work [<slug>]` / `--heartbeat` / `--finish` /
   `--return`, `anchor review [--list | <slug>]`, `anchor draft <slug>` /

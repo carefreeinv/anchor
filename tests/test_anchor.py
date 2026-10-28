@@ -875,6 +875,7 @@ def test_dir_named_like_a_verb_is_scaffolded_via_dot_slash(tmp_path):
 
 def test_scaffold_ships_plan_store_with_fleet_tooling():
     assert "scripts/plan_store.py" in anchor.FLEET_FILES
+    assert "scripts/anchor_ops.py" in anchor.FLEET_FILES
 
 
 def test_bin_anchor_works_through_a_symlink(tmp_path):

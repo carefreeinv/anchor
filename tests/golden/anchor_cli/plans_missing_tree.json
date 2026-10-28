@@ -1,0 +1,15 @@
+{
+  "doc": {
+    "action": "plans",
+    "error": "no .plans/ tree under <ROOT>",
+    "exit_code": 2,
+    "mode": "non-interactive",
+    "notes": [],
+    "ok": false,
+    "pending": [],
+    "result": {},
+    "schema_version": 1,
+    "verb": "plans"
+  },
+  "exit_code": 2
+}

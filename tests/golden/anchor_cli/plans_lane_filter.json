@@ -1,0 +1,33 @@
+{
+  "doc": {
+    "action": "list",
+    "error": null,
+    "exit_code": 0,
+    "mode": "non-interactive",
+    "notes": [],
+    "ok": true,
+    "pending": [],
+    "result": {
+      "columns": [
+        "rel",
+        "lane",
+        "slug",
+        "title"
+      ],
+      "counts": {
+        "bugs": 1
+      },
+      "plans": [
+        {
+          "lane": "bugs",
+          "rel": "bugs/b1.md",
+          "slug": "b1",
+          "title": "Plan: b1"
+        }
+      ]
+    },
+    "schema_version": 1,
+    "verb": "plans"
+  },
+  "exit_code": 0
+}

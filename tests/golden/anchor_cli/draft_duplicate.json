@@ -1,0 +1,15 @@
+{
+  "doc": {
+    "action": "draft",
+    "error": "slug 'taken' already used: features/taken.md",
+    "exit_code": 2,
+    "mode": "non-interactive",
+    "notes": [],
+    "ok": false,
+    "pending": [],
+    "result": {},
+    "schema_version": 1,
+    "verb": "draft"
+  },
+  "exit_code": 2
+}

@@ -1,0 +1,46 @@
+{
+  "doc": {
+    "action": "list",
+    "error": null,
+    "exit_code": 0,
+    "mode": "non-interactive",
+    "notes": [],
+    "ok": true,
+    "pending": [],
+    "result": {
+      "columns": [
+        "rel",
+        "lane",
+        "slug",
+        "title"
+      ],
+      "counts": {
+        "ambiguous": 0,
+        "blocked": 0,
+        "bugs": 1,
+        "completed": 0,
+        "drafts": 1,
+        "features": 0,
+        "in-progress": 0,
+        "review-needed": 0
+      },
+      "plans": [
+        {
+          "lane": "bugs",
+          "rel": "bugs/b1.md",
+          "slug": "b1",
+          "title": "Plan: b1"
+        },
+        {
+          "lane": "drafts",
+          "rel": "drafts/d1.md",
+          "slug": "d1",
+          "title": "Plan: d1"
+        }
+      ]
+    },
+    "schema_version": 1,
+    "verb": "plans"
+  },
+  "exit_code": 0
+}

@@ -1,0 +1,26 @@
+{
+  "doc": {
+    "action": "review",
+    "error": null,
+    "exit_code": 0,
+    "mode": "interactive",
+    "notes": [],
+    "ok": true,
+    "pending": [],
+    "result": {
+      "already_merged": null,
+      "branch": null,
+      "changed": [],
+      "decision": "skip",
+      "fast_forward": null,
+      "head": null,
+      "plan": "review-needed/r1.md",
+      "remote_only": [],
+      "target": null,
+      "title": "Plan: r1"
+    },
+    "schema_version": 1,
+    "verb": "review"
+  },
+  "exit_code": 0
+}

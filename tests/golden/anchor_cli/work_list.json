@@ -1,0 +1,42 @@
+{
+  "doc": {
+    "action": "list",
+    "error": null,
+    "exit_code": 0,
+    "mode": "non-interactive",
+    "notes": [],
+    "ok": true,
+    "pending": [],
+    "result": {
+      "columns": [
+        "rel",
+        "lane",
+        "priority",
+        "value",
+        "preferred",
+        "fit",
+        "deps",
+        "assignee",
+        "owner"
+      ],
+      "plans": [
+        {
+          "assignee": "ai",
+          "deps": "met",
+          "deps_unmet": [],
+          "fit": "good",
+          "lane": "features",
+          "owner": null,
+          "preferred": "mid",
+          "priority": "P2",
+          "rel": "features/f1.md",
+          "slug": "f1",
+          "value": "medium"
+        }
+      ]
+    },
+    "schema_version": 1,
+    "verb": "work"
+  },
+  "exit_code": 0
+}

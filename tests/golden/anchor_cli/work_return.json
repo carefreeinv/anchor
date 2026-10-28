@@ -1,0 +1,18 @@
+{
+  "doc": {
+    "action": "return",
+    "error": null,
+    "exit_code": 0,
+    "mode": "non-interactive",
+    "notes": [],
+    "ok": true,
+    "pending": [],
+    "result": {
+      "agent_id": "a1",
+      "plan": "features/f2.md"
+    },
+    "schema_version": 1,
+    "verb": "work"
+  },
+  "exit_code": 0
+}

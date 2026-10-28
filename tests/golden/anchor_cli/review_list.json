@@ -1,0 +1,30 @@
+{
+  "doc": {
+    "action": "list",
+    "error": null,
+    "exit_code": 0,
+    "mode": "non-interactive",
+    "notes": [],
+    "ok": true,
+    "pending": [],
+    "result": {
+      "columns": [
+        "rel",
+        "slug",
+        "title",
+        "held"
+      ],
+      "plans": [
+        {
+          "held": false,
+          "rel": "review-needed/r1.md",
+          "slug": "r1",
+          "title": "Plan: r1"
+        }
+      ]
+    },
+    "schema_version": 1,
+    "verb": "review"
+  },
+  "exit_code": 0
+}

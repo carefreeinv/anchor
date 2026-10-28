@@ -100,9 +100,13 @@ promote a `P2` plan ahead of a `P1`, or `medium` ahead of `high`.
 
 The one access point for plans on disk. Every workflow script (`plan_select`, `plan_lease`, `plan_board`, `check_plans`, `fleet_watch`, `pending_merges`, `release_progress`, `work_once`, `orchestrate`, the project-orchestrator MCP) lists lanes, finds a slug, reads a plan and moves it between lanes through this module. Callers see lanes, slugs and `rel` strings (`<lane>/<name>`, the lease key), never a file extension, glob or file-vs-directory distinction. The layout itself is one `Layout` class (today: one `<slug>.md` / `<slug>.local.md` file per plan). `tests/test_plan_store.py` runs the unchanged callers against a second, folder-per-plan layout and fails if any caller still spells out the file layout. Dot-directories under `.plans/` (`.leases/`, `.releases/`) are sidecars, not lanes, so `check_plans.py` no longer reports `.releases/` as an unknown lane.
 
+## anchor_ops.py
+
+Transport-neutral operations registry for `anchor plans | work | review | draft`. Each verb/action is a named handler (`plans.list`, `work.claim`, `review.review`, …) with typed params, a `mutates` flag, and a `requires` class (`operator` / `model` / `harness` / none). Adapters supply an `Answers` port (the CLI prompts; a headless or MCP adapter never answers) and a `Ctx`. Handlers call `plan_store` / `plan_select` / `plan_lease` / `work_once` / `merge_feature` and add no rules of their own. Safety (no answer-substituting flag, ff-only merge onto integration, never `main`, no nested model when headless) is enforced here, not in the CLI.
+
 ## anchor_cli.py
 
-The `anchor plans | work | review | draft` verbs, reached through `anchor.py` when the first argument is a verb. They wrap the modules above and add no rules of their own. They emit JSON when headless, never prompt, merge or start a model without an operator in the terminal, and exit `3` when an answer is required. Contract and per-verb split: [Plan workflow verbs](/tooling/plan-verbs).
+The terminal adapter over `anchor_ops.py`, reached through `anchor.py` when the first argument is a verb. Parser, interactive prompts, text/JSON rendering, exit-code mapping. It emits JSON when headless, never prompts, merge or start a model without an operator in the terminal, and exit `3` when an answer is required. Contract and per-verb split: [Plan workflow verbs](/tooling/plan-verbs).
 
 ## plan_parse.py
 

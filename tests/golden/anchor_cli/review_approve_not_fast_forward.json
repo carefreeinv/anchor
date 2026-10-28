@@ -1,0 +1,34 @@
+{
+  "doc": {
+    "action": "review",
+    "error": null,
+    "exit_code": 3,
+    "mode": "interactive",
+    "notes": [],
+    "ok": false,
+    "pending": [
+      {
+        "detail": "feature/r1 is not a fast-forward of dev: a merge commit needs /commit-prep on the merged tree \u2014 finish with /review r1",
+        "needs": "harness",
+        "step": "merge-commit"
+      }
+    ],
+    "result": {
+      "already_merged": false,
+      "branch": "feature/r1",
+      "changed": [
+        "thing.txt"
+      ],
+      "decision": "approve",
+      "fast_forward": false,
+      "head": "<SHA>",
+      "plan": "review-needed/r1.md",
+      "remote_only": [],
+      "target": "dev",
+      "title": "Plan: r1"
+    },
+    "schema_version": 1,
+    "verb": "review"
+  },
+  "exit_code": 3
+}

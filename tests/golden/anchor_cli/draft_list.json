@@ -1,0 +1,28 @@
+{
+  "doc": {
+    "action": "list",
+    "error": null,
+    "exit_code": 0,
+    "mode": "non-interactive",
+    "notes": [],
+    "ok": true,
+    "pending": [],
+    "result": {
+      "columns": [
+        "rel",
+        "slug",
+        "title"
+      ],
+      "plans": [
+        {
+          "rel": "drafts/d1.md",
+          "slug": "d1",
+          "title": "Plan: d1"
+        }
+      ]
+    },
+    "schema_version": 1,
+    "verb": "draft"
+  },
+  "exit_code": 0
+}

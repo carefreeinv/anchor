@@ -7,10 +7,12 @@ and it runs no model on any default path. Anything that needs judgment is either
 **delegated** (only when you ask, and only interactively) or **handed back** as
 a named pending step.
 
-Implementation: `scripts/anchor_cli.py`, reached through `scripts/anchor.py`
-(`bin/anchor`) when the first argument is a verb. Every other invocation is the
-scaffolder, unchanged. A project directory that happens to be named `plans`,
-`work`, `review` or `draft` is scaffolded as `./work`.
+Implementation: verb logic lives in `scripts/anchor_ops.py` (a typed operations
+registry). `scripts/anchor_cli.py` is the terminal adapter — parser, prompts,
+text/JSON rendering — reached through `scripts/anchor.py` (`bin/anchor`) when
+the first argument is a verb. Every other invocation is the scaffolder,
+unchanged. A project directory that happens to be named `plans`, `work`,
+`review` or `draft` is scaffolded as `./work`.
 
 ## The rule for the split
 

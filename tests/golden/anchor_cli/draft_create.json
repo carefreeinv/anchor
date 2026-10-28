@@ -1,0 +1,26 @@
+{
+  "doc": {
+    "action": "create",
+    "error": null,
+    "exit_code": 0,
+    "mode": "non-interactive",
+    "notes": [
+      "promote when ready: anchor draft --promote new-thing --to features|bugs"
+    ],
+    "ok": true,
+    "pending": [
+      {
+        "detail": "write the plan's Goal, Steps and Done when (template: anchor/templates/plan.md)",
+        "needs": "model",
+        "step": "plan-prose"
+      }
+    ],
+    "result": {
+      "path": "<ROOT>/.plans/drafts/new-thing.md",
+      "plan": "drafts/new-thing.md"
+    },
+    "schema_version": 1,
+    "verb": "draft"
+  },
+  "exit_code": 0
+}

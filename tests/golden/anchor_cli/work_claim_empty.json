@@ -1,0 +1,17 @@
+{
+  "doc": {
+    "action": "claim",
+    "error": null,
+    "exit_code": 1,
+    "mode": "non-interactive",
+    "notes": [
+      "nothing claimed (see stderr for why)"
+    ],
+    "ok": false,
+    "pending": [],
+    "result": {},
+    "schema_version": 1,
+    "verb": "work"
+  },
+  "exit_code": 1
+}

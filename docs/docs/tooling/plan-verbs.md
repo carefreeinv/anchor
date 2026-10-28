@@ -3,7 +3,7 @@ sidebar_position: 1.5
 sidebar_label: Plan workflow verbs
 ---
 
-<!-- synced-from: anchor/cli.md @ 28b9fa3b4781546e8edab9a3bf3e6bff48164be0 -->
+<!-- synced-from: anchor/cli.md @ 5434829fae248d04a6e22e3274c1e61635e70d82 -->
 
 # The plan-workflow CLI: what `anchor` does itself, and what it hands back
 
@@ -14,10 +14,12 @@ and it runs no model on any default path. Anything that needs judgment is either
 **delegated** (only when you ask, and only interactively) or **handed back** as
 a named pending step.
 
-Implementation: `scripts/anchor_cli.py`, reached through `scripts/anchor.py`
-(`bin/anchor`) when the first argument is a verb. Every other invocation is the
-scaffolder, unchanged. A project directory that happens to be named `plans`,
-`work`, `review` or `draft` is scaffolded as `./work`.
+Implementation: verb logic lives in `scripts/anchor_ops.py` (a typed operations
+registry). `scripts/anchor_cli.py` is the terminal adapter — parser, prompts,
+text/JSON rendering — reached through `scripts/anchor.py` (`bin/anchor`) when
+the first argument is a verb. Every other invocation is the scaffolder,
+unchanged. A project directory that happens to be named `plans`, `work`,
+`review` or `draft` is scaffolded as `./work`.
 
 ## The rule for the split
 

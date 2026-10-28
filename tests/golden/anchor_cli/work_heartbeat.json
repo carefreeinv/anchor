@@ -1,0 +1,19 @@
+{
+  "doc": {
+    "action": "heartbeat",
+    "error": null,
+    "exit_code": 0,
+    "mode": "non-interactive",
+    "notes": [],
+    "ok": true,
+    "pending": [],
+    "result": {
+      "agent_id": "a1",
+      "expires_at": "<TS>",
+      "plan": "in-progress/f1.md"
+    },
+    "schema_version": 1,
+    "verb": "work"
+  },
+  "exit_code": 0
+}

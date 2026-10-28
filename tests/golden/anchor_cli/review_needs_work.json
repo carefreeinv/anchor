@@ -1,0 +1,29 @@
+{
+  "doc": {
+    "action": "review",
+    "error": null,
+    "exit_code": 0,
+    "mode": "interactive",
+    "notes": [
+      "lane move not committed; if .plans/ is tracked: git add .plans/ && git commit -m \"Plans: r1 \u2192 bugs (anchor review needs-work)\" -- .plans/"
+    ],
+    "ok": true,
+    "pending": [],
+    "result": {
+      "already_merged": null,
+      "branch": null,
+      "changed": [],
+      "decision": "needs-work",
+      "fast_forward": null,
+      "head": null,
+      "moved_to": "bugs/r1.md",
+      "plan": "review-needed/r1.md",
+      "remote_only": [],
+      "target": null,
+      "title": "Plan: r1"
+    },
+    "schema_version": 1,
+    "verb": "review"
+  },
+  "exit_code": 0
+}

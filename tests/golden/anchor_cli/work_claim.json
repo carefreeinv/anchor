@@ -1,0 +1,25 @@
+{
+  "doc": {
+    "action": "claim",
+    "error": null,
+    "exit_code": 0,
+    "mode": "non-interactive",
+    "notes": [],
+    "ok": true,
+    "pending": [
+      {
+        "detail": "implement the plan's Steps: /work in-progress/b1.md in your coding harness; then anchor work --finish b1",
+        "needs": "model",
+        "step": "execute"
+      }
+    ],
+    "result": {
+      "agent_id": "a1",
+      "path": "<ROOT>/.plans/in-progress/b1.md",
+      "plan": "in-progress/b1.md"
+    },
+    "schema_version": 1,
+    "verb": "work"
+  },
+  "exit_code": 0
+}

@@ -1,0 +1,36 @@
+{
+  "doc": {
+    "action": "review",
+    "error": null,
+    "exit_code": 3,
+    "mode": "non-interactive",
+    "notes": [],
+    "ok": false,
+    "pending": [
+      {
+        "detail": "AI critic pass over the plan's Done when and the branch diff",
+        "needs": "model",
+        "step": "critic"
+      },
+      {
+        "detail": "Decision for review-needed/r1.md (approve | needs-work | skip | defer)",
+        "needs": "operator",
+        "step": "review-decision"
+      }
+    ],
+    "result": {
+      "already_merged": null,
+      "branch": null,
+      "changed": [],
+      "fast_forward": null,
+      "head": null,
+      "plan": "review-needed/r1.md",
+      "remote_only": [],
+      "target": null,
+      "title": "Plan: r1"
+    },
+    "schema_version": 1,
+    "verb": "review"
+  },
+  "exit_code": 3
+}

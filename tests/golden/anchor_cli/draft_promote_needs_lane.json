@@ -1,0 +1,21 @@
+{
+  "doc": {
+    "action": "draft",
+    "error": null,
+    "exit_code": 3,
+    "mode": "non-interactive",
+    "notes": [],
+    "ok": false,
+    "pending": [
+      {
+        "detail": "Promote drafts/d1.md to (bugs | features)",
+        "needs": "operator",
+        "step": "promote-lane"
+      }
+    ],
+    "result": {},
+    "schema_version": 1,
+    "verb": "draft"
+  },
+  "exit_code": 3
+}

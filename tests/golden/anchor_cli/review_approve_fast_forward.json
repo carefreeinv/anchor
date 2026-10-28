@@ -1,0 +1,37 @@
+{
+  "doc": {
+    "action": "review",
+    "error": null,
+    "exit_code": 0,
+    "mode": "interactive",
+    "notes": [
+      "lane move not committed; if .plans/ is tracked: git add .plans/ && git commit -m \"Plans: r1 \u2192 completed (anchor review approve)\" -- .plans/"
+    ],
+    "ok": true,
+    "pending": [],
+    "result": {
+      "already_merged": false,
+      "branch": "feature/r1",
+      "changed": [
+        "thing.txt"
+      ],
+      "decision": "approve",
+      "fast_forward": true,
+      "head": "<SHA>",
+      "merge": {
+        "message": "gate passed: feature/r1 \u2192 dev (fast-forward), plan 'r1'.",
+        "ok": true,
+        "outcome": "<SHA>",
+        "reason": "ok"
+      },
+      "moved_to": "completed/r1.md",
+      "plan": "review-needed/r1.md",
+      "remote_only": [],
+      "target": "dev",
+      "title": "Plan: r1"
+    },
+    "schema_version": 1,
+    "verb": "review"
+  },
+  "exit_code": 0
+}

@@ -1,0 +1,26 @@
+{
+  "doc": {
+    "action": "finish",
+    "error": null,
+    "exit_code": 0,
+    "mode": "non-interactive",
+    "notes": [
+      "lane move not committed; if .plans/ is tracked: git add .plans/ && git commit -m \"Plans: f1 \u2192 review-needed (anchor work --finish)\" -- .plans/"
+    ],
+    "ok": true,
+    "pending": [
+      {
+        "detail": "sign-off: anchor review f1",
+        "needs": "operator",
+        "step": "review"
+      }
+    ],
+    "result": {
+      "agent_id": "a1",
+      "plan": "review-needed/f1.md"
+    },
+    "schema_version": 1,
+    "verb": "work"
+  },
+  "exit_code": 0
+}

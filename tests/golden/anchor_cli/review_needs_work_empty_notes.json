@@ -1,0 +1,32 @@
+{
+  "doc": {
+    "action": "review",
+    "error": null,
+    "exit_code": 3,
+    "mode": "interactive",
+    "notes": [],
+    "ok": false,
+    "pending": [
+      {
+        "detail": "Actionable notes (required) (an empty answer is not an answer)",
+        "needs": "operator",
+        "step": "needs-work-notes"
+      }
+    ],
+    "result": {
+      "already_merged": null,
+      "branch": null,
+      "changed": [],
+      "decision": "needs-work",
+      "fast_forward": null,
+      "head": null,
+      "plan": "review-needed/r1.md",
+      "remote_only": [],
+      "target": null,
+      "title": "Plan: r1"
+    },
+    "schema_version": 1,
+    "verb": "review"
+  },
+  "exit_code": 3
+}

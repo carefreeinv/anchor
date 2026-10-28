@@ -1,0 +1,28 @@
+{
+  "doc": {
+    "action": "list",
+    "error": null,
+    "exit_code": 1,
+    "mode": "non-interactive",
+    "notes": [],
+    "ok": false,
+    "pending": [],
+    "result": {
+      "columns": [
+        "rel",
+        "lane",
+        "priority",
+        "value",
+        "preferred",
+        "fit",
+        "deps",
+        "assignee",
+        "owner"
+      ],
+      "plans": []
+    },
+    "schema_version": 1,
+    "verb": "work"
+  },
+  "exit_code": 1
+}

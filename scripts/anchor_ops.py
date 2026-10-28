@@ -1,0 +1,807 @@
+#!/usr/bin/env python3
+"""Transport-neutral operations for ``anchor plans | work | review | draft``.
+
+The CLI and (later) the MCP server are adapters over this module. Workflow
+rules stay in ``plan_store`` / ``plan_select`` / ``plan_lease`` / ``work_once`` /
+``merge_feature``; handlers call those modules and never re-derive them.
+
+Adapters supply an ``Answers`` port and a ``Ctx``. Headless and MCP adapters
+pass an ``Answers`` that never answers and omit ``ctx.delegate``.
+"""
+from __future__ import annotations
+
+import os
+import sys
+from collections.abc import Callable
+from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Any, Protocol, TextIO
+
+import plan_lease
+import plan_store
+
+SCHEMA_VERSION = 1
+VERBS = ("plans", "work", "review", "draft")
+
+EXIT_OK = 0
+EXIT_NOTHING = 1
+EXIT_ERROR = 2
+EXIT_NEEDS_OPERATOR = 3
+
+NEEDS_MODEL = "model"
+NEEDS_OPERATOR = "operator"
+NEEDS_HARNESS = "harness"
+
+REVIEW_CHOICES = ("approve", "needs-work", "skip", "defer")
+READY_LANES = ("bugs", "features")
+MYTHOS_CORE = "anchor/system-prompts/mythos-core.md"
+
+DelegateFn = Callable[[str, str, str | None, str], tuple[str, str]]
+RunOrchFn = Callable[[Path, list[str]], int]
+
+
+# --- mode ----------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class Mode:
+    interactive: bool
+    reason: str
+
+    @property
+    def name(self) -> str:
+        return "interactive" if self.interactive else "non-interactive"
+
+
+def detect_mode(
+    flag: bool,
+    *,
+    stdin: TextIO | None = None,
+    stdout: TextIO | None = None,
+    env: dict[str, str] | None = None,
+) -> Mode:
+    """Interactive only when nothing says otherwise and both ends are a TTY."""
+    env = os.environ if env is None else env
+    if flag:
+        return Mode(False, "--non-interactive")
+    if env.get("ANCHOR_NONINTERACTIVE", "") not in ("", "0"):
+        return Mode(False, "ANCHOR_NONINTERACTIVE")
+    try:
+        tty_in = bool((stdin or sys.stdin).isatty())
+        tty_out = bool((stdout or sys.stdout).isatty())
+    except (AttributeError, ValueError, OSError):
+        return Mode(False, "stdio not inspectable")
+    if not tty_in:
+        return Mode(False, "stdin is not a terminal")
+    if not tty_out:
+        return Mode(False, "stdout is not a terminal")
+    return Mode(True, "terminal")
+
+
+# --- errors / result / ports ---------------------------------------------------
+
+
+class NeedsOperator(Exception):
+    """A step needs a human answer that this run cannot get."""
+
+    def __init__(self, step: str, detail: str) -> None:
+        super().__init__(detail)
+        self.step = step
+        self.detail = detail
+
+
+class CliError(Exception):
+    """A usage or hard error: exit 2 with this message."""
+
+
+class NotDelegated(Exception):
+    """Delegation did not happen; the message says why (never a silent skip)."""
+
+
+class Passthrough(Exception):
+    """A verb handed the whole run to an existing script; carry its exit code."""
+
+    def __init__(self, code: int) -> None:
+        super().__init__(code)
+        self.code = code
+
+
+@dataclass
+class Result:
+    verb: str
+    action: str
+    exit_code: int = EXIT_OK
+    data: dict[str, Any] = field(default_factory=dict)
+    pending: list[dict[str, str]] = field(default_factory=list)
+    notes: list[str] = field(default_factory=list)
+    error: str | None = None
+
+    def need(self, step: str, needs: str, detail: str) -> None:
+        self.pending.append({"step": step, "needs": needs, "detail": detail})
+
+    def to_json(self, mode: Mode) -> dict[str, Any]:
+        return {
+            "schema_version": SCHEMA_VERSION,
+            "verb": self.verb,
+            "action": self.action,
+            "mode": mode.name,
+            "exit_code": self.exit_code,
+            "ok": self.exit_code == EXIT_OK,
+            "result": self.data,
+            "pending": self.pending,
+            "notes": self.notes,
+            "error": self.error,
+        }
+
+
+class Answers(Protocol):
+    """The only way an operation may ask anything. Headless implementations raise."""
+
+    def choose(self, step: str, question: str, choices: tuple[str, ...]) -> str: ...
+    def text(self, step: str, question: str) -> str: ...
+
+
+@dataclass
+class NeverAnswers:
+    """MCP / test adapter: every question is ``NeedsOperator``."""
+
+    def choose(self, step: str, question: str, choices: tuple[str, ...]) -> str:
+        raise NeedsOperator(step, f"{question} ({' | '.join(choices)})")
+
+    def text(self, step: str, question: str) -> str:
+        raise NeedsOperator(step, question)
+
+
+@dataclass
+class Ctx:
+    mode: Mode
+    agent_id: str
+    delegate: DelegateFn | None = None
+    run_orchestrate: RunOrchFn | None = None
+
+
+@dataclass(frozen=True)
+class Operation:
+    name: str
+    verb: str
+    action: str
+    mutates: bool
+    requires: str | None
+    handler: Callable[[Any, Answers, Ctx], Result]
+
+
+REGISTRY: dict[str, Operation] = {}
+
+
+def _op(
+    name: str, *, mutates: bool, requires: str | None,
+) -> Callable[[Callable[..., Result]], Callable[..., Result]]:
+    verb, _, action = name.partition(".")
+
+    def wrap(fn: Callable[..., Result]) -> Callable[..., Result]:
+        REGISTRY[name] = Operation(
+            name=name, verb=verb, action=action, mutates=mutates,
+            requires=requires, handler=fn,
+        )
+        return fn
+
+    return wrap
+
+
+def run(name: str, params: Any, answers: Answers, ctx: Ctx) -> Result:
+    return REGISTRY[name].handler(params, answers, ctx)
+
+
+def operations() -> list[Operation]:
+    return list(REGISTRY.values())
+
+
+# --- params --------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class PlansListParams:
+    root: str
+    lanes: tuple[str, ...] | None = None
+
+
+@dataclass(frozen=True)
+class PlansBoardParams:
+    root: str
+    as_json: bool = False
+
+
+@dataclass(frozen=True)
+class WorkListParams:
+    root: str
+    tier: str | None = None
+    model: str | None = None
+    effort: str | None = None
+    endpoint: str | None = None
+    registry: str | None = None
+
+
+@dataclass(frozen=True)
+class WorkClaimParams:
+    root: str
+    slug: str | None = None
+    no_fit_check: bool = False
+    run: bool = False
+    tier: str | None = None
+    model: str | None = None
+    effort: str | None = None
+    endpoint: str | None = None
+    registry: str | None = None
+
+
+@dataclass(frozen=True)
+class WorkSlugParams:
+    root: str
+    slug: str
+
+
+@dataclass(frozen=True)
+class ReviewListParams:
+    root: str
+
+
+@dataclass(frozen=True)
+class ReviewParams:
+    root: str
+    slug: str
+    delegate: str | None = None
+    registry: str | None = None
+
+
+@dataclass(frozen=True)
+class DraftListParams:
+    root: str
+
+
+@dataclass(frozen=True)
+class DraftCreateParams:
+    root: str
+    slug: str
+    title: str | None = None
+    goal: str | None = None
+    local: bool = False
+    delegate: str | None = None
+    registry: str | None = None
+
+
+@dataclass(frozen=True)
+class DraftPromoteParams:
+    root: str
+    slug: str
+    to: str | None = None
+
+
+# --- shared helpers ------------------------------------------------------------
+
+
+def plans_root(root: str) -> Path:
+    path = Path(root).expanduser().resolve()
+    plans = plan_store.plans_root_for(path)
+    if not plans.is_dir():
+        raise CliError(f"no .plans/ tree under {path}")
+    return plans
+
+
+def _title(ref: plan_store.PlanRef) -> str:
+    from plan_select import parse_title, strip_code_fences
+
+    text, err = plan_store.read_text(ref)
+    if err is not None or text is None:
+        return ref.name
+    return parse_title(strip_code_fences(text), ref.name)
+
+
+def _one(plans: Path, lane: str, slug: str) -> plan_store.PlanRef:
+    hits = plan_store.lookup(plans, lane, slug)
+    if not hits:
+        raise CliError(f"no plan {slug!r} in {lane}/")
+    if len(hits) > 1:
+        raise CliError(f"ambiguous slug {slug!r} in {lane}/: {', '.join(h.rel for h in hits)}")
+    return hits[0]
+
+
+def _lane_commit_hint(res: Result, slug: str, lane: str, why: str) -> None:
+    res.notes.append(
+        f"lane move not committed; if .plans/ is tracked: "
+        f'git add .plans/ && git commit -m "Plans: {slug} → {lane} ({why})" -- .plans/'
+    )
+
+
+def _worker(params: WorkListParams | WorkClaimParams):
+    from types import SimpleNamespace
+
+    from work_once import resolve_worker
+
+    return resolve_worker(SimpleNamespace(
+        effort=params.effort, endpoint=params.endpoint, registry=params.registry,
+        model=params.model, tier=params.tier,
+    ))
+
+
+def _try_delegate(ctx: Ctx, *, endpoint: str, role: str, registry: str | None, user: str) -> tuple[str, str]:
+    if ctx.delegate is None:
+        raise NotDelegated("non-interactive run: the calling agent does this step itself")
+    return ctx.delegate(endpoint, role, registry, user)
+
+
+# --- plans ---------------------------------------------------------------------
+
+
+@_op("plans.list", mutates=False, requires=None)
+def op_plans_list(params: PlansListParams, _answers: Answers, _ctx: Ctx) -> Result:
+    plans = plans_root(params.root)
+    lanes = list(params.lanes) if params.lanes else plan_store.lane_names(plans)
+    res = Result("plans", "list")
+    res.data["columns"] = ["rel", "lane", "slug", "title"]
+    res.data["plans"] = [
+        {"rel": r.rel, "lane": r.lane, "slug": r.slug, "title": _title(r)}
+        for r in plan_store.list_lanes(plans, lanes)
+    ]
+    res.data["counts"] = {lane: plan_store.count(plans, lane) for lane in lanes}
+    return res
+
+
+@_op("plans.board", mutates=False, requires=None)
+def op_plans_board(params: PlansBoardParams, _answers: Answers, ctx: Ctx) -> Result:
+    import plan_board
+
+    argv = ["--project", str(Path(params.root).resolve())]
+    if not ctx.mode.interactive or params.as_json:
+        argv.append("--json")
+    raise Passthrough(plan_board.main(argv))
+
+
+# --- work ----------------------------------------------------------------------
+
+
+@_op("work.list", mutates=False, requires=None)
+def op_work_list(params: WorkListParams, _answers: Answers, ctx: Ctx) -> Result:
+    from plan_select import inventory
+
+    plans = plans_root(params.root)
+    res = Result("work", "list")
+    records = inventory(plans, _worker(params), agent_id=ctx.agent_id)
+    res.data["columns"] = [
+        "rel", "lane", "priority", "value", "preferred", "fit", "deps", "assignee", "owner",
+    ]
+    res.data["plans"] = [
+        {
+            "rel": r.rel, "lane": r.lane, "slug": r.slug, "priority": r.priority,
+            "value": r.value, "preferred": r.preferred, "fit": r.fit.value,
+            "deps": "met" if r.deps_met else "UNMET:" + ",".join(r.deps_unmet),
+            "deps_unmet": list(r.deps_unmet),
+            "assignee": "ai" if r.agent_assignable else (r.assignee or "human"),
+            "owner": r.owner,
+        }
+        for r in records
+    ]
+    if not records:
+        res.exit_code = EXIT_NOTHING
+    return res
+
+
+@_op("work.heartbeat", mutates=True, requires=None)
+def op_work_heartbeat(params: WorkSlugParams, _answers: Answers, ctx: Ctx) -> Result:
+    plans = plans_root(params.root)
+    lease = plan_lease.renew(plans, _one(plans, "in-progress", params.slug).rel, ctx.agent_id)
+    res = Result("work", "heartbeat")
+    res.data.update(plan=lease.plan_rel, agent_id=ctx.agent_id, expires_at=lease.expires_at)
+    return res
+
+
+@_op("work.finish", mutates=True, requires=None)
+def op_work_finish(params: WorkSlugParams, _answers: Answers, ctx: Ctx) -> Result:
+    plans = plans_root(params.root)
+    rel = _one(plans, "in-progress", params.slug).rel
+    dest = plan_lease.finish_to_review(plans, rel, ctx.agent_id)
+    ref = plan_store.ref_for_path(plans, dest)
+    res = Result("work", "finish")
+    res.data.update(plan=ref.rel if ref else str(dest), agent_id=ctx.agent_id)
+    res.need("review", NEEDS_OPERATOR, f"sign-off: anchor review {ref.slug if ref else ''}".strip())
+    _lane_commit_hint(res, ref.slug if ref else rel, "review-needed", "anchor work --finish")
+    return res
+
+
+@_op("work.return", mutates=True, requires=None)
+def op_work_return(params: WorkSlugParams, _answers: Answers, ctx: Ctx) -> Result:
+    plans = plans_root(params.root)
+    rel = _one(plans, "in-progress", params.slug).rel
+    dest = plan_lease.return_to_ready(plans, rel, agent_id=ctx.agent_id)
+    ref = plan_store.ref_for_path(plans, dest)
+    res = Result("work", "return")
+    res.data.update(plan=ref.rel if ref else str(dest), agent_id=ctx.agent_id)
+    return res
+
+
+@_op("work.claim", mutates=True, requires=NEEDS_MODEL)
+def op_work_claim(params: WorkClaimParams, _answers: Answers, ctx: Ctx) -> Result:
+    import argparse
+
+    from work_once import pick_claim_one
+
+    plans = plans_root(params.root)
+    res = Result("work", "claim")
+    ns = argparse.Namespace(
+        slug=params.slug, path=None, no_fit_check=params.no_fit_check,
+        no_dep_check=False, allow_assigned=False, agent_id=ctx.agent_id,
+        lease_ttl=plan_lease.DEFAULT_TTL_SECONDS,
+    )
+    try:
+        dest = pick_claim_one(plans, _worker(params), ns)
+    except ValueError as exc:
+        raise CliError(str(exc)) from exc
+    if dest is None:
+        res.exit_code = EXIT_NOTHING
+        res.notes.append("nothing claimed (see stderr for why)")
+        return res
+    ref = plan_store.ref_for_path(plans, dest)
+    rel = ref.rel if ref else str(dest)
+    res.data.update(plan=rel, path=str(dest), agent_id=ctx.agent_id)
+    detail = (
+        f"implement the plan's Steps: /work {rel} in your coding harness; "
+        f"then anchor work --finish {ref.slug if ref else rel}"
+    )
+    if params.run:
+        if ctx.run_orchestrate is None:
+            res.notes.append("--run ignored: non-interactive runs never start a model")
+            res.need("execute", NEEDS_MODEL, detail)
+            return res
+        code = ctx.run_orchestrate(dest, [])
+        res.data["orchestrate_exit"] = code
+        if code != 0:
+            res.exit_code = EXIT_ERROR
+            res.error = f"orchestrate.py exited {code}; plan stays in in-progress/"
+        return res
+    res.need("execute", NEEDS_MODEL, detail)
+    return res
+
+
+# --- review --------------------------------------------------------------------
+
+
+def _review_package(root: Path, slug: str) -> dict[str, Any]:
+    import merge_feature as mf
+
+    branch = f"feature/{slug}"
+    pkg: dict[str, Any] = {"branch": None, "target": None, "head": None,
+                           "fast_forward": None, "already_merged": None, "changed": [],
+                           "remote_only": []}
+    try:
+        if branch not in mf.local_branches(root):
+            pkg["remote_only"] = _remote_branches(root, branch)
+            return pkg
+        target = mf.resolve_target(root)
+        head = mf.head_sha(root, branch)
+        pkg.update(branch=branch, target=target or None, head=head)
+        if target:
+            base = mf.merge_base(root, target, branch)
+            pkg["changed"] = list(mf.changed_files(root, base, head))
+            pkg["fast_forward"] = mf.is_ancestor(root, target, branch)
+            pkg["already_merged"] = mf.is_ancestor(root, branch, target)
+    except (mf.GitError, OSError):
+        pass
+    return pkg
+
+
+def _remote_branches(root: Path, branch: str) -> list[str]:
+    import subprocess
+
+    p = subprocess.run(
+        ["git", "-C", str(root), "for-each-ref", "--format=%(refname:short)",
+         f"refs/remotes/*/{branch}"],
+        capture_output=True, text=True, check=False,
+    )
+    return [line for line in p.stdout.splitlines() if line.strip()] if p.returncode == 0 else []
+
+
+def critic_verdict(text: str) -> str:
+    """ACCEPT | REVISE | ESCALATE from a critic reply.
+
+    A ``## Verdict`` section is the current verdict. Option lists
+    (``ACCEPT | REVISE | ESCALATE``) and ``~~strike~~`` are ignored; of what
+    remains, the most cautious word wins (ESCALATE > REVISE > ACCEPT). A
+    heading with nothing left is ``UNKNOWN`` — a prior-round
+    ``verdict: ACCEPT`` outside the section is not the current verdict.
+    Without a heading, labeled ``Verdict:`` lines (then any remaining word)
+    are used the same way.
+    """
+    import re
+
+    rank = {"ESCALATE": 3, "REVISE": 2, "ACCEPT": 1}
+    cleaned = re.sub(r"~~[^~]*~~", " ", text)
+    cleaned = re.sub(
+        r"\bACCEPT(?:\s*\([^)]*\))?\s*\|\s*REVISE(?:\s*\([^)]*\))?\s*\|\s*ESCALATE"
+        r"(?:\s*\([^)]*\))?",
+        " ",
+        cleaned,
+        flags=re.IGNORECASE,
+    )
+
+    def _pick(words: set[str]) -> str:
+        if not words:
+            return "UNKNOWN"
+        return max(words, key=lambda w: rank[w])
+
+    section = re.search(
+        r"^##[^\n]*\bverdict\b.*?(?=^##\s|\Z)", cleaned,
+        re.IGNORECASE | re.MULTILINE | re.DOTALL,
+    )
+    if section:
+        return _pick({
+            w.upper()
+            for w in re.findall(r"\b(ACCEPT|REVISE|ESCALATE)\b",
+                                section.group(0), re.IGNORECASE)
+        })
+    labeled = {
+        m.group(1).upper()
+        for m in re.finditer(r"verdict\W{0,12}(ACCEPT|REVISE|ESCALATE)", cleaned, re.IGNORECASE)
+    }
+    if labeled:
+        return _pick(labeled)
+    return _pick({
+        w.upper()
+        for w in re.findall(r"\b(ACCEPT|REVISE|ESCALATE)\b", cleaned, re.IGNORECASE)
+    })
+
+
+@_op("review.list", mutates=False, requires=None)
+def op_review_list(params: ReviewListParams, _answers: Answers, _ctx: Ctx) -> Result:
+    import pending_merges
+
+    plans = plans_root(params.root)
+    refs = plan_store.list_lane(plans, "review-needed")
+    res = Result("review", "list")
+    res.data["columns"] = ["rel", "slug", "title", "held"]
+    res.data["plans"] = [
+        {"rel": r.rel, "slug": r.slug, "title": _title(r),
+         "held": pending_merges.is_held(r.path)}
+        for r in refs
+    ]
+    if not refs:
+        res.exit_code = EXIT_NOTHING
+    return res
+
+
+@_op("review.review", mutates=True, requires=NEEDS_OPERATOR)
+def op_review(params: ReviewParams, answers: Answers, ctx: Ctx) -> Result:
+    plans = plans_root(params.root)
+    root = plans.parent
+    ref = _one(plans, "review-needed", params.slug)
+    res = Result("review", "review")
+    pkg = _review_package(root, ref.slug)
+    res.data.update(plan=ref.rel, title=_title(ref), **pkg)
+
+    if params.delegate:
+        _critic(params, ctx, ref, pkg, root, res)
+    else:
+        res.need("critic", NEEDS_MODEL,
+                 "AI critic pass over the plan's Done when and the branch diff")
+
+    try:
+        return _decide(res, answers, root, plans, ref, pkg)
+    except NeedsOperator as exc:
+        res.exit_code = EXIT_NEEDS_OPERATOR
+        res.need(exc.step, NEEDS_OPERATOR, exc.detail)
+        return res
+
+
+def _decide(res: Result, answers: Answers, root: Path, plans: Path, ref, pkg) -> Result:
+    choice = answers.choose("review-decision", f"Decision for {ref.rel}", REVIEW_CHOICES)
+    res.data["decision"] = choice
+    res.pending = [p for p in res.pending if p["step"] != "critic"]
+    if choice == "skip":
+        return res
+    if choice == "approve":
+        verdict = (res.data.get("critic") or {}).get("verdict")
+        if verdict in ("REVISE", "ESCALATE", "UNKNOWN"):
+            sure = answers.choose(
+                "approve-despite-critic",
+                f"The critic's verdict is {verdict}. Approve despite critic concerns?",
+                ("yes", "no"),
+            )
+            if sure != "yes":
+                res.data["decision"] = "skip"
+                res.notes.append("not approved: critic concerns stand; plan left in review-needed/")
+                return res
+        return _approve(res, root, plans, ref, pkg)
+    if choice == "needs-work":
+        lane = answers.choose("needs-work-lane", "Return it as", READY_LANES)
+        notes = answers.text("needs-work-notes", "Actionable notes (required)")
+        _append_section(ref, "Review notes", notes)
+        new = plan_store.move(plans, ref.rel, lane)
+        res.data["moved_to"] = new.rel
+        _lane_commit_hint(res, ref.slug, lane, "anchor review needs-work")
+        return res
+    blocker = answers.text("defer-blocker", "What blocks it (required)")
+    _append_section(ref, "Blocked", blocker)
+    new = plan_store.move(plans, ref.rel, "blocked")
+    res.data["moved_to"] = new.rel
+    _lane_commit_hint(res, ref.slug, "blocked", "anchor review defer")
+    return res
+
+
+def _critic(params: ReviewParams, ctx: Ctx, ref, pkg, root: Path, res: Result) -> None:
+    import subprocess
+
+    text, _err = plan_store.read_text(ref)
+    diff = ""
+    if pkg.get("head") and pkg.get("target"):
+        p = subprocess.run(
+            ["git", "-C", str(root), "diff", f"{pkg['target']}...{pkg['head']}"],
+            capture_output=True, text=True, check=False,
+        )
+        diff = p.stdout[:60000]
+    try:
+        import anchor_client
+
+        template = anchor_client.load_prompt("anchor/templates/review.md")
+    except (ImportError, OSError):
+        template = ""
+    user = (
+        "You are the critic. Review only; do not fix. Judge whether the Done when "
+        f"items hold.\n\nTEMPLATE:\n{template}\n\nPLAN:\n{text or ''}\n\nDIFF:\n{diff}"
+    )
+    try:
+        name, out = _try_delegate(ctx, endpoint=params.delegate or "auto", role="critic",
+                                  registry=params.registry, user=user)
+    except NotDelegated as exc:
+        res.notes.append(f"critic not delegated: {exc}")
+        res.need("critic", NEEDS_MODEL,
+                 "AI critic pass over the plan's Done when and the branch diff")
+        return
+    res.data["critic"] = {"endpoint": name, "verdict": critic_verdict(out), "text": out}
+
+
+def _approve(res: Result, root: Path, plans: Path, ref, pkg: dict[str, Any]) -> Result:
+    import merge_feature as mf
+
+    if pkg.get("remote_only"):
+        res.exit_code = EXIT_NEEDS_OPERATOR
+        res.need(
+            "local-branch", NEEDS_OPERATOR,
+            f"feature/{ref.slug} exists only as {', '.join(pkg['remote_only'])}: "
+            f"check it out locally (git switch feature/{ref.slug}) and re-run — "
+            "approving now would archive the plan without merging it",
+        )
+        return res
+    if pkg["branch"] and not pkg["already_merged"]:
+        not_ff = (
+            f"{pkg['branch']} is not a fast-forward of {pkg['target']}: a merge commit "
+            f"needs /commit-prep on the merged tree — finish with /review {ref.slug}"
+        )
+        if not pkg["fast_forward"]:
+            res.exit_code = EXIT_NEEDS_OPERATOR
+            res.need("merge-commit", NEEDS_HARNESS, not_ff)
+            return res
+        verdict, outcome = mf.run(
+            root, ref.slug, tuple(pkg["changed"]),
+            expect_head=pkg["head"], target=pkg["target"], title=res.data.get("title", ""),
+            ff_only=True,
+        )
+        res.data["merge"] = {"ok": verdict.ok, "reason": verdict.reason,
+                             "message": verdict.message, "outcome": outcome}
+        if verdict.reason == "not-fast-forward" or outcome == mf.NOT_FAST_FORWARD:
+            res.exit_code = EXIT_NEEDS_OPERATOR
+            res.need("merge-commit", NEEDS_HARNESS, not_ff)
+            return res
+        if not verdict.ok or outcome is None:
+            res.exit_code = EXIT_ERROR
+            res.error = f"merge refused: {verdict.message}"
+            return res
+    new = plan_store.move(plans, ref.rel, "completed")
+    res.data["moved_to"] = new.rel
+    _lane_commit_hint(res, ref.slug, "completed", "anchor review approve")
+    return res
+
+
+def _append_section(ref: plan_store.PlanRef, heading: str, body: str) -> None:
+    text, err = plan_store.read_text(ref)
+    if err is not None or text is None:
+        raise CliError(f"cannot read {ref.rel}: {err}")
+    ref.path.write_text(text.rstrip("\n") + f"\n\n## {heading}\n{body}\n", encoding="utf-8")
+
+
+# --- draft ---------------------------------------------------------------------
+
+DRAFT_SKELETON = """# Plan: {title}
+
+- **Value:** medium
+- **Priority:** P2
+- **Slug:** {slug}
+- **Preferred models:** mid
+- **Assignee:** ai
+- **Depends on:** none
+
+## Goal
+{goal}
+
+## Steps
+| # | Task | Touches | Verify by | Route to |
+|---|------|---------|-----------|----------|
+| 1 | TODO | | | |
+
+## Done when
+- TODO
+"""
+
+REQUIRED_SECTIONS = ("## Goal", "## Steps", "## Done when")
+
+
+@_op("draft.list", mutates=False, requires=None)
+def op_draft_list(params: DraftListParams, _answers: Answers, _ctx: Ctx) -> Result:
+    plans = plans_root(params.root)
+    res = Result("draft", "list")
+    res.data["columns"] = ["rel", "slug", "title"]
+    res.data["plans"] = [
+        {"rel": r.rel, "slug": r.slug, "title": _title(r)}
+        for r in plan_store.list_lane(plans, "drafts")
+    ]
+    if not res.data["plans"]:
+        res.exit_code = EXIT_NOTHING
+    return res
+
+
+@_op("draft.create", mutates=True, requires=NEEDS_MODEL)
+def op_draft_create(params: DraftCreateParams, _answers: Answers, ctx: Ctx) -> Result:
+    plans = plans_root(params.root)
+    taken = plan_store.find_slug(plans, params.slug, dated=False)
+    if taken:
+        raise CliError(f"slug {params.slug!r} already used: {', '.join(r.rel for r in taken)}")
+    goal = params.goal or "TODO — the outcome, in one paragraph."
+    text = DRAFT_SKELETON.format(title=params.title or params.slug, slug=params.slug, goal=goal)
+    res = Result("draft", "create")
+    prose_step = "write the plan's Goal, Steps and Done when (template: anchor/templates/plan.md)"
+
+    if params.delegate:
+        text = _delegated_draft(params, ctx, text, res) or text
+    else:
+        res.need("plan-prose", NEEDS_MODEL, prose_step)
+
+    ref = plan_store.create(plans, "drafts", params.slug, text, local=params.local)
+    res.data.update(plan=ref.rel, path=str(ref.path))
+    res.notes.append(f"promote when ready: anchor draft --promote {params.slug} --to features|bugs")
+    return res
+
+
+@_op("draft.promote", mutates=True, requires=NEEDS_OPERATOR)
+def op_draft_promote(params: DraftPromoteParams, answers: Answers, _ctx: Ctx) -> Result:
+    plans = plans_root(params.root)
+    ref = _one(plans, "drafts", params.slug)
+    lane = params.to or answers.choose("promote-lane", f"Promote {ref.rel} to", READY_LANES)
+    new = plan_store.move(plans, ref.rel, lane)
+    res = Result("draft", "promote")
+    res.data.update(plan=new.rel)
+    _lane_commit_hint(res, ref.slug, lane, "anchor draft --promote")
+    return res
+
+
+def _delegated_draft(params: DraftCreateParams, ctx: Ctx, skeleton: str, res: Result) -> str | None:
+    try:
+        import anchor_client
+
+        template = anchor_client.load_prompt("anchor/templates/plan.md")
+    except (ImportError, OSError):
+        template = ""
+    user = (
+        "Write ONE complete plan file following this template. Output only the "
+        f"markdown.\n\nTEMPLATE:\n{template}\n\nSTARTING POINT:\n{skeleton}"
+    )
+    try:
+        name, out = _try_delegate(ctx, endpoint=params.delegate or "auto", role="planner",
+                                  registry=params.registry, user=user)
+    except NotDelegated as exc:
+        res.notes.append(f"plan prose not delegated: {exc}")
+        res.need("plan-prose", NEEDS_MODEL, "write the plan's Goal, Steps and Done when")
+        return None
+    missing = [s for s in REQUIRED_SECTIONS if s not in out]
+    if missing:
+        res.notes.append(f"{name} draft rejected (missing {', '.join(missing)}); kept skeleton")
+        res.need("plan-prose", NEEDS_MODEL, "write the plan's Goal, Steps and Done when")
+        return None
+    res.data["delegated_to"] = name
+    return out.strip() + "\n"

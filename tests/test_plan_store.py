@@ -313,6 +313,7 @@ CALLERS = [
     "scripts/orchestrate.py",
     "mcp/project-orchestrator/coordinator.py",
     "scripts/anchor_cli.py",
+    "scripts/anchor_ops.py",
     "scripts/lease_branch.py",
 ]
 

@@ -29,6 +29,7 @@ package-dir = { "" = "scripts" }
 py-modules = [
     "anchor",
     "anchor_cli",
+    "anchor_ops",
     "anchor_client",
     "fit_device",
     "lease_branch",
