@@ -60,7 +60,7 @@ into **`.plans/drafts/<slug>.md`**, including **Preferred models** and **Depends
 (inventory other `.plans/**` goals first; use `none` only after checking). Do **not**
 promote out of `drafts/` except via **`/draft --promote <slug>`** (infer bugs vs
 features from the plan; or a human move; **path is the ready marker**). Executors claim → `in-progress/`,
-finish → `review-needed/` (human `/review` → `completed/`); park half-baked/stuck work in `ambiguous/`|`blocked/`. Prefer
+two finish workflows — human-assisted: `in-progress/` → `review-needed/` (human `/review` → `completed/`); autonomous: critic **ACCEPT** then `completed/` on `feature/<slug>` + PR (never merge); park half-baked/stuck work in `ambiguous/`|`blocked/`. Prefer
 a durable Preferred orchestrator; if unset, frontier/near-frontier may be temporary
 coordinator. Executors: **`/work`** or `work_once` / `orchestrate.py --plan-file`.
 

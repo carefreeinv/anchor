@@ -129,8 +129,10 @@ explicit named claim you own); bugs before features; honor **Preferred models**
 and **Depends on** (skip unmet deps); never execute `drafts/` / `completed/` /
 `ambiguous/` / `blocked/`; ignore foreign `in-progress/`; claim ready →
 `in-progress/` (atomic move + required lease); park half-baked → `ambiguous/` or
-stuck → `blocked/`; finish `in-progress/` → `review-needed/` (required; human
-**`/review`** → `completed/`).
+stuck → `blocked/`; **two finish workflows** — human-assisted: `in-progress/` →
+`review-needed/` (human **`/review`** → `completed/`); autonomous/cloud: critic
+**ACCEPT** then `in-progress/` → `completed/` on `feature/<slug>` + PR (never
+merge; never on REVISE).
 Do not promote drafts from `/work` (use `/draft --promote`). If Preferred orchestrator is unset, frontier/near-frontier
 (including a Grok session as lead, 4.5 or 4.6 per its own harness line) may act as temporary coordinator
 (`TEMPORARY-COORDINATOR:`). On Git projects: **worktree per agent**

@@ -6,6 +6,20 @@ Newest first.
 
 ## [Unreleased]
 
+### Changed
+
+- **Two finish workflows for tracked plans.** Human-assisted `/work` still parks
+  in `review-needed/` (or merges to `dev` only when the operator answers the
+  culmination question). Autonomous / cloud runs (`work_once.py`, fleet,
+  coordinator MCP) loop executor → critic until **ACCEPT**, then move the plan
+  `in-progress/` → `completed/` **on `feature/<slug>`** and open a pull request
+  targeting integration. They still **never merge**. Critic **REVISE** never
+  archives and never opens a PR. `/review` remains the human survey for
+  `review-needed/` and still does not auto-open a PR. Doctrine, `/work`,
+  `/review`, Chat, platform briefs, and
+  [How work reaches `dev`](https://carefreeinv.com/anchor/tooling/how-work-reaches-dev)
+  describe the split.
+
 ### Added
 
 - **Agents offer `smky` for reusable browser smoke tests, only when it fits.**

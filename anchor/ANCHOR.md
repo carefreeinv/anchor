@@ -134,12 +134,22 @@ makes a local plan tracked. **Path is
 authoritative:** `bugs/` and `features/` are ready; agents move claimed work to
 `in-progress/` (only the claimer continues — others **ignore**); may park to
 `ambiguous/` (half-baked) or `blocked/` (cannot fix), or return in-progress to
-ready; agents finish claimed work to `review-needed/` (human sign-off via
-**`/review`** → `completed/`) — or, when the operator answers `/work`'s end-of-run
-culmination question with **merge to `dev` now** and the branch passes the
-scoped-merge gate, straight to `completed/` with a `## Handoff` note recording the
-skipped review; never execute `drafts/` / `ambiguous/` /
-`blocked/` / `review-needed/`. Do not put `Lane:` or `Status:` inside plan files.
+ready. **Two finish workflows.** *Human-assisted* (interactive `/work` /
+`/review`): work → critic → (REVISE → work)* → the human decides. Default agent
+finish is `review-needed/` for **`/review`** (Approve merges `feature/<slug>` →
+`dev` then → `completed/`; Needs Work → `bugs|features/`) — or, when the operator
+answers `/work`'s culmination question with **merge to `dev` now** and the branch
+passes the scoped-merge gate, straight to `completed/` with a `## Handoff` note
+recording the skipped review. Human-assisted sessions never auto-open a PR.
+*Autonomous / cloud* (`work_once.py`, fleet workers, coordinator MCP, any
+unattended run): work → critic → (REVISE → work)* → **ACCEPT**. Only after a
+fresh-context critic rates **ACCEPT** (template `ACCEPT`; **APPROVED** means the
+same) does the agent move the plan `in-progress/` → `completed/` **on
+`feature/<slug>`**, commit that move, push, and open a PR targeting integration.
+REVISE never archives and never opens a PR. Autonomous runs **never merge**.
+`review-needed/` is not the autonomous finish lane. Never execute `drafts/` /
+`ambiguous/` / `blocked/` / `review-needed/`. Do not put `Lane:` or `Status:`
+inside plan files.
 **Promotion** from `drafts/` → ready is via explicit **`/draft --promote <slug>`**
 (user-authorized; agent infers `bugs/` vs `features/` from the plan; **keeps**
 `.local.md` if present) or a human filesystem move — never from `/work` or fleet pullers. Selection order: own

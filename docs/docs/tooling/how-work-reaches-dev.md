@@ -6,21 +6,25 @@ sidebar_label: How work reaches dev
 # How work reaches `dev`
 
 Getting finished work from a plan onto the integration branch is the least legible
-part of the workflow. There are exactly **two** routes onto `dev`, one route onto
-`main`, and one command that only ever reports.
+part of the workflow. There are **two local-merge routes** onto `dev`, one
+**pull-request route** (autonomous / cloud), one route onto `main`, and one
+command that only ever reports.
 
 ```mermaid
 flowchart LR
   feat["feature/&lt;slug&gt;"]
+  pr["pull request"]
   dev["dev"]
   main["main"]
 
   feat -->|"/review Approve<br/>(AI critic + human survey)"| dev
   feat -->|"/work culmination answer<br/>(scoped-merge gate)"| dev
+  feat -->|"autonomous critic ACCEPT<br/>completed/ on branch"| pr
+  pr -->|"human merges the PR"| dev
   dev -->|"/review empty-queue Promote"| main
 ```
 
-## The two routes onto integration
+## The two local-merge routes onto integration
 
 | | [`/review`](/skills/review) Approve | [`/work`](/skills/work) scoped merge |
 |---|---|---|
@@ -31,8 +35,19 @@ flowchart LR
 | Unattended runs (fleet, `work_once.py`, MCP) | n/a | **Never** — the question needs a human answer |
 | Plan ends in | `completed/` | `completed/`, with a `## Handoff` note recording the skipped review |
 
-Both are human-authorized. The difference is *what* the human is trusting: a critic
+Both local-merge routes are human-authorized. The difference is *what* the human is trusting: a critic
 pass plus a survey, or their own attention during a run they just watched.
+
+## The autonomous PR route
+
+Unattended / cloud runs (`work_once.py`, fleet workers, coordinator MCP) **never
+merge**. Their finish is work → critic → (REVISE → work)* → **ACCEPT**, then
+move the plan to `completed/` **on `feature/<slug>`**, push, and open a PR
+targeting integration (`dev`/`develop`). A human (or the host merge queue)
+merges that PR. Critic **REVISE** never archives and never opens a PR.
+`pending_merges.py` already flags this as **completed work awaiting merge**.
+
+Human-assisted `/work` never auto-opens a PR.
 
 ## The scoped-merge gate
 

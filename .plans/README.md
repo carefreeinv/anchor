@@ -20,7 +20,7 @@ files freely; do **not** put `Lane:` or `Status:` inside plan markdown.
 | `in-progress/` | claimed / being worked | **only the agent that moved it there** |
 | `ambiguous/` | half-baked / needs clarification | **no** (parked; not auto-picked) |
 | `blocked/` | cannot proceed with current means | **no** (parked; not auto-picked) |
-| `review-needed/` | agent believes `Done when` holds; awaiting human sign-off | **no** (human runs **`/review`**: Approve merges `feature/<slug>` → **dev** then → `completed/`; Needs Work → `bugs|features/`; Skip stays; empty queue may **Promote** dev → main) |
+| `review-needed/` | agent believes `Done when` holds; awaiting human sign-off (human-assisted finish) | **no** (human runs **`/review`**: Approve merges `feature/<slug>` → **dev** then → `completed/`; Needs Work → `bugs|features/`; Skip stays; empty queue may **Promote** dev → main). Not the autonomous finish lane |
 | `drafts/` | not ready (edit / design) | no one (edit only) |
 | `completed/` | finished archive | no one |
 
@@ -30,10 +30,13 @@ Agents may relocate plan files **only** as follows:
 
 ```text
 bugs|features/<slug>.md     ──mv──►  in-progress/     (starting work + lease)
-in-progress/<slug>.md       ──mv──►  review-needed/   (Done when holds — default finish)
-in-progress/<slug>.md       ──mv──►  completed/       (ONLY via /work culmination merge:
+in-progress/<slug>.md       ──mv──►  review-needed/   (human-assisted: Done when holds)
+in-progress/<slug>.md       ──mv──►  completed/       (1) /work culmination merge:
                                                       operator answers in-session +
-                                                      scoped-merge gate passes)
+                                                      scoped-merge gate passes
+                                                      (2) autonomous: critic ACCEPT
+                                                      on feature/<slug>, immediately
+                                                      before opening a PR — never a merge)
 review-needed/<slug>.md     ──mv──►  completed/       (HUMAN ONLY via /review Approve)
 review-needed/<slug>.md     ──mv──►  in-progress/     (human requested changes; agent resumes)
 review-needed/<slug>.md     ──mv──►  bugs|features/   (release/return; also /review Needs Work)
@@ -58,9 +61,11 @@ Agents must **never**:
 - Swap `bugs/` ↔ `features/` except via explicit return targeting a lane
 - Move anything out of `completed/`
 - **Move `in-progress/` → `completed/`** on your own judgment — that transition
-  exists only as the tail of an operator-authorized `/work` culmination merge
-  (question asked, answer given, scoped gate passed); there is no self-certify
-  archive path
+  exists only as (1) the tail of an operator-authorized `/work` culmination merge
+  (question asked, answer given, scoped gate passed) or (2) the tail of a
+  fresh-context critic **ACCEPT** on an autonomous/cloud run, immediately before
+  opening a PR. Neither path is a self-certified merge
+- **Open a PR or archive to `completed/`** after a critic **REVISE**
 - **Move `review-needed/` → `completed/`** except under a human-confirmed
   **`/review` Approve** — that is the entire point of the lane
 - **Touch another agent’s `in-progress/` plan** (ignore it)
@@ -125,13 +130,16 @@ Claim:    agent → move into in-progress/ + lease (path = working)
 Execute:  /work → follow Steps; verify each step
 Park:     agent → ambiguous/ (half-baked) or blocked/ (cannot fix)
 Release:  agent → bugs|features/ (give up claim; still ready for others)
-Finish:   agent → git mv in-progress/ → review-needed/ (Done when holds —
-          default). Human runs **`/review`**: AI critic + survey —
+Finish:   two workflows. Human-assisted → git mv in-progress/ → review-needed/
+          (Done when holds). Human runs **`/review`**: AI critic + survey —
           Approve → completed/; Needs Work → bugs|features/ (inferred);
           Skip stays in review-needed/. OR the operator answers /work's
           culmination question with "merge to dev now": scoped gate runs,
           branch lands on dev, plan → completed/ with a ## Handoff note.
-          Agents never archive to completed/ on their own judgment.
+          Human-assisted never auto-opens a PR. Autonomous/cloud → critic
+          loop until ACCEPT, then in-progress/ → completed/ on feature/<slug>,
+          push, open a PR targeting integration; never merge. REVISE never
+          archives and never opens a PR.
 Worktree: parallel agents use scripts/worktree_for_agent.py ensure
           --agent-id … [--slug …] (var/worktrees/<id>/); or work_once --ensure-worktree
 Branch:   from **dev** (else **develop**); if neither exists, **create dev**
@@ -241,7 +249,7 @@ automatically), then marks the release `ready` so it doesn't ask again.
 | Role | Writes / reads |
 |------|----------------|
 | Planner (NIM, local, human) | Write under `drafts/` only; **human** moves when ready |
-| Executor (`/work`, Fable, Sonnet, Grok, …) | Ready → own `in-progress/` → `review-needed/`; human **`/review`** → `completed/` (or Needs Work → ready); ignore others’ in-progress |
+| Executor (`/work`, Fable, Sonnet, Grok, …) | Ready → own `in-progress/`. Human-assisted → `review-needed/` then human **`/review`**. Autonomous → critic ACCEPT → `completed/` on the feature branch + PR (never merge). Ignore others’ in-progress |
 | Critic | Plan **Done when** + diff |
 
 Plans must be **self-contained** (Goal, Steps with verify commands, Done when).

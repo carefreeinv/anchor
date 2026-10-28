@@ -12,9 +12,14 @@ agents ignore foreign in-progress plans. Not a daemon; not a central assigner.
 **Never merges, never asks.** Interactive `/work` may land a finished branch on the
 integration branch when the operator answers its end-of-run culmination question
 (see `.claude/commands/work.md` §6). That path requires a human answer in-session,
-so it does not exist here: a headless worker finishes to `.plans/review-needed/` and
-leaves integration to `/review`. Do not add a flag that stands in for the answer —
-an unattended merge is exactly what the gate is designed to prevent.
+so it does not exist here. A headless worker's finish is the **autonomous critic
+loop** (work → review → review → PR): work → critic → (REVISE → work)* →
+**ACCEPT** (critic ACCEPT), then `in-progress/` → `completed/` **on
+``feature/<slug>``**, push, and open a PR targeting integration.
+Do not add a flag that stands in for a merge answer — an unattended merge is
+exactly what the gate is designed to prevent. Do not open a PR or archive to
+`completed/` on critic **REVISE**. `review-needed/` is not this worker's finish
+lane.
 
 Usage:
   python work_once.py --list

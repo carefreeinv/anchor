@@ -227,8 +227,9 @@ Workers do **not** watch `drafts/` or chat. Eligibility is entirely filesystem:
 | Foreign `in-progress/` | other workers | **Ignore** — do not list as pickable, do not execute |
 | Park → `ambiguous/` or `blocked/` | agent | Half-baked or cannot-fix; **not** auto-picked |
 | Return → `bugs/`\|`features/` | agent | Release claim or unpark when ready again |
-| `git mv` → `review-needed/` | owning executor when Done when holds (**required** agent finish) | Leaves in-progress; **not** auto-picked; human **`/review`** → `completed/` or Needs Work → ready |
-| `git mv` → `completed/` | **human only** (via `/review` Approve) | Agents must not self-archive |
+| `git mv` → `review-needed/` | owning executor, **human-assisted** finish when Done when holds | Leaves in-progress; **not** auto-picked; human **`/review`** → `completed/` or Needs Work → ready |
+| `git mv` → `completed/` on `feature/<slug>` | owning executor, **autonomous** finish after critic **ACCEPT**, immediately before opening a PR | Never on **REVISE**. Never a merge. `pending_merges.py` treats this as completed awaiting merge |
+| `git mv` → `completed/` after local merge | **human** via `/review` Approve, or `/work` culmination “merge to `dev` now” | Agents must not self-certify a merge |
 
 So “monitor the project folder” means: **poll `.plans/bugs`, `.plans/features`, and your own `.plans/in-progress`**, not the whole repository. Prefer promoting drafts only when acceptance criteria and Preferred models are filled in.
 
@@ -260,7 +261,7 @@ python scripts/worktree_for_agent.py remove --project /srv/myapp --agent-id mid-
 python scripts/work_once.py --once --tier mid --agent-id mid-1 --ensure-worktree
 ```
 
-**Rules:** edit code **only** in your worktree path; `/commit-prep` before commit; push the **feature branch** only; **never merge** — the operator-answered culmination merge in interactive `/work` does not exist for unattended workers, which always finish to `review-needed/`. Plan leases stay under the project’s `.plans/` (shared); the worktree is for the *code* tree only.
+**Rules:** edit code **only** in your worktree path; `/commit-prep` before commit; push the **feature branch** only; **never merge** — the operator-answered culmination merge in interactive `/work` does not exist for unattended workers. Their finish is the autonomous critic loop: work → critic → (REVISE → work)* → **ACCEPT**, then `in-progress/` → `completed/` **on `feature/<slug>`**, push, open a PR targeting integration. Never archive or open a PR on **REVISE**. Plan leases stay under the project’s `.plans/` (shared); the worktree is for the *code* tree only.
 
 ## Leases and claims
 
@@ -309,7 +310,7 @@ Never “drain entire backlog forever” as the default—bounded polls keep eco
 4. [ ] Each worker has unique `--agent-id` and correct `--tier` / `--endpoint`.
 5. [ ] Pollers treat exit `1` as idle; alert only on exit `2` or repeated claim storms.
 6. [ ] Git isolation: **worktree per agent-id** (`worktree_for_agent.py` / `work_once --ensure-worktree`) or single-writer clone.
-7. [ ] On completion, executor moves to review-needed: `git mv .plans/in-progress/<slug>.md .plans/review-needed/` (human `/review` → `completed/`).
+7. [ ] On autonomous completion after critic **ACCEPT**: `git mv .plans/in-progress/<slug>.md .plans/completed/`, push `feature/<slug>`, open a PR targeting `dev` (never merge; never on REVISE). Human-assisted sessions still park in `review-needed/` for `/review`.
 8. [ ] Spot-check with `--list` per tier (deps column shows met/UNMET):
 
 ```bash

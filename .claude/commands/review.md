@@ -77,12 +77,19 @@ Flags may combine with a slug: `/review --no-launch my-slug`.
 
    Do **not** ask Approve/Needs Work before the AI pass finishes (or a clear
    “AI pass skipped/failed: …” message), unless `--skip-ai`.
-3. **AI is advisory.** It never auto-approves or auto-rejects. The human
-   survey is authoritative for merges and lane moves.
+   **Never** move to `completed/` or open a PR on critic **REVISE**. This skill
+   is the **human-assisted** critic + survey. The autonomous critic loop
+   (work → review → review → PR) lives in `/work` §6; it does not survey and
+   it must not be run as a silent extra step of this pipeline.
+3. **AI is advisory** for merges and human lane moves. The human survey is
+   authoritative here. Autonomous `/work` treats critic **ACCEPT** as a hard
+   gate for archive-on-branch + PR — that is a different workflow, not this
+   skill auto-approving.
 4. **`review-needed/` → `completed/`** only after **Approve** in the survey
    (plus any required override follow-up) **and** the feature→integration merge
    succeeded (or there was nothing to merge). Weak “lgtm” without survey choice
-   does not complete — re-prompt when ambiguous.
+   does not complete — re-prompt when ambiguous. If autonomous `/work` already
+   archived the plan on the feature branch, Approve merge is “nothing to archive”.
 5. **Needs Work** → **`bugs/` or `features/`** (inferred), **never**
    `in-progress/`. Actionable notes required first. **No merge** on Needs Work.
 6. **Merge only after human survey Approve / Promote.** Never merge on AI ACCEPT
@@ -95,9 +102,11 @@ Flags may combine with a slug: `/review --no-launch my-slug`.
    A `/work` session may merge `feature/<slug>` → **integration only**, and only
    when the operator answers its end-of-run culmination question in-session *and*
    the branch passes the scoped-merge gate (`scripts/merge_feature.py`). Everything
-   else stays here: unattended/fleet runs never merge, and **this skill is the only
+   else stays here: unattended/fleet runs never merge (they open a PR after
+   critic **ACCEPT** via `/work` §6), and **this skill is the only
    route to `main`/`master`** (empty-queue Promote). A plan that arrives in
-   `review-needed/` was not merged by `/work` — review it normally.
+   `review-needed/` was not merged by `/work` — review it normally. This skill
+   **never auto-opens a PR**.
 
 ## Integration / mainline resolution
 
@@ -567,6 +576,8 @@ after a plan Approve in the same invocation (human re-runs `/review`).
   "Batch mode": on by default for bare `/review`, off with `--no-batch`) — every
   item in a batch still gets its own full pipeline and its own required survey
 - AI auto-Approve without human survey
+- Opening a PR (autonomous PR finish is `/work` §6, after critic ACCEPT only)
+- Moving to `completed/` or opening a PR on critic **REVISE**
 - Moving Needs Work into `in-progress/`
 - Force-push, `--no-verify`, deleting feature branches by default
 

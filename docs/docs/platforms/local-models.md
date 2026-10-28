@@ -3,7 +3,7 @@ sidebar_position: 4
 sidebar_label: Local Models
 ---
 
-<!-- synced-from: platforms/local-models/README.md @ fe47c10a3255394a9617dded5d0b3bdbb26986cc -->
+<!-- synced-from: platforms/local-models/README.md @ e25ef2acf23b3d353e00913052ac764df317b7b7 -->
 
 # Local Models
 
@@ -43,4 +43,4 @@ until commit or `.aiderignore`.
 
 ## Tracked plans and coordination
 
-Local models follow the same **`/work`** contract when the harness has shell: honor **Preferred models** and **Depends on**, claim into `in-progress/`, finish to **`review-needed/`** (human [`/review`](/skills/review) → `completed/`), never promote drafts. They do **not** self-appoint as temporary coordinator when Preferred orchestrator is unset—escalate to a frontier session. The reverse failure is just as real: local models are the *intended* executors for `small`/`mid` plans, so a scoped, well-specified task is not escalated because a bigger model exists, because the plan's **Preferred models** also lists one (only listed *tiers* gate), or because the repo is unfamiliar. See [model fitness](/model-fitness) and Skills → [`/work`](/skills/work).
+Local models follow the same **`/work`** contract when the harness has shell: honor **Preferred models** and **Depends on**, claim into `in-progress/`; human-assisted finish to **`review-needed/`** (human [`/review`](/skills/review) → `completed/`); autonomous finish after critic **ACCEPT** is `completed/` on the feature branch + PR (never merge). Never promote drafts. They do **not** self-appoint as temporary coordinator when Preferred orchestrator is unset—escalate to a frontier session. The reverse failure is just as real: local models are the *intended* executors for `small`/`mid` plans, so a scoped, well-specified task is not escalated because a bigger model exists, because the plan's **Preferred models** also lists one (only listed *tiers* gate), or because the repo is unfamiliar. See [model fitness](/model-fitness) and Skills → [`/work`](/skills/work).

@@ -76,9 +76,14 @@ No shell here, so you cannot list files or `git mv` yourself. When the user type
    (skip unmet deps). Never execute `drafts/` / `completed/` / `ambiguous/` /
    `blocked/`. **Ignore** foreign `in-progress/`. If they name a draft, offer
    edit-only — use `/draft --promote` to promote, not `/work`. Relocates: ready → `in-progress/`
-   when starting; park half-baked → `ambiguous/` or stuck → `blocked/`; finish
-   `in-progress/` → `review-needed/` (required). Human **`/review`** archives
-   to `completed/`.
+   when starting; park half-baked → `ambiguous/` or stuck → `blocked/`. Two
+   finish workflows: **human-assisted** (a person is supervising) →
+   `in-progress/` → `review-needed/`; human **`/review`** archives to
+   `completed/`. **Autonomous / cloud** (unattended; or they asked to open a
+   PR when the critic accepts) → critic loop until **ACCEPT**, then
+   `in-progress/` → `completed/` **on `feature/<slug>`**, push, open a PR
+   targeting `dev`/`develop`. Never dictate `gh pr create` on **REVISE** or
+   in a human-assisted session. Never dictate a merge on the autonomous path.
 3. **`--list`:** from their paste, table path / Priority / Value / Preferred models / fit for
    the model they are chatting with — do not implement. **Path is authoritative**
    (ignore any in-file `Lane:` / `Status:`; do not dictate writing those fields).
@@ -89,11 +94,25 @@ No shell here, so you cannot list files or `git mv` yourself. When the user type
    ```bash
    git mv .plans/features/<slug>.md .plans/in-progress/
    ```
-   **Finish:** when Done when holds, move to review-needed (not completed):
+   **Finish (human-assisted):** when Done when holds, move to review-needed
+   (not completed):
    ```bash
    git mv .plans/in-progress/<slug>.md .plans/review-needed/
    ```
    Then remind the human to run **`/review`** (or `/review <slug>`) for sign-off.
+   Never dictate `gh pr create` here.
+
+   **Finish (autonomous / they asked for a PR):** after Done when holds, a
+   fresh-context critic must rate **ACCEPT** (REVISE → they fix, critic again;
+   cap 3). Only then:
+   ```bash
+   git mv .plans/in-progress/<slug>.md .plans/completed/
+   git add .plans/ && git commit -m "Plans: <slug> → completed (critic ACCEPT)" -- .plans/
+   git push -u origin feature/<slug>
+   gh pr create --base dev --head feature/<slug> --title "<plan title>" --body "<Goal>"
+   ```
+   If `.plans/` is untracked, skip the commit and say “lane move (untracked)”.
+   Never dictate a merge. Never dictate `gh pr create` on REVISE.
 6. Mid-session stop: leave the plan in **`in-progress/`** with a short `## Progress`
    note — other agents ignore it; do not set `Status:`.
 

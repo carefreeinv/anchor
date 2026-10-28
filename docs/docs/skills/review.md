@@ -97,6 +97,8 @@ select → checkout (if safe) → evidence + optional launch
        → lane move to completed/ (after merge success or nothing to merge)
 ```
 
+Human-assisted only. **Never** move to `completed/` or open a PR on critic **REVISE**. The autonomous critic loop (work → review → review → PR) lives in [`/work`](/skills/work), not here.
+
 1. **Select** — run from `main`/`dev` while a review queue coexists with an
    unpromoted `dev`, the skill first asks whether to review `dev` for promotion
    or pick a feature branch from the queue. Otherwise the bare pick uses
@@ -105,7 +107,8 @@ select → checkout (if safe) → evidence + optional launch
    dirty trees get a worktree offer, not a silent switch.
 3. **Launch** — low-risk local servers only; confirm Docker/migrations/deploy.
 4. **AI critic** — fresh subagent/context; format from `templates/review.md`
-   (ACCEPT | REVISE | ESCALATE). **Advisory only.**
+   (ACCEPT | REVISE | ESCALATE). **Advisory** for merges and human lane moves.
+   Autonomous `/work` treats **ACCEPT** as a hard gate for archive-on-branch + PR.
 5. **Survey** — Approve | Needs Work | Skip | optional Defer.
 6. **Follow-ups** — e.g. override if AI was REVISE and human Approves; actionable
    bullets required for Needs Work.
@@ -165,10 +168,10 @@ Process contract also lives in `.plans/README.md` once scaffolded.
 
 ## Related
 
-- [**`/work`**](/skills/work) — default finish is `review-needed/`; interactive
+- [**`/work`**](/skills/work) — human-assisted default finish is `review-needed/`; interactive
   sessions may also land `feature/<slug>` on **`dev` only** when the operator
   answers the culmination question and the scoped-merge gate passes. Unattended
-  runs never merge. `/review` remains the only route to `main`.
-- [`pending_merges.py`](/tooling/scripts) — advisory table of unmerged branches
-- [How work reaches `dev`](/tooling/how-work-reaches-dev) — the two routes onto integration
+  runs never merge; they open a PR after critic **ACCEPT**. `/review` remains the only route to `main` and never auto-opens a PR.
+- [`pending_merges.py`](/tooling/scripts) — advisory table of unmerged branches, including completed-on-branch awaiting merge
+- [How work reaches `dev`](/tooling/how-work-reaches-dev) — local merge routes plus the autonomous PR route
 - [Doctrine — tracked plans](/doctrine)

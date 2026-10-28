@@ -69,10 +69,13 @@ Agents may relocate plan files **only** as:
 
 ```text
 bugs|features/     →  in-progress/     (start work + lease)
-in-progress/       →  review-needed/   (Done when holds — default agent finish)
-in-progress/       →  completed/       (ONLY after the operator answers "merge to dev
-                                        now" at culmination AND the scoped-merge gate
-                                        passes — see §6. Never self-certified.)
+in-progress/       →  review-needed/   (human-assisted: Done when holds)
+in-progress/       →  completed/       (1) operator answers "merge to dev now" at
+                                        culmination AND scoped-merge gate passes
+                                        — see §6. Never self-certified merge.
+                                        (2) autonomous/cloud: critic ACCEPT on
+                                        feature/<slug>, immediately before opening
+                                        a PR — never a merge. See §6 autonomous.)
 review-needed/     →  completed/       (HUMAN ONLY via /review Approve)
 review-needed/     →  in-progress/     (human requested changes; agent resumes)
 review-needed/     →  bugs|features/   (release/return; also /review Needs Work)
@@ -89,10 +92,12 @@ Agents must **never** promote drafts (use **`/draft --promote`** instead), move
 work into `drafts/`, move `review-needed/` → `completed/` except under a
 human-confirmed **`/review` Approve**, or touch another agent’s `in-progress/` plan.
 
-`in-progress/` → `completed/` is **not** a self-certify path: it happens only as the
-tail of a merge the **operator** authorized in-session (§6). Unattended runs —
-`work_once.py`, fleet workers, the coordinator MCP — never ask, never merge, and
-always finish to `review-needed/`.
+`in-progress/` → `completed/` is **not** a self-certify merge. It happens only as
+(1) the tail of a merge the **operator** authorized in-session (§6) or (2) the
+tail of a fresh-context critic **ACCEPT** on an autonomous/cloud run, immediately
+before opening a PR. Unattended runs — `work_once.py`, fleet workers, the
+coordinator MCP — never ask, never merge, and **never auto-open a PR on REVISE**.
+Their finish is the autonomous critic loop in §6 (work → review → review → PR).
 
 ## Priority (when no target is given)
 
@@ -429,16 +434,64 @@ the queue moving. Small models do not grab architecture plans to "try hard."
    (and confirm every Step bullet is checked).
 2. Run **`/commit-prep`**, then commit on `feature/<slug>`. **Record the SHA** —
    the merge gate needs it.
-3. Ask the **culmination question**, then follow the answer.
+3. **Session kind:**
+   - **Human-assisted** (interactive, a person is supervising) → ask the
+     **culmination question**, then follow the answer. Never auto-open a PR.
+   - **Autonomous / cloud** (`work_once.py`, fleet, coordinator MCP, any
+     unattended run, or an interactive operator who asked to open a PR when
+     the critic accepts) → **do not** ask the culmination question and **do
+     not** park in `review-needed/`. Run the **autonomous critic loop** below.
 4. Session footer: `## Result`, `## How to verify`, `## Deferred / concerns`,
    including the plan's new path, the handoff outcome, and the
    `pending_merges.py --brief` line.
 
+#### Two workflows
+
+| | **Human-assisted** | **Autonomous (cloud)** |
+|---|---|---|
+| Who | Interactive `/work` / `/review` | `work_once.py`, fleet, MCP, unattended |
+| Loop | work → critic → (REVISE → work)* → human decides | work → critic → (REVISE → work)* → **ACCEPT** → archive + PR |
+| `completed/` | `/review` Approve after local merge, or culmination merge + scoped gate | **On `feature/<slug>`**, after critic **ACCEPT**, **before** the PR |
+| PR | Never auto-opened | Opened after ACCEPT + completed-on-branch commit + push |
+| Merge to `dev`/`main` | Human `/review` or culmination answer | **Never** |
+| `review-needed/` | Default parking when Done when holds | **Not** the finish lane |
+
+#### Autonomous critic loop (unattended / cloud)
+
+Spawn a **fresh-context** critic the same way `/review` §7 does (read-only
+subagent; `templates/review.md` verdict `ACCEPT | REVISE | ESCALATE`;
+**APPROVED** = `ACCEPT`). The executor does not ACCEPT its own work.
+
+| Verdict | Action |
+|---------|--------|
+| **REVISE** | Write findings into `## Review notes` / Progress. Stay in `in-progress/` (do **not** bounce to `bugs/`/`features/` — that is human `/review` Needs Work). Fix, `/commit-prep` + feature-branch commit, critic again. **Do not** move to `completed/`. **Do not** open a PR. |
+| **ACCEPT** | Completed-on-branch + PR (next subsection). |
+| **ESCALATE**, or **3 critic cycles** with no ACCEPT, or two failed fixes on the same finding | Stop; park `blocked/` or leave `in-progress/` with notes; **no PR**. |
+
+#### Autonomous completed-on-branch + PR (ACCEPT only)
+
+1. Critic **ACCEPT** on the current `feature/<slug>` HEAD.
+2. `git mv` the plan `in-progress/` → `completed/` (same basename, including
+   `.local.md`) **while checked out on `feature/<slug>`**. Light-path commit
+   when `.plans/` is tracked; “lane move (untracked)” when ignored. Drop the
+   lease. Append `## Handoff` `autonomous PR after critic ACCEPT <date>`.
+3. Push `feature/<slug>` (**no force**). This path is an authorized exception
+   to `/push`'s interactive confirm — the unattended run *is* the
+   authorization. Still never force-push, still never push to
+   `main`/`master`/`dev`/`develop`.
+4. Open a PR **targeting integration** (`dev`, else `develop`): `gh pr create`
+   when GitHub/`gh` works; otherwise print the exact create command / URL
+   recipe. Never target `main`/`master`.
+5. **Never merge** the PR. **Never merge locally** on this path.
+6. Push or PR-create failure after the completed move: report; leave the plan
+   in `completed/` on the branch; do not revert the lane move unless asked.
+
 #### The culmination question
 
 Ask **once**, only when **all** hold: `/commit-prep` green · the feature-branch
-commit succeeded · the session is **interactive** · the project uses Git. Otherwise
-skip it and finish to `review-needed/` with a one-line note saying why.
+commit succeeded · the session is **interactive** · the project uses Git · the
+operator did **not** ask for the autonomous PR finish. Unattended / cloud runs
+skip this question and use the autonomous critic loop above.
 
 ```text
 Plan '<slug>' is done and committed on feature/<slug>. What now?
@@ -536,6 +589,10 @@ hold — waiting on staging data — 2026-08-01
 ## Handoff
 handed to /review 2026-08-01
 ```
+```markdown
+## Handoff
+autonomous PR after critic ACCEPT 2026-10-28
+```
 
 #### Answers 1 and 3
 
@@ -619,8 +676,9 @@ missing). Optional `--slug` checks out `feature/<slug>` inside the worktree.
    - If gates are **red**: do not commit; fix or stop per stop rules. No commit
      means no culmination question.
    - **Never** commit on `main`/`master`/`dev`/`develop`. Merging happens only as
-     §6 describes: operator asked, operator answered, gate passed. Unattended runs
-     hand off to **`/review`** instead.
+     §6 describes: operator asked, operator answered, gate passed. Unattended
+     runs never merge; they run the autonomous critic loop and open a PR after
+     **ACCEPT**.
 
 ## Batch dispatch (`--batch`)
 
@@ -668,7 +726,8 @@ chaining several sign-off cycles; this flag does not touch `/review`'s doctrine.
   not ask and the plan does not require it
 - **Merging on your own initiative** — the culmination merge needs the operator's
   in-session answer *and* a passing scoped-merge gate. Unattended paths
-  (`work_once.py`, fleet workers, the coordinator MCP) never ask and never merge
+  (`work_once.py`, fleet workers, the coordinator MCP) never ask and never merge;
+  they open a PR only after critic **ACCEPT** (never on REVISE)
 - Merging to `main`/`master` under any answer — that is `/review`'s promotion survey
 - **Documenting plan backlog** as product docs (hard rule: docs describe **current
   shipped state**, not `.plans/` contents). When work ships, document the code —
