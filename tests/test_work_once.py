@@ -580,3 +580,32 @@ def test_crude_value_handles_comments_quotes_and_urls():
     assert work_once._crude_value('model: "qwen3:4b"') == "qwen3:4b"
     assert work_once._crude_value("base_url: http://x/v1#frag") == "http://x/v1#frag"
     assert work_once._crude_value("name: box") == "box"
+
+
+def test_run_with_ensure_worktree_forwards_worktree_to_orchestrate(tmp_path, monkeypatch):
+    root = _root(tmp_path)
+    _plan(root / ".plans" / "features" / "a.md", preferred="mid")
+    captured: list[list[str]] = []
+
+    class Rec:
+        path = tmp_path / "wt"
+        branch = "feature/a"
+        integration = "dev"
+
+    Rec.path.mkdir()
+
+    def fake_ensure(project, agent_id, slug=None):
+        return Rec()
+
+    def fake_run(plan_path, extra):
+        captured.append(list(extra))
+        return 0
+
+    monkeypatch.setattr("worktree_for_agent.ensure_worktree", fake_ensure)
+    monkeypatch.setattr(work_once, "run_orchestrate", fake_run)
+    code = work_once.main([
+        "--root", str(root), "--once", "--run", "--ensure-worktree",
+        "--tier", "mid", "--agent-id", "w", "--slug", "a",
+    ])
+    assert code == 0
+    assert captured and captured[0][:2] == ["--worktree", str(Rec.path)]

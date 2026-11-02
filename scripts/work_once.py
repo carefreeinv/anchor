@@ -734,6 +734,7 @@ def _one_claim(root: Path, plans_root: Path, worker, args) -> tuple[int, int]:
     if plan_path is None:
         return 1, 0
     print(plan_path)
+    extra = list(args.orchestrate_args)
     if args.ensure_worktree:
         try:
             from worktree_for_agent import WorktreeError, ensure_worktree
@@ -747,6 +748,8 @@ def _one_claim(root: Path, plans_root: Path, worker, args) -> tuple[int, int]:
                 f"[work_once] worktree ready — run code edits in {rec.path}",
                 file=sys.stderr,
             )
+            if "--worktree" not in extra:
+                extra = ["--worktree", str(rec.path), *extra]
         except WorktreeError as exc:
             print(f"[work_once] worktree ensure failed: {exc}", file=sys.stderr)
             return 2, 0
@@ -754,7 +757,7 @@ def _one_claim(root: Path, plans_root: Path, worker, args) -> tuple[int, int]:
             print(f"[work_once] worktree ensure failed: {exc}", file=sys.stderr)
             return 2, 0
     if args.run:
-        code = run_orchestrate(plan_path, args.orchestrate_args)
+        code = run_orchestrate(plan_path, extra)
         if code != 0:
             print(
                 f"[work_once] orchestrate exit {code}; lease left on plan "

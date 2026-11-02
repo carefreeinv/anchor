@@ -143,6 +143,7 @@ def conventions_path(project_dir: Path, *, for_write: bool = False) -> Path:
 FLEET_FILES: list[str] = [
     "scripts/anchor_client.py",
     "scripts/orchestrate.py",
+    "scripts/apply_executor_diff.py",
     "scripts/handoff.py",
     "scripts/work_once.py",
     "scripts/plan_select.py",

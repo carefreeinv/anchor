@@ -1025,3 +1025,54 @@ def test_main_all_noop_exits_nonzero_and_zero_ok_count(git_repo, monkeypatch):
     run = json.loads(out.read_text())
     assert run["results"][0]["status"] == "failed-noop"
     assert sum(r["status"] == "ok" for r in run["results"]) == 0
+
+
+APPLY_OUTPUT = (
+    "--- a/README\n"
+    "+++ b/README\n"
+    "@@ -1 +1 @@\n"
+    "-hi\n"
+    "+applied from chat\n"
+    "## Result\n"
+    "changed README\n"
+    "## How to verify\n"
+    "cat README\n"
+    "## Deferred / concerns\n"
+    "None.\n"
+)
+
+
+def test_execute_task_applies_unified_diff_then_verify(git_repo):
+    from pathlib import Path
+
+    from orchestrate import execute_task
+
+    marker = git_repo / "verify-ran.txt"
+    fleet = FakeFleet([APPLY_OUTPUT])
+    result = execute_task(
+        "edit readme",
+        "plan",
+        fleet,
+        verify_cmd=f"touch {marker}",
+        hold_on_fail=False,
+        worktree=git_repo,
+    )
+    assert result["status"] == "ok"
+    assert (git_repo / "README").read_text(encoding="utf-8") == "applied from chat\n"
+    assert Path(marker).exists()
+
+
+def test_execute_task_footer_only_with_worktree_is_failed_noop(git_repo):
+    from orchestrate import execute_task
+
+    fleet = FakeFleet([GOOD_OUTPUT, GOOD_OUTPUT])
+    result = execute_task(
+        "edit readme",
+        "plan",
+        fleet,
+        verify_cmd="true",
+        hold_on_fail=False,
+        worktree=git_repo,
+    )
+    assert result["status"] == "failed-noop"
+    assert (git_repo / "README").read_text(encoding="utf-8") == "hi\n"

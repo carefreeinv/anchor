@@ -51,6 +51,11 @@ Newest first.
 
 ### Fixed
 
+- **`--run` applies executor unified diffs** into `--worktree` before
+  scope/verify. `work_once.py --ensure-worktree --run` forwards `--worktree`.
+  Footer-only replies still fail closed (`failed-noop`). Parser is stdlib-only
+  (`scripts/apply_executor_diff.py`); apply errors fail the attempt.
+
 - **Orchestrate `failed-noop`.** A well-formed footer plus an already-green
   `--verify` is not `ok` when the worktree is unchanged, or when `## Result` is
   empty / stall phrasing (“will produce after”, “let me examine”). `orchestrate.py`

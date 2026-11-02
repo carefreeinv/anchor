@@ -36,6 +36,12 @@ import time
 from pathlib import Path
 
 import plan_store
+from apply_executor_diff import (
+    EDIT_FORMAT,
+    ApplyError,
+    NoApplyableHunks,
+    apply_reply,
+)
 from anchor_client import Endpoint, Fleet, has_required_footer, load_prompt
 from fleet_metrics import (
     DEFAULT_FOOTER_MAX_LINES,
@@ -514,6 +520,8 @@ def execute_task(task: str, plan: str, fleet: Fleet, verify_cmd: str | None,
         tree = worktree if worktree is not None else (scope.root if scope is not None else None)
         before_fp = worktree_fingerprint(tree) if tree is not None else None
         prompt = f"PLAN (context only):\n{plan}\n\nYOUR SINGLE TASK:\n{task}"
+        if tree is not None:
+            prompt += f"\n\n{EDIT_FORMAT}"
         if history:
             prompt += f"\n\nPREVIOUS ATTEMPT FAILED. Verbatim failure output:\n{history[-1]}"
         if escalation_suffix:
@@ -543,7 +551,7 @@ def execute_task(task: str, plan: str, fleet: Fleet, verify_cmd: str | None,
         out = ep.chat([{"role": "system", "content": system},
                        {"role": "user", "content": prompt}], max_tokens=8192)
         last_out = out
-        after_fp = worktree_fingerprint(tree) if tree is not None else None
+        after_chat_fp = worktree_fingerprint(tree) if tree is not None else None
 
         # Full raw transcript archived for post-mortem before anything crosses
         # back to the coordinator — the coordinator itself only ever sees
@@ -618,6 +626,23 @@ def execute_task(task: str, plan: str, fleet: Fleet, verify_cmd: str | None,
                 "task or fail — do not claim work that has not happened"
             )
             continue
+
+        if tree is not None:
+            try:
+                apply_reply(out, Path(tree))
+            except NoApplyableHunks as exc:
+                if before_fp is not None and after_chat_fp == before_fp:
+                    print(f"[apply] {ep.name}: {exc}", file=sys.stderr)
+                    history.append(
+                        f"NOOP: {exc}; include a unified diff for files you change"
+                    )
+                    continue
+            except ApplyError as exc:
+                print(f"[apply] {ep.name}: {exc}", file=sys.stderr)
+                history.append(f"APPLY: {exc}")
+                continue
+
+        after_fp = worktree_fingerprint(tree) if tree is not None else None
 
         if before_fp is not None and after_fp is not None and after_fp == before_fp:
             print(f"[noop] {ep.name}: worktree unchanged after chat", file=sys.stderr)
