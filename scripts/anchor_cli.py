@@ -272,7 +272,8 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--registry", help="endpoints.yaml for --endpoint")
     p.add_argument("--no-fit-check", action="store_true", help="ignore Preferred models")
     p.add_argument("--run", action="store_true",
-                   help="interactive only: hand the claimed plan to orchestrate.py")
+                   help="interactive only: hand the claimed plan to orchestrate.py "
+                        "(uses the same --endpoint/--registry as claim)")
     p.add_argument("--heartbeat", metavar="SLUG", help="extend your lease on SLUG")
     p.add_argument("--finish", metavar="SLUG", help="your in-progress SLUG → review-needed/")
     p.add_argument("--return", dest="return_ready", metavar="SLUG",

@@ -536,9 +536,17 @@ def op_work_claim(params: WorkClaimParams, _answers: Answers, ctx: Ctx) -> Resul
     if params.run:
         if not ctx.mode.interactive or ctx.run_orchestrate is None:
             res.notes.append("--run ignored: non-interactive runs never start a model")
+            if params.endpoint:
+                res.notes.append(
+                    f"--endpoint {params.endpoint!r} was set; pass it again on an "
+                    "interactive --run, or execute in the calling harness"
+                )
             res.need("execute", NEEDS_MODEL, detail)
             return res
-        code = ctx.run_orchestrate(dest, [])
+        from work_once import orchestrate_identity_args
+
+        extra = orchestrate_identity_args(params)
+        code = ctx.run_orchestrate(dest, extra)
         res.data["orchestrate_exit"] = code
         if code != 0:
             res.exit_code = EXIT_ERROR

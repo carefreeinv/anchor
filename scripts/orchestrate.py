@@ -877,6 +877,11 @@ def main() -> None:
     ap.add_argument("--out", default="orchestration_run.json")
     ap.add_argument("--registry", default=None)
     ap.add_argument(
+        "--endpoint",
+        default=None,
+        help="use only this named endpoint from the registry for planner/executor/critic",
+    )
+    ap.add_argument(
         "--metrics-ledger",
         default=None,
         help="JSONL path for claimed-vs-actual outcomes "
@@ -914,6 +919,13 @@ def main() -> None:
     if args.prefer_local:
         fleet_kw["prefer_local"] = True
     fleet = Fleet(**fleet_kw) if fleet_kw else Fleet()
+    if args.endpoint:
+        matches = [e for e in fleet.endpoints if e.name == args.endpoint]
+        if not matches:
+            ap.error(f"no endpoint named {args.endpoint!r} in the registry")
+        fleet.endpoints = matches
+        tier = matches[0].tier
+        fleet.roles = {role: [tier] for role in ("planner", "executor", "critic", "tuner")}
     context = Path(args.context).read_text(encoding="utf-8") if args.context else ""
     root = Path(args.worktree)
     events: list[dict] = []

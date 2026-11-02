@@ -609,3 +609,46 @@ def test_run_with_ensure_worktree_forwards_worktree_to_orchestrate(tmp_path, mon
     ])
     assert code == 0
     assert captured and captured[0][:2] == ["--worktree", str(Rec.path)]
+
+
+def test_run_forwards_endpoint_and_registry_before_worktree(tmp_path, monkeypatch):
+    root = _root(tmp_path)
+    _plan(root / ".plans" / "features" / "a.md", preferred="mid")
+    captured: list[list[str]] = []
+    reg = tmp_path / "ep.yaml"
+    reg.write_text(
+        "endpoints:\n  - name: pin\n    tier: executor\n    model: x\n",
+        encoding="utf-8",
+    )
+
+    class Rec:
+        path = tmp_path / "wt"
+        branch = "feature/a"
+        integration = "dev"
+
+    Rec.path.mkdir()
+
+    def fake_ensure(project, agent_id, slug=None):
+        return Rec()
+
+    def fake_run(plan_path, extra):
+        captured.append(list(extra))
+        return 0
+
+    monkeypatch.setattr("worktree_for_agent.ensure_worktree", fake_ensure)
+    monkeypatch.setattr(work_once, "run_orchestrate", fake_run)
+    monkeypatch.setattr(
+        work_once,
+        "resolve_worker",
+        lambda args: work_once.Worker(name="pin", tier="mid"),
+    )
+    code = work_once.main([
+        "--root", str(root), "--once", "--run", "--ensure-worktree",
+        "--endpoint", "pin", "--registry", str(reg),
+        "--no-fit-check", "--agent-id", "w", "--slug", "a",
+    ])
+    assert code == 0
+    assert captured
+    extra = captured[0]
+    assert extra[:4] == ["--registry", str(reg), "--endpoint", "pin"]
+    assert extra[4:6] == ["--worktree", str(Rec.path)]

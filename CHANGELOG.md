@@ -34,6 +34,10 @@ Newest first.
   `SSH auth failed` and skip the network round-trip when every ready plan is
   `*.local.md`.
 
+- **`anchor work --run` forwards `--endpoint` / `--registry`** into
+  `orchestrate.py` (claim identity is the execute identity). Headless `--run`
+  still does not start a model; it notes when an endpoint was set.
+
 - **`anchor` verbs commit their own plans-only lane moves** when `.plans/` is
   tracked (`git commit -m "Plans: <slug> → <lane> (anchor …)" -- .plans/`).
   Untracked / `*.local.md` trees note `lane move (untracked)`. A merge in

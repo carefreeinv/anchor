@@ -171,6 +171,46 @@ def test_work_run_is_refused_headless(project, monkeypatch):
     assert doc["pending"][0]["step"] == "execute"
 
 
+def test_work_run_forwards_endpoint_interactive(project, monkeypatch, tmp_path):
+    import work_once
+
+    seen: list[list[str]] = []
+
+    def fake_orch(_dest, extra):
+        seen.append(list(extra))
+        return 0
+
+    monkeypatch.setattr(work_once, "run_orchestrate", fake_orch)
+    write(project, "features", "f1")
+    reg = tmp_path / "ep.yaml"
+    reg.write_text(
+        "endpoints:\n  - name: nemoclaw\n    tier: executor\n    model: qwen3:8b\n",
+        encoding="utf-8",
+    )
+    code, _doc = cli(
+        [
+            "work", "--root", str(project), "--agent-id", "a1", "--run",
+            "--endpoint", "nemoclaw", "--registry", str(reg), "--no-fit-check",
+        ],
+        interactive=True,
+    )
+    assert code == 0
+    assert seen == [["--registry", str(reg), "--endpoint", "nemoclaw"]]
+
+
+def test_work_run_headless_notes_dropped_endpoint(project, monkeypatch):
+    import work_once
+
+    monkeypatch.setattr(work_once, "run_orchestrate", lambda *a: pytest.fail("model started"))
+    write(project, "features", "f1")
+    code, doc = cli(
+        ["work", "--root", str(project), "--agent-id", "a1", "--run",
+         "--endpoint", "h100-executor"],
+    )
+    assert code == 0
+    assert any("h100-executor" in n and "--endpoint" in n for n in doc["notes"])
+
+
 def test_work_heartbeat_finish_return(project):
     plans = project / ".plans"
     write(project, "features", "f1")

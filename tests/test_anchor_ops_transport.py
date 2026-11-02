@@ -189,3 +189,33 @@ def test_headless_refuses_injected_run(project):
     )
     assert ran == []
     assert any("--run ignored" in n for n in res.notes)
+
+
+def test_interactive_run_forwards_endpoint(project, tmp_path):
+    seen: list[list[str]] = []
+
+    def orch(_dest, extra):
+        seen.append(list(extra))
+        return 0
+
+    reg = tmp_path / "ep.yaml"
+    reg.write_text(
+        "endpoints:\n  - name: nemoclaw\n    tier: executor\n    model: qwen3:8b\n",
+        encoding="utf-8",
+    )
+    ctx = ops.Ctx(
+        mode=ops.Mode(True, "transport-test"),
+        agent_id="t1",
+        run_orchestrate=orch,
+    )
+    res = ops.run(
+        "work.claim",
+        ops.WorkClaimParams(
+            root=str(project), slug="f1", no_fit_check=True, run=True,
+            endpoint="nemoclaw", registry=str(reg),
+        ),
+        ops.NeverAnswers(),
+        ctx,
+    )
+    assert res.exit_code == 0
+    assert seen == [["--registry", str(reg), "--endpoint", "nemoclaw"]]

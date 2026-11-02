@@ -193,6 +193,18 @@ def load_gate(root: Path, worker: Worker, args: argparse.Namespace) -> str | Non
     return None if allowed else reason
 
 
+def orchestrate_identity_args(args) -> list[str]:
+    """Forward claim identity into ``orchestrate.py`` (``--endpoint`` / ``--registry``)."""
+    extra: list[str] = []
+    registry = getattr(args, "registry", None)
+    if registry:
+        extra.extend(["--registry", str(registry)])
+    endpoint = getattr(args, "endpoint", None)
+    if endpoint:
+        extra.extend(["--endpoint", str(endpoint)])
+    return extra
+
+
 def run_orchestrate(plan_path: Path, extra: list[str]) -> int:
     script = Path(__file__).resolve().parent / "orchestrate.py"
     cmd = [sys.executable, str(script), "--plan-file", str(plan_path), *extra]
@@ -757,6 +769,7 @@ def _one_claim(root: Path, plans_root: Path, worker, args) -> tuple[int, int]:
             print(f"[work_once] worktree ensure failed: {exc}", file=sys.stderr)
             return 2, 0
     if args.run:
+        extra = orchestrate_identity_args(args) + extra
         code = run_orchestrate(plan_path, extra)
         if code != 0:
             print(
