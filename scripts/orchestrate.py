@@ -46,6 +46,7 @@ from fleet_metrics import (
     normalize_fit_tier,
     record_task_outcome,
     render_human_report,
+    result_is_placeholder,
     should_stop,
     task_id_for,
 )
@@ -65,10 +66,12 @@ from scope_gate import (
     enforce_config,
     parse_scope,
     worktree_changes,
+    worktree_fingerprint,
 )
 
 MAX_ATTEMPTS = 2  # Anchor stop condition: two failures → escalate/hold, never a third.
 ROLE_VIOLATION_EXIT = 4
+FAILED_NOOP_EXIT = 2
 
 BUDGET_CHARS_PER_TOKEN = 4  # matches prompt_tuner's conservative estimate
 
@@ -458,7 +461,8 @@ def execute_task(task: str, plan: str, fleet: Fleet, verify_cmd: str | None,
                  metrics_ledger: Path | None = None,
                  task_slug: str | None = None,
                  outcome_sink: dict | None = None,
-                 transcript_root: Path | None = None) -> dict:
+                 transcript_root: Path | None = None,
+                 worktree: Path | None = None) -> dict:
     system = load_prompt("anchor/system-prompts/mythos-core.md")
     history: list[str] = []
     last_ep = None
@@ -507,6 +511,8 @@ def execute_task(task: str, plan: str, fleet: Fleet, verify_cmd: str | None,
                 escalation_suffix = escalation_directive(decision)
 
         print(f"[exec {attempt}/{MAX_ATTEMPTS}] {ep.name}: {task[:70]}", file=sys.stderr)
+        tree = worktree if worktree is not None else (scope.root if scope is not None else None)
+        before_fp = worktree_fingerprint(tree) if tree is not None else None
         prompt = f"PLAN (context only):\n{plan}\n\nYOUR SINGLE TASK:\n{task}"
         if history:
             prompt += f"\n\nPREVIOUS ATTEMPT FAILED. Verbatim failure output:\n{history[-1]}"
@@ -537,6 +543,7 @@ def execute_task(task: str, plan: str, fleet: Fleet, verify_cmd: str | None,
         out = ep.chat([{"role": "system", "content": system},
                        {"role": "user", "content": prompt}], max_tokens=8192)
         last_out = out
+        after_fp = worktree_fingerprint(tree) if tree is not None else None
 
         # Full raw transcript archived for post-mortem before anything crosses
         # back to the coordinator — the coordinator itself only ever sees
@@ -604,6 +611,22 @@ def execute_task(task: str, plan: str, fleet: Fleet, verify_cmd: str | None,
                 "('## Result' / '## How to verify' / '## Deferred / concerns')"
             )
             continue
+        if result_is_placeholder(out):
+            history.append(
+                "FORMAT: ## Result is empty, checkbox-only, or a stall phrase "
+                "(will produce / let me examine / TODO implement); implement the "
+                "task or fail — do not claim work that has not happened"
+            )
+            continue
+
+        if before_fp is not None and after_fp is not None and after_fp == before_fp:
+            print(f"[noop] {ep.name}: worktree unchanged after chat", file=sys.stderr)
+            history.append(
+                "NOOP: worktree is byte-identical to before this attempt; "
+                "edit files in the worktree or fail — a passing verify on an "
+                "unchanged tree is not success"
+            )
+            continue
 
         # Scope gate (mythos-core rule 7, machine-enforced): reject any change
         # outside the task spec's ## Files in scope BEFORE running tests. A scope
@@ -669,7 +692,12 @@ def execute_task(task: str, plan: str, fleet: Fleet, verify_cmd: str | None,
         recorded = True
         return {"task": task, "status": "ok", "attempts": attempt, "output": relay_text(out)}
 
-    status = "hold" if hold_on_fail else "escalate"
+    if any(h.startswith("NOOP:") for h in history):
+        status = "failed-noop"
+    elif hold_on_fail:
+        status = "hold"
+    else:
+        status = "escalate"
     # Exhausted retries (format failures, etc.) — record once if not already.
     if not recorded and last_ep is not None:
         _ledger_outcome(
@@ -688,7 +716,8 @@ def execute_with_continuations(task: str, plan: str, fleet: Fleet, verify_cmd: s
                                outcome_sink: dict | None = None,
                                max_respawns: int = MAX_RESPAWNS,
                                events: list[dict] | None = None,
-                               transcript_root: Path | None = None) -> dict:
+                               transcript_root: Path | None = None,
+                               worktree: Path | None = None) -> dict:
     """Run one task, respawning fresh contexts from handoffs up to the cap.
 
     Each continuation is a *new* context seeded with the handoff — never a longer
@@ -711,6 +740,7 @@ def execute_with_continuations(task: str, plan: str, fleet: Fleet, verify_cmd: s
             spec, plan, fleet, verify_cmd, hold_on_fail, insist, scope,
             metrics_ledger=metrics_ledger, task_slug=task_slug,
             outcome_sink=outcome_sink, transcript_root=transcript_root,
+            worktree=worktree,
         )
         if result["status"] != "handoff":
             if windows:
@@ -895,7 +925,7 @@ def main() -> None:
             t, plan, fleet, args.verify, args.hold_on_fail, args.insist, scope,
             metrics_ledger=metrics_ledger, task_slug=task_slug,
             outcome_sink=outcome_sink, max_respawns=args.max_respawns, events=events,
-            transcript_root=transcript_root,
+            transcript_root=transcript_root, worktree=root,
         )
         if r.get("status") == "human-report":
             report_path = write_human_report(
@@ -930,6 +960,8 @@ def main() -> None:
     if violations:
         print(f"\n{len(violations)} role violation(s) — see {args.out}", file=sys.stderr)
         sys.exit(ROLE_VIOLATION_EXIT)
+    if any(r.get("status") == "failed-noop" for r in results):
+        sys.exit(FAILED_NOOP_EXIT)
 
 
 if __name__ == "__main__":

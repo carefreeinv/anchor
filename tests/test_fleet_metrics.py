@@ -15,6 +15,7 @@ from fleet_metrics import (
     parse_claimed_status,
     record_task_outcome,
     render_human_report,
+    result_is_placeholder,
     should_stop,
     task_id_for,
 )
@@ -263,6 +264,24 @@ CLEAN_FOOTER = (
     "## Deferred / concerns\n"
     "None.\n"
 )
+
+
+def test_result_is_placeholder_stall_phrases():
+    stall = (
+        "## Result\nWill produce after executing step 1\n"
+        "## How to verify\npytest -q\n## Deferred / concerns\nnone\n"
+    )
+    examine = (
+        "## Result\nLet me examine the relevant files first.\n"
+        "## How to verify\nls\n## Deferred / concerns\nnone\n"
+    )
+    empty = "## Result\n\n## How to verify\nx\n## Deferred / concerns\nnone\n"
+    real = CLEAN_FOOTER
+    assert result_is_placeholder(stall)
+    assert result_is_placeholder(examine)
+    assert result_is_placeholder(empty)
+    assert not result_is_placeholder(real)
+    assert extract_footer(stall).ok  # headings present; stall is a second gate
 
 
 def test_extract_footer_clean_input():

@@ -42,6 +42,32 @@ RESULT_SECTION_RE = re.compile(
     r"^##\s+Result\s*$([\s\S]*?)(?=^##\s|\Z)",
     re.MULTILINE | re.IGNORECASE,
 )
+# Obvious stall / future-tense Result bodies (NVIDIA --run 2026-11-02).
+STALL_RESULT_RE = re.compile(
+    r"(?is)("
+    r"will produce after|"
+    r"let me examine|"
+    r"todo implement|"
+    r"need to (?:check|examine) (?:the )?files"
+    r")"
+)
+_EMPTY_CHECKBOX_RE = re.compile(r"^- \[[ ]\]")
+
+
+def result_is_placeholder(text: str) -> bool:
+    """True when ## Result is empty, checkbox-only, or a known stall phrase.
+
+    Heading presence is still ``extract_footer``; this is a second gate so a
+    well-formed footer cannot claim work that has not happened.
+    """
+    m = RESULT_SECTION_RE.search(text or "")
+    body = (m.group(1) if m else "").strip()
+    if not body:
+        return True
+    lines = [ln.strip() for ln in body.splitlines() if ln.strip()]
+    if lines and all(_EMPTY_CHECKBOX_RE.match(ln) for ln in lines):
+        return True
+    return bool(STALL_RESULT_RE.search(body))
 # Required footer headings (same contract as anchor_client.has_required_footer).
 FOOTER_MARKERS = ("## Result", "## How to verify")
 

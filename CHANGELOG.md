@@ -51,6 +51,11 @@ Newest first.
 
 ### Fixed
 
+- **Orchestrate `failed-noop`.** A well-formed footer plus an already-green
+  `--verify` is not `ok` when the worktree is unchanged, or when `## Result` is
+  empty / stall phrasing (“will produce after”, “let me examine”). `orchestrate.py`
+  retries once then exits 2. Footer is format, not evidence of edits.
+
 - **`Fleet.pick` skips unreachable LAN endpoints** (`GET {base}/models`, ~3s)
   and falls back to NVIDIA Build when `NVIDIA_API_KEY` is live. Dead H100 no
   longer waits on a 600s chat timeout. `ANCHOR_PREFER_LOCAL` /

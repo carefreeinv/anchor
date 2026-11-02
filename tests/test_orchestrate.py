@@ -240,12 +240,13 @@ def test_execute_task_rejects_out_of_scope_before_tests(git_repo):
     from orchestrate import execute_task
     from scope_gate import ScopeConfig
 
-    # Executor "touched" a file outside scope (untracked new file).
-    (git_repo / "secret.py").write_text("x = 1\n", encoding="utf-8")
     marker = git_repo / "verify-ran.txt"
     scope = ScopeConfig(root=git_repo, in_scope=("README",))
 
-    fleet = FakeFleet([GOOD_OUTPUT])
+    def write_secret():
+        (git_repo / "secret.py").write_text("x = 1\n", encoding="utf-8")
+
+    fleet = SideEffectFleet([(write_secret, GOOD_OUTPUT)])
     result = execute_task(
         "do the thing", "plan", fleet,
         verify_cmd=f"touch {marker}", hold_on_fail=False, scope=scope,
@@ -264,11 +265,13 @@ def test_execute_task_in_scope_runs_verify(git_repo):
     from orchestrate import execute_task
     from scope_gate import ScopeConfig
 
-    (git_repo / "README").write_text("edited in scope\n", encoding="utf-8")
     marker = git_repo / "verify-ran.txt"
     scope = ScopeConfig(root=git_repo, in_scope=("README",))
 
-    fleet = FakeFleet([GOOD_OUTPUT])
+    def write_readme():
+        (git_repo / "README").write_text("edited in scope\n", encoding="utf-8")
+
+    fleet = SideEffectFleet([(write_readme, GOOD_OUTPUT)])
     result = execute_task(
         "edit the readme", "plan", fleet,
         verify_cmd=f"touch {marker}", hold_on_fail=False, scope=scope,
@@ -318,6 +321,7 @@ class SideEffectEndpoint:
         self.quirks: dict = {}  # real Endpoint always has one; budget gate reads it
 
     def chat(self, messages, **kwargs):
+        self.calls = getattr(self, "calls", 0) + 1
         side_effect, reply = self.replies.pop(0)
         if side_effect:
             side_effect()
@@ -366,7 +370,7 @@ def test_main_planner_product_write_hard_error_run_still_outputs(
     fleet = SideEffectFleet([
         # planner: illegally writes a product file alongside its plan text
         (lambda: (git_repo / "api.py").write_text("x = 1\n"), PLAN_TEXT),
-        (None, GOOD_OUTPUT),   # executor
+        (lambda: (git_repo / "README").write_text("hello from executor\n"), GOOD_OUTPUT),
         (None, "review: ok"),  # critic
     ])
     out = _run_main(monkeypatch, git_repo, fleet)
@@ -418,7 +422,7 @@ def test_main_clean_run_has_no_violations_and_exits_zero(git_repo, monkeypatch):
 
     fleet = SideEffectFleet([
         (None, PLAN_TEXT),
-        (None, GOOD_OUTPUT),
+        (lambda: (git_repo / "README").write_text("hello\n"), GOOD_OUTPUT),
         (None, "review: ok"),
     ])
     out = _run_main(monkeypatch, git_repo, fleet)
@@ -787,7 +791,7 @@ def test_clean_task_records_role_verdict_pass(git_repo, monkeypatch):
     ledger = git_repo / "outcomes.jsonl"
     fleet = SideEffectFleet([
         (None, PLAN_TEXT),     # planner
-        (None, GOOD_OUTPUT),   # executor (writes nothing it shouldn't)
+        (lambda: (git_repo / "README").write_text("hello\n"), GOOD_OUTPUT),
         (None, "review: ok"),  # critic
     ])
     _run_main(monkeypatch, git_repo, fleet,
@@ -931,3 +935,93 @@ def test_continuation_completes_with_a_passing_verify_command(git_repo):
     assert result["status"] == "ok"
     assert result["windows"] == 2
     assert Path(marker).exists()   # the continuation's verify ran, and passed
+
+
+STALL_FOOTER = (
+    "## Result\n"
+    "Will produce after executing step 1\n"
+    "## How to verify\n"
+    "pytest -q\n"
+    "## Deferred / concerns\n"
+    "None at this time\n"
+)
+
+EXAMINE_FOOTER = (
+    "## Result\n"
+    "Let me examine the relevant files first.\n"
+    "## How to verify\n"
+    "Check current state of the files\n"
+    "## Deferred / concerns\n"
+    "None initially\n"
+)
+
+
+def test_execute_task_noop_worktree_is_not_ok_even_if_verify_passes(git_repo):
+    from orchestrate import execute_task
+
+    fleet = FakeFleet([GOOD_OUTPUT, GOOD_OUTPUT])
+    result = execute_task(
+        "do the thing",
+        "plan",
+        fleet,
+        verify_cmd="true",
+        hold_on_fail=False,
+        worktree=git_repo,
+    )
+    assert result["status"] == "failed-noop"
+    assert result["attempts"] == 2
+    assert fleet.ep.calls == 2
+
+
+def test_execute_task_placeholder_result_is_not_ok(git_repo):
+    from orchestrate import execute_task
+
+    fleet = FakeFleet([STALL_FOOTER, EXAMINE_FOOTER])
+    result = execute_task(
+        "do the thing",
+        "plan",
+        fleet,
+        verify_cmd="true",
+        hold_on_fail=False,
+        worktree=git_repo,
+    )
+    assert result["status"] != "ok"
+    assert fleet.ep.calls == 2
+
+
+def test_execute_task_write_then_verify_still_ok(git_repo):
+    from orchestrate import execute_task
+
+    def write_readme():
+        (git_repo / "README").write_text("edited\n", encoding="utf-8")
+
+    fleet = SideEffectFleet([(write_readme, GOOD_OUTPUT)])
+    result = execute_task(
+        "edit readme",
+        "plan",
+        fleet,
+        verify_cmd="true",
+        hold_on_fail=False,
+        worktree=git_repo,
+    )
+    assert result["status"] == "ok"
+
+
+def test_main_all_noop_exits_nonzero_and_zero_ok_count(git_repo, monkeypatch):
+    import json
+
+    import orchestrate
+
+    fleet = SideEffectFleet([
+        (None, PLAN_TEXT),
+        (None, GOOD_OUTPUT),
+        (None, GOOD_OUTPUT),
+        (None, "review: ok"),
+    ])
+    out = _run_main(monkeypatch, git_repo, fleet)
+    with pytest.raises(SystemExit) as exc:
+        orchestrate.main()
+    assert exc.value.code == orchestrate.FAILED_NOOP_EXIT
+    run = json.loads(out.read_text())
+    assert run["results"][0]["status"] == "failed-noop"
+    assert sum(r["status"] == "ok" for r in run["results"]) == 0

@@ -33,6 +33,7 @@ targets 3.10+):
 from __future__ import annotations
 
 import argparse
+import hashlib
 import re
 import subprocess
 import sys
@@ -202,6 +203,32 @@ def worktree_changes(root: Path | str) -> list[str]:
             if line:
                 paths.add(_normalize(line))
     return sorted(paths)
+
+
+def worktree_fingerprint(root: Path | str) -> str | None:
+    """Content-aware snapshot of dirty + untracked files, or None if not git.
+
+    Path-only ``worktree_changes`` cannot see extra edits to an already-dirty
+    file; this hashes ``git diff HEAD`` plus untracked file bytes so a no-op
+    chat is distinguishable from a real write.
+    """
+    root = Path(root)
+    try:
+        diff = _git(root, "diff", "HEAD")
+        porcelain = _git(root, "status", "--porcelain=v1")
+        untracked = _git(root, "ls-files", "--others", "--exclude-standard")
+    except ScopeError:
+        return None
+    parts = [porcelain, diff]
+    for rel in untracked.splitlines():
+        rel = rel.strip()
+        if not rel:
+            continue
+        path = root / rel
+        if path.is_file():
+            digest = hashlib.sha256(path.read_bytes()).hexdigest()
+            parts.append(f"{rel}:{digest}")
+    return "\n".join(parts)
 
 
 def enforce_scope(
