@@ -3,7 +3,7 @@ sidebar_position: 1.5
 sidebar_label: Plan workflow verbs
 ---
 
-<!-- synced-from: anchor/cli.md @ 029d015d7b15b94d20ab5a6c9de3959a2e2e1159 -->
+<!-- synced-from: anchor/cli.md @ 282c3af99fcdae9198eec2aca989a393dee6773a -->
 
 # The plan-workflow CLI: what `anchor` does itself, and what it hands back
 
@@ -31,7 +31,9 @@ Ollama and NVIDIA Build. `anchor` loads a gitignored repo-root `.env`
 (setdefault) before verbs run; Authorization is the first set of
 `ANCHOR_API_KEY`, `NVIDIA_API_KEY`, `NGC_API_KEY`. `--run` hands the claimed
 plan to `orchestrate.py` with no extra registry args — it uses the default
-fleet file, not `--registry`.
+fleet file, not `--registry`. That default `Fleet.pick` probes LAN rows
+before chat and falls back to NVIDIA Build when the probe is live (see
+`platforms/nvidia-build/BUILD.md`).
 
 ## The rule for the split
 

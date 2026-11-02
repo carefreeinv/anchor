@@ -808,11 +808,21 @@ def main() -> None:
         help="root dir for archived per-task raw transcripts "
              "(default: <worktree>/var/task-transcripts/; pass empty string to disable)",
     )
+    ap.add_argument(
+        "--prefer-local",
+        action="store_true",
+        help="never fall back to NVIDIA Build even if LAN endpoints are down",
+    )
     args = ap.parse_args()
     if not args.goal and not args.plan_file:
         ap.error("--goal or --plan-file required")
 
-    fleet = Fleet(args.registry) if args.registry else Fleet()
+    fleet_kw: dict = {}
+    if args.registry:
+        fleet_kw["registry_path"] = args.registry
+    if args.prefer_local:
+        fleet_kw["prefer_local"] = True
+    fleet = Fleet(**fleet_kw) if fleet_kw else Fleet()
     context = Path(args.context).read_text(encoding="utf-8") if args.context else ""
     root = Path(args.worktree)
     events: list[dict] = []

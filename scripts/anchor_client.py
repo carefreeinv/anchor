@@ -38,6 +38,7 @@ from __future__ import annotations
 
 import os
 import re
+import sys
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -323,26 +324,120 @@ class Endpoint:
         )
 
 
+HEALTH_TIMEOUT_S = 3.0
+NVIDIA_BUILD_ENDPOINT_NAME = "nvidia-build"
+
+
+def _truthy_env(name: str) -> bool:
+    return os.environ.get(name, "").strip().lower() in {"1", "true", "yes", "on"}
+
+
+def endpoint_reachable(ep: Endpoint, *, timeout: float = HEALTH_TIMEOUT_S) -> bool:
+    """Cheap GET ``{base_url}/models``. Unreachable or non-2xx is False."""
+    url = ep.base_url.rstrip("/") + "/models"
+    try:
+        resp = requests.get(url, timeout=timeout)
+    except requests.RequestException:
+        return False
+    return resp.status_code == 200
+
+
 class Fleet:
-    def __init__(self, registry_path: str | Path = DEFAULT_REGISTRY):
+    def __init__(
+        self,
+        registry_path: str | Path = DEFAULT_REGISTRY,
+        *,
+        prefer_local: bool | None = None,
+        probe_health: bool = True,
+    ):
         data = yaml.safe_load(Path(registry_path).read_text(encoding="utf-8"))
         self.endpoints = [Endpoint(**e) for e in data.get("endpoints", [])]
         self.roles: dict[str, list[str]] = data.get("roles", {})
         self._rr: dict[str, int] = {}
+        self._health: dict[str, bool] = {}
+        if prefer_local is None:
+            prefer_local = _truthy_env("ANCHOR_PREFER_LOCAL")
+        self.prefer_local = bool(prefer_local)
+        self.probe_health = probe_health
 
     def by_tier(self, tier: str) -> list[Endpoint]:
         return [e for e in self.endpoints if e.tier == tier]
 
+    def _is_healthy(self, ep: Endpoint) -> bool:
+        if not self.probe_health:
+            return True
+        cached = self._health.get(ep.name)
+        if cached is not None:
+            return cached
+        ok = endpoint_reachable(ep)
+        self._health[ep.name] = ok
+        return ok
+
     def pick(self, role: str) -> Endpoint:
-        """First healthy-tier endpoint for a role, round-robin within the tier."""
+        """First *reachable* endpoint for a role, round-robin within the tier.
+
+        Unreachable LAN rows are skipped (connect timeout ~``HEALTH_TIMEOUT_S``).
+        When none remain and NVIDIA Build is configured+reachable, return a
+        hosted Build endpoint — unless ``prefer_local`` / ``ANCHOR_PREFER_LOCAL``.
+        """
+        skipped: list[str] = []
         for tier in self.roles.get(role, []):
             candidates = self.by_tier(tier)
-            if candidates:
-                i = self._rr.get(tier, 0)
-                self._rr[tier] = (i + 1) % len(candidates)
-                return candidates[i % len(candidates)]
-        raise LookupError(f"No endpoint available for role '{role}' "
-                          f"(tiers tried: {self.roles.get(role)})")
+            healthy = []
+            for ep in candidates:
+                if self._is_healthy(ep):
+                    healthy.append(ep)
+                else:
+                    skipped.append(ep.name)
+            if not healthy:
+                continue
+            i = self._rr.get(tier, 0)
+            self._rr[tier] = (i + 1) % len(healthy)
+            return healthy[i % len(healthy)]
+        build_note = "not tried (prefer_local)"
+        if not self.prefer_local:
+            fb, build_note = self._nvidia_build_fallback()
+            if fb is not None:
+                skipped_s = ", ".join(skipped) if skipped else "none"
+                print(
+                    f"[fleet] using NVIDIA Build ({fb.base_url}) — {build_note}; "
+                    f"LAN skipped: {skipped_s}",
+                    file=sys.stderr,
+                )
+                return fb
+        raise LookupError(
+            f"No healthy endpoint for role '{role}' "
+            f"(tiers tried: {self.roles.get(role)}; "
+            f"skipped unreachable: {skipped or 'none'}; "
+            f"NVIDIA Build: {build_note})"
+        )
+
+    def _nvidia_build_fallback(self) -> tuple[Endpoint | None, str]:
+        try:
+            import nvidia_build_probe as nbp
+        except ImportError:
+            return None, "nvidia_build_probe missing"
+        probe = nbp.probe_build()
+        backend = nbp.preferred_backend(probe, prefer_local=self.prefer_local)
+        if backend != "build":
+            return None, nbp.explain(probe, backend, prefer_local=self.prefer_local)
+        model = nbp.choose_build_model(nbp.list_build_model_ids(probe))
+        if model in nbp.RETIRED_BUILD_MODELS or model.endswith(
+            "llama-3.3-nemotron-super-49b-v1"
+        ):
+            model = nbp.DEFAULT_BUILD_MODEL
+        ep = Endpoint(
+            name=NVIDIA_BUILD_ENDPOINT_NAME,
+            tier="reasoner",
+            base_url=nbp.BUILD_BASE_URL,
+            model=model,
+            quirks={"think_toggle": "nemotron", "temperature": 0},
+            local=False,
+        )
+        note = (
+            f"key from {probe.key_source}, reachable, model={model}"
+        )
+        return ep, note
 
 
 def resolve_doctrine_path(rel: str, root: Path | None = None) -> Path:

@@ -7,6 +7,7 @@ import pytest
 import requests
 from anchor_client import (
     MAX_RETRIES,
+    NVIDIA_BUILD_ENDPOINT_NAME,
     EmptyAssistantText,
     Endpoint,
     Fleet,
@@ -158,7 +159,7 @@ def test_fleet_pick_round_robins_within_tier(tmp_path):
         "  - name: b\n    tier: swarm\n    base_url: http://b/v1\n    model: m\n"
         "roles:\n  executor: [swarm]\n"
     )
-    fleet = Fleet(registry)
+    fleet = Fleet(registry, probe_health=False)
 
     picks = [fleet.pick("executor").name for _ in range(4)]
 
@@ -172,7 +173,7 @@ def test_fleet_pick_raises_when_no_endpoint_available_for_role(tmp_path):
         "  - name: a\n    tier: swarm\n    base_url: http://a/v1\n    model: m\n"
         "roles:\n  planner: [frontier]\n"
     )
-    fleet = Fleet(registry)
+    fleet = Fleet(registry, probe_health=False, prefer_local=True)
 
     with pytest.raises(LookupError):
         fleet.pick("planner")
@@ -570,3 +571,76 @@ def test_endpoint_locality_agrees_with_the_shared_helper():
         ep = Endpoint(name="n", tier="swarm", base_url=entry["base_url"], model="m",
                       local=raw)
         assert ep.is_local == il.endpoint_is_local(entry), f"disagreement for {raw!r}"
+
+
+def _lan_registry(tmp_path: Path) -> Path:
+    reg = tmp_path / "endpoints.yaml"
+    reg.write_text(
+        "endpoints:\n"
+        "  - name: h100-executor\n    tier: executor-heavy\n"
+        "    base_url: http://10.0.1.10:8000/v1\n    model: qwen\n"
+        "  - name: h100-nemotron\n    tier: reasoner\n"
+        "    base_url: http://10.0.1.11:8000/v1\n    model: nemo\n"
+        "roles:\n  executor: [executor-heavy, swarm]\n  critic: [reasoner]\n",
+        encoding="utf-8",
+    )
+    return reg
+
+
+@patch("anchor_client.endpoint_reachable", return_value=True)
+def test_fleet_pick_keeps_healthy_lan(_mock_ok, tmp_path):
+    fleet = Fleet(_lan_registry(tmp_path), prefer_local=False)
+    assert fleet.pick("executor").name == "h100-executor"
+
+
+@patch("anchor_client.endpoint_reachable", return_value=False)
+@patch("nvidia_build_probe.list_build_model_ids", return_value=[
+    "nvidia/llama-3.3-nemotron-super-49b-v1",
+    "nvidia/nemotron-3.5-lightning-30b-a3b",
+])
+@patch("nvidia_build_probe.probe_build")
+def test_fleet_pick_falls_back_to_build_when_lan_down(
+    mock_probe, _mock_ids, _mock_down, tmp_path, monkeypatch, capsys,
+):
+    import nvidia_build_probe as nbp
+
+    monkeypatch.setenv("NVIDIA_API_KEY", "nvapi-test")
+    mock_probe.return_value = nbp.BuildProbe(
+        configured=True, reachable=True, key_source="NVIDIA_API_KEY",
+        base_url=nbp.BUILD_BASE_URL,
+    )
+    fleet = Fleet(_lan_registry(tmp_path), prefer_local=False)
+    ep = fleet.pick("executor")
+    assert ep.name == NVIDIA_BUILD_ENDPOINT_NAME
+    assert ep.model == "nvidia/nemotron-3.5-lightning-30b-a3b"
+    assert ep.local is False
+    assert "llama-3.3-nemotron-super-49b" not in ep.model
+    err = capsys.readouterr().err
+    assert "NVIDIA Build" in err
+    assert "nvapi-test" not in err
+
+
+@patch("anchor_client.endpoint_reachable", return_value=False)
+@patch("nvidia_build_probe.probe_build")
+def test_fleet_pick_prefer_local_skips_build(mock_probe, _mock_down, tmp_path, monkeypatch):
+    import nvidia_build_probe as nbp
+
+    monkeypatch.setenv("NVIDIA_API_KEY", "nvapi-test")
+    mock_probe.return_value = nbp.BuildProbe(
+        configured=True, reachable=True, key_source="NVIDIA_API_KEY",
+        base_url=nbp.BUILD_BASE_URL,
+    )
+    fleet = Fleet(_lan_registry(tmp_path), prefer_local=True)
+    with pytest.raises(LookupError, match="prefer_local"):
+        fleet.pick("executor")
+    mock_probe.assert_not_called()
+
+
+@patch("anchor_client.endpoint_reachable", return_value=False)
+def test_fleet_pick_fails_fast_when_lan_and_build_down(_mock_down, tmp_path, monkeypatch):
+    monkeypatch.delenv("NVIDIA_API_KEY", raising=False)
+    monkeypatch.delenv("NGC_API_KEY", raising=False)
+    monkeypatch.delenv("ANCHOR_API_KEY", raising=False)
+    fleet = Fleet(_lan_registry(tmp_path), prefer_local=False)
+    with pytest.raises(LookupError, match="No healthy endpoint"):
+        fleet.pick("executor")

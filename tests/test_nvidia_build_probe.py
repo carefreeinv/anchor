@@ -106,6 +106,25 @@ def test_explain_local_reason_mentions_missing_key():
     assert "no NVIDIA_API_KEY" in nbp.explain(probe, "local")
 
 
+def test_choose_build_model_prefers_lightning_skips_retired_49b():
+    ids = [
+        "nvidia/llama-3.3-nemotron-super-49b-v1",
+        "nvidia/nemotron-3.5-lightning-30b-a3b",
+    ]
+    assert nbp.choose_build_model(ids) == nbp.DEFAULT_BUILD_MODEL
+    assert nbp.choose_build_model(["nvidia/llama-3.3-nemotron-super-49b-v1"]) == (
+        nbp.DEFAULT_BUILD_MODEL
+    )
+
+
+def test_list_build_model_ids_empty_when_unreachable():
+    probe = nbp.BuildProbe(configured=True, reachable=False, key_source="NVIDIA_API_KEY",
+                            base_url=nbp.BUILD_BASE_URL)
+    with patch("nvidia_build_probe.requests.get") as mock_get:
+        assert nbp.list_build_model_ids(probe, env={"NVIDIA_API_KEY": "k"}) == []
+    mock_get.assert_not_called()
+
+
 def test_explain_local_reason_mentions_operator_override():
     probe = nbp.BuildProbe(configured=True, reachable=True, key_source="NVIDIA_API_KEY",
                             base_url=nbp.BUILD_BASE_URL)

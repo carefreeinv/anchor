@@ -51,6 +51,11 @@ Newest first.
 
 ### Fixed
 
+- **`Fleet.pick` skips unreachable LAN endpoints** (`GET {base}/models`, ~3s)
+  and falls back to NVIDIA Build when `NVIDIA_API_KEY` is live. Dead H100 no
+  longer waits on a 600s chat timeout. `ANCHOR_PREFER_LOCAL` /
+  `orchestrate.py --prefer-local` skip Build. Super 49B is not selected.
+
 - **`anchor work` claim** light-path commits a tracked `.plans/` move to
   `in-progress/` (`Plans: <slug> → in-progress (anchor work claim)`).
 

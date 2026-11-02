@@ -65,17 +65,26 @@ itself), and the resulting `backend` (`build` or `local`).
 
 ## Preference rule
 
-| Key present? | Reachable? | Operator override (`prefer_local`)? | Backend used |
-|---|---|---|---|
-| no | — | — | local |
-| yes | no (401 / unreachable / timeout) | — | local |
-| yes | yes | yes | local |
-| yes | yes | no | **build** |
+`Fleet.pick` (used by `orchestrate.py` and interactive `anchor work --run`)
+probes each registry endpoint with `GET {base}/models` (about 3s). Unreachable
+LAN rows (for example a powered-off H100) are skipped. Then:
 
-An absent or unreachable key never crashes an Aider session — it falls back
-to whatever local path was already documented (Ollama/llama.cpp). An explicit
-operator preference for local always wins, even with a live Build key —
-Anchor never silently overrides a choice the operator already made.
+| LAN healthy? | Key present? | Build reachable? | `prefer_local` / `ANCHOR_PREFER_LOCAL`? | Backend used |
+|---|---|---|---|---|
+| yes | — | — | — | **LAN** (H100 / NIM / listed) |
+| no | no | — | — | fail fast (seconds, not a 600s chat hang) |
+| no | yes | no | — | fail fast |
+| no | yes | yes | yes | fail fast (Build not tried) |
+| no | yes | yes | no | **NVIDIA Build** (hosted, free-tier catalog) |
+
+Healthy LAN always wins. Build is fallback, not a silent steal of rack GPUs.
+`orchestrate.py --prefer-local` and env `ANCHOR_PREFER_LOCAL=1` skip Build.
+The hosted model id comes from live `GET /v1/models`, preferring
+`nvidia/nemotron-3.5-lightning-30b-a3b`; Super 49B is retired on Build (HTTP 410).
+
+An absent or unreachable key never hangs a chat — `Fleet.pick` raises
+`LookupError` in seconds. An explicit operator preference for local always
+wins, even with a live Build key.
 
 ## Aider wiring
 

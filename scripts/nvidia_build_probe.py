@@ -27,6 +27,12 @@ from dataclasses import dataclass
 import requests
 
 BUILD_BASE_URL = "https://integrate.api.nvidia.com/v1"
+# Verified live on integrate.api.nvidia.com (2026-10-28). Super 49B is HTTP 410.
+DEFAULT_BUILD_MODEL = "nvidia/nemotron-3.5-lightning-30b-a3b"
+RETIRED_BUILD_MODELS = frozenset({
+    "nvidia/llama-3.3-nemotron-super-49b-v1",
+    "llama-3.3-nemotron-super-49b-v1",
+})
 
 # NVIDIA_API_KEY is the documented Build inference key (from build.nvidia.com).
 # NGC_API_KEY is normally a container-registry / NIM-pull credential, not
@@ -87,6 +93,59 @@ def probe_build(
         return BuildProbe(configured=True, reachable=True, key_source=source, base_url=base_url)
     return BuildProbe(configured=True, reachable=False, key_source=source, base_url=base_url,
                        error=f"HTTP {resp.status_code}")
+
+
+def choose_build_model(ids: list[str] | None) -> str:
+    """Pick a hosted catalog id. Never Super 49B (HTTP 410 on Build)."""
+    live = [
+        i for i in (ids or [])
+        if i not in RETIRED_BUILD_MODELS
+        and not str(i).endswith("llama-3.3-nemotron-super-49b-v1")
+    ]
+    if DEFAULT_BUILD_MODEL in live:
+        return DEFAULT_BUILD_MODEL
+    for i in live:
+        if "nemotron" in i.lower():
+            return i
+    return DEFAULT_BUILD_MODEL
+
+
+def list_build_model_ids(
+    probe: BuildProbe,
+    *,
+    timeout: float = PROBE_TIMEOUT_S,
+    env: dict[str, str] | None = None,
+) -> list[str]:
+    """Live ``GET /v1/models`` ids, or empty. Never raises; never returns the key."""
+    if not probe.reachable:
+        return []
+    key, _source = find_api_key(env)
+    if not key:
+        return []
+    try:
+        resp = requests.get(
+            f"{probe.base_url}/models",
+            headers={"Authorization": f"Bearer {key}"},
+            timeout=timeout,
+        )
+    except requests.RequestException:
+        return []
+    if resp.status_code != 200:
+        return []
+    try:
+        data = resp.json()
+    except ValueError:
+        return []
+    rows = data.get("data") if isinstance(data, dict) else data
+    if not isinstance(rows, list):
+        return []
+    ids: list[str] = []
+    for row in rows:
+        if isinstance(row, dict) and row.get("id"):
+            ids.append(str(row["id"]))
+        elif isinstance(row, str):
+            ids.append(row)
+    return ids
 
 
 def preferred_backend(probe: BuildProbe, *, prefer_local: bool = False) -> str:

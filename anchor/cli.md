@@ -24,7 +24,9 @@ Ollama and NVIDIA Build. `anchor` loads a gitignored repo-root `.env`
 (setdefault) before verbs run; Authorization is the first set of
 `ANCHOR_API_KEY`, `NVIDIA_API_KEY`, `NGC_API_KEY`. `--run` hands the claimed
 plan to `orchestrate.py` with no extra registry args — it uses the default
-fleet file, not `--registry`.
+fleet file, not `--registry`. That default `Fleet.pick` probes LAN rows
+before chat and falls back to NVIDIA Build when the probe is live (see
+`platforms/nvidia-build/BUILD.md`).
 
 ## The rule for the split
 
