@@ -3,7 +3,7 @@ sidebar_position: 1.5
 sidebar_label: Plan workflow verbs
 ---
 
-<!-- synced-from: anchor/cli.md @ e8ce2e1dbae1625d92d278e0e40730d4413f90fc -->
+<!-- synced-from: anchor/cli.md @ 145505a3cc507b3affd8a814b38396bb82d05243 -->
 
 # The plan-workflow CLI: what `anchor` does itself, and what it hands back
 
