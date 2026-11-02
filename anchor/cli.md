@@ -95,7 +95,7 @@ that answer, so the CLI has none that tries.
 | Part | Kind | Why |
 |------|------|-----|
 | list every lane (or `--lane`) with slug and title | deterministic | a directory read |
-| `--board` | deterministic | hands off to `plan_board.py`; JSON when headless |
+| `--board` | deterministic | one `plan_board.py --once` frame; JSON wraps that dump as `result.board` |
 
 ### `anchor work`
 

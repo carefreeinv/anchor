@@ -463,9 +463,18 @@ def op_plans_list(params: PlansListParams, _answers: Answers, _ctx: Ctx) -> Resu
 def op_plans_board(params: PlansBoardParams, _answers: Answers, ctx: Ctx) -> Result:
     import plan_board
 
-    argv = ["--project", str(Path(params.root).resolve())]
+    root = Path(params.root).resolve()
+    plans = root / ".plans"
+    argv = ["--project", str(root), "--once"]
     if not ctx.mode.interactive or params.as_json:
-        argv.append("--json")
+        if not plans.is_dir():
+            res = Result("plans", "board", exit_code=EXIT_NOTHING)
+            res.error = f"no .plans/ directory under {root}"
+            return res
+        payload = plan_board.board_status_payload(plans, root)
+        res = Result("plans", "board")
+        res.data["board"] = payload
+        return res
     raise Passthrough(plan_board.main(argv))
 
 

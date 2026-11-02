@@ -3,7 +3,7 @@ sidebar_position: 1.5
 sidebar_label: Plan workflow verbs
 ---
 
-<!-- synced-from: anchor/cli.md @ cfa49743fcfb223f2d5921dec0054de75bebd6a3 -->
+<!-- synced-from: anchor/cli.md @ 259d7254599881262df28a36151f7a6fb348498e -->
 
 # The plan-workflow CLI: what `anchor` does itself, and what it hands back
 
@@ -102,7 +102,7 @@ that answer, so the CLI has none that tries.
 | Part | Kind | Why |
 |------|------|-----|
 | list every lane (or `--lane`) with slug and title | deterministic | a directory read |
-| `--board` | deterministic | hands off to `plan_board.py`; JSON when headless |
+| `--board` | deterministic | one `plan_board.py --once` frame; JSON wraps that dump as `result.board` |
 
 ### `anchor work`
 

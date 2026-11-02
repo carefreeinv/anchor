@@ -1,4 +1,5 @@
 {
+  "action": "board",
   "column_names": [
     "Drafts",
     "Ready",
@@ -9,16 +10,20 @@
   "exit_code": 0,
   "include_parked": false,
   "keys": [
-    "columns",
-    "generated_at",
-    "include_parked",
-    "plans_root",
-    "project_root",
+    "action",
+    "error",
+    "exit_code",
+    "mode",
+    "notes",
+    "ok",
+    "pending",
+    "result",
     "schema_version",
-    "throughput"
+    "verb"
   ],
   "ready_slugs": [
     "b1"
   ],
-  "schema_version": 1
+  "schema_version": 1,
+  "verb": "plans"
 }

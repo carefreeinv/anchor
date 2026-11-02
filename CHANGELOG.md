@@ -8,6 +8,8 @@ Newest first.
 
 ### Added
 
+- **`anchor plans --board` one frame + JSON envelope.** Interactive runs pass `--once` to `plan_board` so the TTY board exits after one draw. `--json` / headless wrap `plan_board`'s dump as `result.board` in the schema-v1 envelope (`verb=plans`, `action=board`).
+
 - **CLI `--run` commit-prep.** After orchestrate exit 0, `work_once` / `anchor work --run` runs tests (and a CHANGELOG nudge when the apply is user-visible), then one product commit on `feature/<slug>` before auto-finish. Prep red stays in `in-progress/` with no commit. `--no-commit` keeps apply-only. Never commits on `main`/`master`/`dev`/`develop`.
 
 - **Default CLI loop.** `anchor work` claims the top ready plan and runs orchestrate (`--no-run` claims only). `anchor review` critics the top `review-needed/` plan (`--list` lists). `anchor draft "brief"` derives a kebab slug and asks the planner (default `*.local.md`). Empty review queue + integration ahead still exits 2 and names `anchor review --promote`.

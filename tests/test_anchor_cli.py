@@ -770,8 +770,10 @@ def test_no_verb_blocks_with_stdin_closed(project, argv, close):
         out, _err = proc.communicate(input="", timeout=30)
     assert proc.returncode in (0, 1, 3), _err
     doc = json.loads(out)
-    if "--board" not in argv:
-        assert doc["mode"] == "non-interactive" and doc["exit_code"] == proc.returncode
+    assert doc["mode"] == "non-interactive" and doc["exit_code"] == proc.returncode
+    if "--board" in argv:
+        assert doc["verb"] == "plans" and doc["action"] == "board"
+        assert "board" in (doc.get("result") or {})
 
 
 # --- a pip-installed `anchor` can import everything it uses -------------------------

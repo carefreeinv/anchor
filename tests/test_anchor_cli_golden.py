@@ -112,24 +112,21 @@ def test_golden_plans_lane_filter(project):
     assert_golden("plans_lane_filter", code, doc, project)
 
 
-def test_golden_plans_board_passthrough(project, monkeypatch):
-    """`--board` hands off to plan_board; prints that script's JSON, not ours."""
+def test_golden_plans_board_passthrough(project):
+    """`--board --json` is the schema-v1 envelope with plan_board under result.board."""
     write(project, "bugs", "b1")
-    buf = io.StringIO()
-    monkeypatch.setattr(sys, "stdout", buf)
-    code = anchor_cli.main(
-        ["plans", "--board", "--root", str(project), "--json"],
-        stdin=io.StringIO(), stdout=TTY(), env={},
-    )
-    doc = json.loads(buf.getvalue())
+    code, doc = cli(["plans", "--board", "--root", str(project), "--json"])
+    board = (doc.get("result") or {}).get("board") or {}
     payload = {
         "exit_code": code,
+        "verb": doc.get("verb"),
+        "action": doc.get("action"),
         "keys": sorted(doc.keys()),
         "schema_version": doc.get("schema_version"),
-        "include_parked": doc.get("include_parked"),
-        "column_names": [c["name"] for c in doc.get("columns", [])],
+        "include_parked": board.get("include_parked"),
+        "column_names": [c["name"] for c in board.get("columns", [])],
         "ready_slugs": [
-            p["slug"] for col in doc.get("columns", []) if col["name"] == "Ready"
+            p["slug"] for col in board.get("columns", []) if col["name"] == "Ready"
             for p in col["plans"]
         ],
     }

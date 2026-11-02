@@ -398,6 +398,8 @@ def _cli_action(args: argparse.Namespace) -> str:
         return "review"
     if getattr(args, "list", False):
         return "list"
+    if verb == "plans" and getattr(args, "board", False):
+        return "board"
     if verb == "models":
         if getattr(args, "list", False) or args.action == "list":
             return "list"
