@@ -51,6 +51,10 @@ Newest first.
 
 ### Fixed
 
+- **`--run` escalates before chat** when a task Touches `.plans/**`
+  (executor write-deny). `insist` still dispatches. A task that only names
+  `scripts/plan_store.py` still chats.
+
 - **`--run` applies executor unified diffs** into `--worktree` before
   scope/verify. `work_once.py --ensure-worktree --run` forwards `--worktree`.
   Footer-only replies still fail closed (`failed-noop`). Parser is stdlib-only

@@ -407,6 +407,30 @@ def split_tasks(plan: str) -> list[str]:
     )
 
 
+_PLANS_LANES = (
+    "bugs", "features", "in-progress", "completed", "review-needed",
+    "drafts", "ambiguous", "blocked",
+)
+_PLANS_DENIED_RE = re.compile(
+    r"`[^`\n]*\.plans/[^`\n]+`"
+    r"|(?:^|[\s(])(?:\./)?\.plans/(?:"
+    + "|".join(_PLANS_LANES)
+    + r")(?:/[\w.\-]+)*"
+    r"|(?:^|[\s(])(?:\./)?\.plans/[\w./\-]+\.local\.md",
+    re.IGNORECASE | re.MULTILINE,
+)
+
+
+def task_touches_denied_plans(task: str) -> bool:
+    """True when the task names a `.plans/` path the executor cannot write.
+
+    Path-shaped only: a lane under `.plans/`, a `.local.md`, or a backtick
+    path containing `.plans/`. The bare word "plans" and `.plans/README`
+    without a lane do not match.
+    """
+    return _PLANS_DENIED_RE.search(task) is not None
+
+
 def _ledger_outcome(
     *,
     task: str,
@@ -469,6 +493,18 @@ def execute_task(task: str, plan: str, fleet: Fleet, verify_cmd: str | None,
                  outcome_sink: dict | None = None,
                  transcript_root: Path | None = None,
                  worktree: Path | None = None) -> dict:
+    if task_touches_denied_plans(task) and not insist:
+        msg = (
+            "EXECUTOR write-deny: task Touches `.plans/**`; escalate before chat"
+        )
+        print(f"[role] {msg}", file=sys.stderr)
+        return {
+            "task": task,
+            "status": "escalate",
+            "attempts": 1,
+            "suggestion": msg,
+            "message": msg,
+        }
     system = load_prompt("anchor/system-prompts/mythos-core.md")
     history: list[str] = []
     last_ep = None

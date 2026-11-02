@@ -1,5 +1,5 @@
 import pytest
-from orchestrate import split_tasks
+from orchestrate import split_tasks, task_touches_denied_plans
 
 
 def test_split_tasks_from_steps_table():
@@ -30,6 +30,67 @@ def test_split_tasks_unrecognized_format_raises_with_preview():
     with pytest.raises(ValueError, match="No tasks found") as exc_info:
         split_tasks(plan)
     assert "refactor things" in str(exc_info.value)
+
+
+def test_task_touches_denied_plans_hygiene_path():
+    assert task_touches_denied_plans(
+        "Drop the Status: line from "
+        ".plans/completed/plan-release-tracking.local.md"
+    )
+    assert task_touches_denied_plans(
+        "edit `scripts/foo.py` and `.plans/features/bar.md`"
+    )
+    assert not task_touches_denied_plans("rewrite scripts/plan_store.py")
+    assert not task_touches_denied_plans("see the plans workflow")
+    assert not task_touches_denied_plans("see .plans/README for process")
+
+
+def test_execute_task_plans_touch_escalates_without_chat():
+    from orchestrate import execute_task
+
+    fleet = FakeFleet([GOOD_OUTPUT])
+    result = execute_task(
+        "Drop Status from .plans/completed/plan-release-tracking.local.md",
+        "plan",
+        fleet,
+        verify_cmd=None,
+        hold_on_fail=False,
+    )
+    assert result["status"] == "escalate"
+    assert result["attempts"] == 1
+    assert "EXECUTOR" in result["suggestion"]
+    assert fleet.ep.calls == 0
+
+
+def test_execute_task_mixed_product_and_plans_escalates():
+    from orchestrate import execute_task
+
+    fleet = FakeFleet([GOOD_OUTPUT])
+    result = execute_task(
+        "Update scripts/plan_store.py and `.plans/features/hygiene.md`",
+        "plan",
+        fleet,
+        verify_cmd=None,
+        hold_on_fail=False,
+    )
+    assert result["status"] == "escalate"
+    assert fleet.ep.calls == 0
+
+
+def test_execute_task_plans_touch_insist_still_chats():
+    from orchestrate import execute_task
+
+    fleet = FakeFleet([GOOD_OUTPUT])
+    result = execute_task(
+        "Drop Status from .plans/completed/x.local.md",
+        "plan",
+        fleet,
+        verify_cmd=None,
+        hold_on_fail=False,
+        insist=True,
+    )
+    assert result["status"] == "ok"
+    assert fleet.ep.calls == 1
 
 
 class FakeEndpoint:
