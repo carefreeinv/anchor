@@ -681,3 +681,42 @@ def test_ref_lock_race_is_contention_not_unavailable(clones, monkeypatch):
 
     monkeypatch.setattr(lb, "_git", spy)
     assert lb._push(a, sha) is False
+
+
+def test_compact_git_err_strips_askpass():
+    dump = (
+        "ssh_askpass: exec(/usr/bin/ssh-askpass): No such file or directory\n"
+        "git@github.com: Permission denied (publickey).\n"
+        "fatal: Could not read from remote repository.\n"
+    )
+    assert lb._compact_git_err(dump) == "SSH auth failed"
+
+
+def test_compact_git_err_keeps_isolation_text():
+    msg = "remote 'origin' has a 'leases' branch that is not a lease branch"
+    assert lb._compact_git_err(msg) == msg
+    assert "SSH auth" not in lb._compact_git_err(msg)
+
+
+def test_fetch_auth_failure_is_one_line(clones, monkeypatch):
+    a, _, _ = clones
+    real = lb._git
+
+    def spy(root, *args, **kwargs):
+        if args and args[0] == "fetch":
+            class _P:
+                returncode = 1
+                stdout = b""
+                stderr = (
+                    b"ssh_askpass: exec(/usr/bin/ssh-askpass): No such file or directory\n"
+                    b"git@github.com: Permission denied (publickey).\n"
+                    b"fatal: Could not read from remote repository.\n"
+                )
+            return _P()
+        return real(root, *args, **kwargs)
+
+    monkeypatch.setattr(lb, "_git", spy)
+    with pytest.raises(lb.LeaseBranchUnavailable, match="SSH auth failed") as ei:
+        lb.fetch(a)
+    assert "ssh_askpass" not in str(ei.value)
+    assert "fatal:" not in str(ei.value).lower()

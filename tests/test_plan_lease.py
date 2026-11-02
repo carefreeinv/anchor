@@ -37,6 +37,22 @@ def _write_plan(path: Path) -> None:
     )
 
 
+def test_claimed_rels_skips_fetch_when_only_private_plans(tmp_path, monkeypatch):
+    import lease_branch as lb
+
+    plans = _plans(tmp_path)
+    _write_plan(plans / "features" / "secret.local.md")
+    calls: list[str] = []
+
+    def boom(*_a, **_k):
+        calls.append("list")
+        raise AssertionError("must not fetch shared leases for .local.md-only trees")
+
+    monkeypatch.setattr(lb, "list_leases", boom)
+    assert claimed_rels(plans) == set()
+    assert calls == []
+
+
 def test_claim_success_and_double_claim_fails(tmp_path):
     plans = _plans(tmp_path)
     rel = "features/foo.md"

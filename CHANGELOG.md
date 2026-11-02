@@ -30,6 +30,10 @@ Newest first.
 
 ### Changed
 
+- **Shared-lease fetch warnings** collapse SSH/`ssh_askpass` failures to
+  `SSH auth failed` and skip the network round-trip when every ready plan is
+  `*.local.md`.
+
 - **`anchor` verbs commit their own plans-only lane moves** when `.plans/` is
   tracked (`git commit -m "Plans: <slug> → <lane> (anchor …)" -- .plans/`).
   Untracked / `*.local.md` trees note `lane move (untracked)`. A merge in

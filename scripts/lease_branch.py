@@ -115,6 +115,27 @@ class IsolationError(LeaseBranchError):
     """The leases branch would contain something other than ``leases/*.json``."""
 
 
+_AUTH_MARKERS = (
+    "permission denied (publickey)",
+    "permission denied (keyboard-interactive",
+    "could not read from remote repository",
+    "ssh_askpass",
+    "host key verification failed",
+    "authentication failed",
+)
+
+
+def _compact_git_err(err: str) -> str:
+    """One-line transport failure; drop git fatal / ssh_askpass dumps."""
+    low = err.lower()
+    if any(m in low for m in _AUTH_MARKERS):
+        return "SSH auth failed"
+    first = next((ln.strip() for ln in err.splitlines() if ln.strip()), "git failed")
+    if len(first) > 120:
+        first = first[:117] + "..."
+    return first
+
+
 def _env_int(name: str, default: int) -> int:
     try:
         return int(os.environ.get(name, default))
@@ -321,7 +342,9 @@ def fetch(root: Path, *, validate: bool = True) -> str | None:
         err = got.stderr.decode(errors="replace").strip()
         if "couldn't find remote ref" in err.lower():
             return None
-        raise LeaseBranchUnavailable(f"cannot fetch from remote {remote_name()!r}: {err}")
+        raise LeaseBranchUnavailable(
+            f"cannot fetch from remote {remote_name()!r}: {_compact_git_err(err)}"
+        )
     tip = _out(_git(root, "rev-parse", _remote_ref()))
     if validate:
         _validate_remote(root, tip)

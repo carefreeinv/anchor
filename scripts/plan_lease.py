@@ -145,6 +145,11 @@ def _remote_claim(plans_root: Path, plan_rel: str, agent_id: str, ttl: int, reco
 
 def _remote_live_slugs(plans_root: Path) -> dict[str, str]:
     """slug -> agent_id for unexpired shared leases (empty when unavailable)."""
+    if not any(
+        lease_branch.publishable(lease_branch.slug_of(ref.name))
+        for ref in plan_store.list_lanes(plans_root, READY_LANES)
+    ):
+        return {}
     ran, leases = _branch_call(
         plans_root, None, lambda root, _slug: lease_branch.list_leases(root), blocking=False
     )
