@@ -428,6 +428,32 @@ def main(argv: list[str] | None = None) -> int:
         metavar="N",
         help="bounded loop: claim up to N plans (still one-at-a-time); for cron",
     )
+    ap.add_argument(
+        "--watch",
+        action="store_true",
+        help="stay up: pull on .plans/ events (inotify) with a long poll heartbeat",
+    )
+    ap.add_argument(
+        "--watch-debounce",
+        type=float,
+        default=None,
+        metavar="SEC",
+        help="coalesce filesystem bursts (default 0.4s)",
+    )
+    ap.add_argument(
+        "--watch-heartbeat",
+        type=float,
+        default=None,
+        metavar="SEC",
+        help="poll fallback interval while --watch (default 300s)",
+    )
+    ap.add_argument(
+        "--watch-cycles",
+        type=int,
+        default=None,
+        metavar="N",
+        help="stop after N wakeups (tests); omit to run until signal",
+    )
     ap.add_argument("--no-fit-check", action="store_true",
                     help="ignore Preferred-models filter (still one plan per pick)")
     ap.add_argument(
@@ -685,37 +711,76 @@ def main(argv: list[str] | None = None) -> int:
             plans_root, worker, args.agent_id, ignore_deps=args.no_dep_check
         )
 
-    # Site load policy: refuse *before* claiming, so a capped site leaves the
-    # backlog untouched rather than parking plans under a lease it cannot run.
-    # Idle (exit 1), not failure — systemd units already treat 1 as "nothing to do".
+    if args.watch:
+        return _watch_loop(root, plans_root, worker, args)
+
+    return _claim_loop(root, plans_root, worker, args)
+
+
+def _one_claim(root: Path, plans_root: Path, worker, args) -> tuple[int, int]:
+    """Run one pull. Returns (exit_code, picked_count). exit 1 = idle, 2 = hard."""
     refusal = load_gate(root, worker, args)
     if refusal is not None:
         print(f"[work_once] {refusal} — not claiming", file=sys.stderr)
-        return 1
+        return 1, 0
+    try:
+        plan_path = pick_claim_one(plans_root, worker, args)
+    except ValueError as exc:
+        print(f"[work_once] {exc}", file=sys.stderr)
+        return 2, 0
+    except FileNotFoundError as exc:
+        print(f"[work_once] {exc}", file=sys.stderr)
+        return 2, 0
+    if plan_path is None:
+        return 1, 0
+    print(plan_path)
+    if args.ensure_worktree:
+        try:
+            from worktree_for_agent import WorktreeError, ensure_worktree
 
+            slug = plan_slug(plan_path)
+            rec = ensure_worktree(root, args.agent_id, slug=slug)
+            print(f"WORKTREE={rec.path}")
+            print(f"BRANCH={rec.branch}")
+            print(f"INTEGRATION={rec.integration}")
+            print(
+                f"[work_once] worktree ready — run code edits in {rec.path}",
+                file=sys.stderr,
+            )
+        except WorktreeError as exc:
+            print(f"[work_once] worktree ensure failed: {exc}", file=sys.stderr)
+            return 2, 0
+        except Exception as exc:  # noqa: BLE001
+            print(f"[work_once] worktree ensure failed: {exc}", file=sys.stderr)
+            return 2, 0
+    if args.run:
+        code = run_orchestrate(plan_path, args.orchestrate_args)
+        if code != 0:
+            print(
+                f"[work_once] orchestrate exit {code}; lease left on plan "
+                f"(release with --release or wait for TTL)",
+                file=sys.stderr,
+            )
+            return code, 1
+    return 0, 1
+
+
+def _claim_loop(root: Path, plans_root: Path, worker, args) -> int:
     max_n = args.max_plans
     if max_n is None:
-        max_n = 1  # --once default
+        max_n = 1
     if max_n < 1:
         print("[work_once] --max-plans must be >= 1", file=sys.stderr)
         return 2
-
-    # Named slug with max>1 still only one plan
     if args.slug or args.path:
         max_n = 1
-
     picked = 0
-    for i in range(max_n):
-        try:
-            plan_path = pick_claim_one(plans_root, worker, args)
-        except ValueError as exc:
-            print(f"[work_once] {exc}", file=sys.stderr)
+    last_hard = 1
+    for _ in range(max_n):
+        code, n = _one_claim(root, plans_root, worker, args)
+        if code == 2:
             return 2
-        except FileNotFoundError as exc:
-            print(f"[work_once] {exc}", file=sys.stderr)
-            return 2
-
-        if plan_path is None:
+        if n == 0:
             if picked == 0:
                 print(
                     "[work_once] nothing to do "
@@ -724,44 +789,51 @@ def main(argv: list[str] | None = None) -> int:
                 )
                 return 1
             break
-
-        picked += 1
-        print(plan_path)
-        if args.ensure_worktree:
-            try:
-                from worktree_for_agent import WorktreeError, ensure_worktree
-
-                slug = plan_slug(plan_path)
-                rec = ensure_worktree(root, args.agent_id, slug=slug)
-                print(f"WORKTREE={rec.path}")
-                print(f"BRANCH={rec.branch}")
-                print(f"INTEGRATION={rec.integration}")
-                print(
-                    f"[work_once] worktree ready — run code edits in {rec.path}",
-                    file=sys.stderr,
-                )
-            except WorktreeError as exc:
-                print(f"[work_once] worktree ensure failed: {exc}", file=sys.stderr)
-                return 2
-            except Exception as exc:  # noqa: BLE001 — surface unexpected git issues
-                print(f"[work_once] worktree ensure failed: {exc}", file=sys.stderr)
-                return 2
-        if args.run:
-            code = run_orchestrate(plan_path, args.orchestrate_args)
-            if code != 0:
-                print(
-                    f"[work_once] orchestrate exit {code}; lease left on plan "
-                    f"(release with --release or wait for TTL)",
-                    file=sys.stderr,
-                )
-                return code
-        # After first named/once, stop unless looping
+        picked += n
+        last_hard = code
         if args.slug or args.path:
             break
         if args.once and args.max_plans is None:
             break
+    return 0 if picked else last_hard
 
-    return 0 if picked else 1
+
+def _watch_loop(root: Path, plans_root: Path, worker, args) -> int:
+    import plan_watch
+
+    debounce = (
+        plan_watch.DEFAULT_DEBOUNCE_S
+        if args.watch_debounce is None
+        else args.watch_debounce
+    )
+    heartbeat = (
+        plan_watch.DEFAULT_HEARTBEAT_S
+        if args.watch_heartbeat is None
+        else args.watch_heartbeat
+    )
+    watch = plan_watch.open_watch(plans_root)
+    print(
+        f"[work_once] watching {plans_root} debounce={debounce}s heartbeat={heartbeat}s",
+        file=sys.stderr,
+    )
+    picked = 0
+    last = 1
+    for reason in plan_watch.run_loop(
+        watch,
+        debounce_s=debounce,
+        heartbeat_s=heartbeat,
+        cycles=args.watch_cycles,
+        on_event=lambda r: plan_watch.publish_mqtt_poke() if r == "inotify" else None,
+    ):
+        print(f"[work_once] wake ({reason})", file=sys.stderr)
+        code, n = _one_claim(root, plans_root, worker, args)
+        if code == 2:
+            return 2
+        picked += n
+        last = code
+        if n == 0:
+            print("[work_once] idle after wake", file=sys.stderr)
+    return 0 if picked else last
 
 
 if __name__ == "__main__":

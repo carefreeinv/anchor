@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""``anchor plans | work | review | draft`` — CLI adapter over ``anchor_ops``.
+"""``anchor plans | work | review | draft | fleet-watch`` — CLI adapter over ``anchor_ops``.
 
 Parser, mode detection, interactive prompting, text rendering, exit-code
 mapping. Workflow lives in ``anchor_ops``; this file does not list lanes,
@@ -31,6 +31,7 @@ from anchor_ops import (
     DraftCreateParams,
     DraftListParams,
     DraftPromoteParams,
+    FleetWatchParams,
     Mode,
     NeedsOperator,
     NotDelegated,
@@ -245,7 +246,9 @@ def build_parser() -> argparse.ArgumentParser:
         epilog="exit codes: 0 done · 1 nothing to do · 2 usage/hard error · "
                "3 an operator answer (or harness step) is required",
     )
-    sub = ap.add_subparsers(dest="verb", required=True, metavar="{plans,work,review,draft}")
+    sub = ap.add_subparsers(
+        dest="verb", required=True, metavar="{plans,work,review,draft,fleet-watch}",
+    )
 
     p = sub.add_parser("plans", help="list plans in every lane")
     _common(p)
@@ -286,6 +289,32 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--promote", metavar="SLUG", help="move drafts/SLUG to a ready lane")
     p.add_argument("--to", choices=READY_LANES, help="with --promote: the ready lane")
     _delegation(p, "planner")
+
+    p = sub.add_parser("fleet-watch", help="inspect or emit per-project plan daemons")
+    _common(p)
+    p.add_argument("--project", help="project root (alias of --root)")
+    p.add_argument("--status", action="store_true", help="inspect .plans/ and installed timers")
+    p.add_argument("--list", action="store_true", help="work_once --list for this project")
+    p.add_argument("--once", action="store_true", help="work_once --once (one pull)")
+    p.add_argument("--triage", action="store_true", help="mechanical take/skip/reject")
+    p.add_argument("--emit", choices=("systemd", "cron", "both"),
+                   help="print unit files / crontab lines (does not install)")
+    p.add_argument("--install-user", action="store_true",
+                   help="write systemd user units (interactive operator only)")
+    p.add_argument("--yes", action="store_true",
+                   help="with --install-user, skip the confirm (still requires a TTY)")
+    p.add_argument("--worker", action="append", default=[], metavar="SPEC",
+                   help="tier=mid,agent=id,interval=5m[,watch=0] (repeatable)")
+    p.add_argument("--tier", help="for --list/--once/--triage")
+    p.add_argument("--agent-id", help="for --list/--once/--triage")
+    p.add_argument("--endpoint", help="registry endpoint for --list/--once")
+    p.add_argument("--model", help="model name for --list/--once")
+    p.add_argument("--registry", help="endpoints.yaml for --endpoint")
+    p.add_argument("--run", action="store_true", help="with --once, pass --run to work_once")
+    p.add_argument("--load-watcher", action="store_true",
+                   help="also emit the inference_load --watch unit")
+    p.add_argument("--write-dir", help="write emitted units into this directory")
+    p.add_argument("--python", help="interpreter for ExecStart")
     return ap
 
 
@@ -320,6 +349,33 @@ def _dispatch(args: argparse.Namespace, answers: Prompter, ctx: Ctx) -> Result:
         return run("review.review", ReviewParams(
             root=args.root, slug=args.slug, delegate=args.delegate, registry=args.registry,
         ), answers, ctx)
+    if verb == "fleet-watch":
+        root = args.project or args.root
+        fw = FleetWatchParams(
+            root=root,
+            workers=tuple(args.worker or ()),
+            emit=args.emit,
+            yes=args.yes,
+            triage=args.triage,
+            run=args.run,
+            tier=args.tier,
+            agent_id=args.agent_id,
+            endpoint=args.endpoint,
+            model=args.model,
+            registry=args.registry,
+            python=args.python,
+            write_dir=args.write_dir,
+            load_watcher=args.load_watcher,
+        )
+        if args.install_user:
+            return run("fleet-watch.install", fw, answers, ctx)
+        if args.emit or args.write_dir:
+            return run("fleet-watch.emit", fw, answers, ctx)
+        if args.once or args.triage:
+            return run("fleet-watch.once", fw, answers, ctx)
+        if args.list:
+            return run("fleet-watch.list", fw, answers, ctx)
+        return run("fleet-watch.status", fw, answers, ctx)
     if args.promote:
         return run("draft.promote", DraftPromoteParams(root=args.root, slug=args.promote, to=args.to), answers, ctx)
     if args.list or not args.slug:

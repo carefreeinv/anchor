@@ -9,7 +9,7 @@ sidebar_label: /fleet-watch · background pullers
 (from the project, or from Anchor with a project name/path). See
 [Skills overview](/skills/overview).
 
-Turn on **always-on plan watchers** for a project so eligible work under **`.plans/`** is picked up and driven through the same kind of **claim → execute → complete** loop as [**`/work`**](/skills/work)—without you sitting in an interactive session.
+Turn on **always-on plan watchers** for a project so eligible work under **`.plans/`** is picked up and driven through the same kind of **claim → execute → complete** loop as [**`/work`**](/skills/work)—without you sitting in an interactive session. From a terminal the same inspect/emit/install path is **`anchor fleet-watch`**.
 
 You run the skill once (or occasionally) in a coding agent to **configure** those watchers. The watchers themselves then keep applying that work-style workflow on a schedule. Architecture of pull-per-endpoint fleets: [Fleet workers](/tooling/fleet-workers).
 
@@ -106,5 +106,6 @@ Same contract everywhere; only how the agent loads the skill differs:
 
 - [**`/work`**](/skills/work) — interactive: pick and execute one plan *with you in the session*
 - [Fleet workers](/tooling/fleet-workers) — multi-tier pull model, leases, isolation (what the watchers implement)
-- [Utility scripts](/tooling/scripts) — `fleet_watch.py` / `work_once.py` if you automate outside an agent
+- [Utility scripts](/tooling/scripts) — `fleet_watch.py` / `work_once.py` / `plan_watch.py` if you automate outside an agent
+- [Plan-workflow CLI](/tooling/plan-verbs) — `anchor fleet-watch` (install is operator-only)
 - [CLI](/tooling/cli) — scaffold, preferred orchestrator

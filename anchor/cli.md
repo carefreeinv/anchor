@@ -1,6 +1,6 @@
 # The plan-workflow CLI: what `anchor` does itself, and what it hands back
 
-`anchor plans | work | review | draft` runs the `.plans/` workflow from a
+`anchor plans | work | review | draft | fleet-watch` runs the `.plans/` workflow from a
 terminal, with no chat harness. It is a small, deterministic program: every
 decision it makes comes from a fixed set of outcomes with a rule you can name,
 and it runs no model on any default path. Anything that needs judgment is either
@@ -110,6 +110,17 @@ output prints the plans-only commit command.
 
 The CLI edits no plan metadata. Priority, assignee and dependencies stay as
 their authors wrote them. `--goal` only seeds the skeleton of a new draft.
+
+### `anchor fleet-watch`
+
+| Part | Kind | Why |
+|------|------|-----|
+| `--status`, `--list`, `--triage` | deterministic | wraps `fleet_watch.py`; fit/lease unchanged |
+| `--once` | harness | one `work_once` pull |
+| `--emit systemd\|cron` | harness | prints units; does not write the host |
+| `--install-user` | **operator** | writes `~/.config/systemd/user`; headless (including `--yes` without a TTY) exits 3 and writes nothing |
+
+`--worker tier=…,agent=…,interval=5m` defaults to event-driven units (`work_once --watch`, `Type=simple`) plus a oneshot poll timer as heartbeat. `watch=0` restores interval-only oneshot timers.
 
 ## Two modes, one code path
 

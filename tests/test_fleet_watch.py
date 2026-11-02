@@ -19,6 +19,9 @@ def test_parse_worker():
     assert w.tier == "mid"
     assert w.agent_id == "mid-1"
     assert w.interval == "5m"
+    assert w.watch is True
+    w0 = fw.parse_worker("tier=mid,agent=mid-1,interval=5m,watch=0")
+    assert w0.watch is False
     w2 = fw.parse_worker("endpoint=h100-executor,agent=a,run=1")
     assert w2.endpoint == "h100-executor"
     assert w2.run is True
@@ -34,14 +37,19 @@ def test_emit_systemd_contains_work_once_and_success_exit(tmp_path):
     names = [n for n, _ in files]
     assert any(n.endswith(".service") for n in names)
     assert any(n.endswith(".timer") for n in names)
-    body = next(c for n, c in files if n.endswith(".service"))
-    assert "work_once.py" in body
-    assert "--root" in body
-    assert "SuccessExitStatus=0 1" in body
-    assert "mid-1" in body
+    watch_svc = next(c for n, c in files if n.endswith(".service") and "-poll." not in n)
+    assert "work_once.py" in watch_svc
+    assert "--watch" in watch_svc
+    assert "Type=simple" in watch_svc
+    assert "SuccessExitStatus=0 1" in watch_svc
+    assert "mid-1" in watch_svc
+    poll_svc = next(c for n, c in files if "-poll.service" in n)
+    assert "--watch" not in poll_svc
+    assert "Type=oneshot" in poll_svc
     timer = next(c for n, c in files if n.endswith(".timer"))
     assert "OnUnitActiveSec=5min" in timer
     assert "Persistent=true" in timer
+    assert "-poll.service" in timer
 
 
 def test_emit_cron_line(tmp_path):

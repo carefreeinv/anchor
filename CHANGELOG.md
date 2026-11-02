@@ -8,6 +8,18 @@ Newest first.
 
 ### Added
 
+- **Event-driven plan watchers.** `work_once.py --watch` stays up and pulls on
+  `.plans/{bugs,features,in-progress}` inotify events (debounced) with a long
+  poll heartbeat when inotify is missing. Optional MQTT poke
+  (`ANCHOR_MQTT_PLANS_TOPIC` or `anchor/v1/sites/{site}/plans/poke`) is a no-op
+  when unconfigured. `fleet_watch.py` emits `Type=simple` `--watch` units plus a
+  oneshot poll timer (`watch=0` restores interval-only). New `scripts/plan_watch.py`
+  ships in `FLEET_FILES`.
+
+- **`anchor fleet-watch`.** Status/list/once/emit wrap `fleet_watch.py`;
+  `--install-user` is operator-only (headless `--yes` still exits 3 and writes
+  nothing).
+
 - **Repo-root `.env` for fleet keys.** `anchor` plan verbs and
   `nvidia_build_probe.py --probe` load a gitignored `.env` with setdefault
   (exported environment wins). `Endpoint.chat` sends `Authorization` from the

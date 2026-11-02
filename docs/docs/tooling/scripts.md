@@ -189,7 +189,7 @@ all-or-nothing abort.
 
 ## fleet_watch.py
 
-Implementation behind the [**`/fleet-watch`**](/skills/fleet-watch) skill (prefer the skill in an agent). Direct CLI for automation/CI: `--project`, `--status`, `--list` / `--once`, `--emit systemd|cron`, `--install-user` (systemd **user** timers; reboot-safe with `loginctl enable-linger $USER`). See [Fleet workers](/tooling/fleet-workers) for the pull model.
+Implementation behind [**`anchor fleet-watch`**](/tooling/plan-verbs) and the [**`/fleet-watch`**](/skills/fleet-watch) skill. Direct script for automation: `--project`, `--status`, `--list` / `--once`, `--emit systemd|cron`, `--install-user` (systemd **user** units; reboot-safe with linger). Event-driven `work_once --watch` is the default emit; `watch=0` restores interval-only oneshots. See [Fleet workers](/tooling/fleet-workers).
 
 ```bash
 python fleet_watch.py --project /path/to/app --status

@@ -21,7 +21,7 @@ import plan_lease
 import plan_store
 
 SCHEMA_VERSION = 1
-VERBS = ("plans", "work", "review", "draft")
+VERBS = ("plans", "work", "review", "draft", "fleet-watch")
 
 EXIT_OK = 0
 EXIT_NOTHING = 1
@@ -276,6 +276,32 @@ class DraftPromoteParams:
     root: str
     slug: str
     to: str | None = None
+
+
+@dataclass(frozen=True)
+class FleetWatchParams:
+    """Inspect / emit / install per-project fleet daemons.
+
+    Exposure: status, list, once, emit — CLI + MCP (harness). install —
+    operator-only; never an MCP tool that writes systemd units. ``--yes`` is
+    not an answer substitute: headless install returns needs_operator even
+    with yes=True.
+    """
+
+    root: str
+    workers: tuple[str, ...] = ()
+    emit: str | None = None
+    yes: bool = False
+    triage: bool = False
+    run: bool = False
+    tier: str | None = None
+    agent_id: str | None = None
+    endpoint: str | None = None
+    model: str | None = None
+    registry: str | None = None
+    python: str | None = None
+    write_dir: str | None = None
+    load_watcher: bool = False
 
 
 # --- shared helpers ------------------------------------------------------------
@@ -809,3 +835,125 @@ def _delegated_draft(params: DraftCreateParams, ctx: Ctx, skeleton: str, res: Re
         return None
     res.data["delegated_to"] = name
     return out.strip() + "\n"
+
+
+# --- fleet-watch ---------------------------------------------------------------
+
+
+def _fw_scripts():
+    import fleet_watch as fw
+
+    return fw, Path(fw.SCRIPTS_DIR)
+
+
+@_op("fleet-watch.status", mutates=False, requires=None)
+def op_fleet_watch_status(params: FleetWatchParams, _answers: Answers, _ctx: Ctx) -> Result:
+    import io
+
+    fw, scripts = _fw_scripts()
+    buf = io.StringIO()
+    with _redirect_stdout(buf):
+        code = fw.cmd_status(Path(params.root), scripts)
+    res = Result("fleet-watch", "status", exit_code=code)
+    res.data["output"] = buf.getvalue()
+    return res
+
+
+@_op("fleet-watch.list", mutates=False, requires=None)
+def op_fleet_watch_list(params: FleetWatchParams, _answers: Answers, _ctx: Ctx) -> Result:
+    return _fw_list_or_once(params, mode="list")
+
+
+@_op("fleet-watch.once", mutates=True, requires=NEEDS_HARNESS)
+def op_fleet_watch_once(params: FleetWatchParams, _answers: Answers, _ctx: Ctx) -> Result:
+    return _fw_list_or_once(params, mode="triage" if params.triage else "once")
+
+
+@_op("fleet-watch.emit", mutates=False, requires=NEEDS_HARNESS)
+def op_fleet_watch_emit(params: FleetWatchParams, _answers: Answers, _ctx: Ctx) -> Result:
+    fw, scripts = _fw_scripts()
+    if not params.workers:
+        raise CliError("--emit needs at least one --worker")
+    workers = [fw.parse_worker(w) for w in params.workers]
+    project = Path(params.root)
+    python = params.python or fw.DEFAULT_PYTHON
+    files = fw.emit_systemd(
+        project, scripts, workers, python=python, load_watcher=params.load_watcher,
+    )
+    res = Result("fleet-watch", "emit")
+    res.data["units"] = [{"name": n, "content": c} for n, c in files]
+    if params.emit in ("cron", "both"):
+        res.data["cron"] = fw.emit_cron_lines(
+            project, scripts, workers, python=python, load_watcher=params.load_watcher,
+        )
+    if params.write_dir:
+        out = Path(params.write_dir)
+        out.mkdir(parents=True, exist_ok=True)
+        written = []
+        for name, content in files:
+            dest = out / name
+            dest.write_text(content, encoding="utf-8")
+            written.append(str(dest))
+        res.data["written"] = written
+    return res
+
+
+@_op("fleet-watch.install", mutates=True, requires=NEEDS_OPERATOR)
+def op_fleet_watch_install(params: FleetWatchParams, answers: Answers, ctx: Ctx) -> Result:
+    if not ctx.mode.interactive:
+        res = Result("fleet-watch", "install", exit_code=EXIT_NEEDS_OPERATOR)
+        res.need(
+            "install-user",
+            NEEDS_OPERATOR,
+            "writing systemd user units needs an interactive operator ( --yes is not a substitute )",
+        )
+        return res
+    if not params.workers:
+        raise CliError("--install-user needs at least one --worker")
+    if not params.yes:
+        choice = answers.choose(
+            "install-user",
+            "Write and enable systemd user units for this project?",
+            ("yes", "no"),
+        )
+        if choice != "yes":
+            raise CliError("install cancelled")
+    fw, scripts = _fw_scripts()
+    workers = [fw.parse_worker(w) for w in params.workers]
+    python = params.python or fw.DEFAULT_PYTHON
+    files = fw.emit_systemd(
+        Path(params.root), scripts, workers, python=python,
+        load_watcher=params.load_watcher,
+    )
+    code = fw.install_user_units(files, yes=True)
+    res = Result("fleet-watch", "install", exit_code=code)
+    res.data["units"] = [n for n, _ in files]
+    return res
+
+
+def _fw_list_or_once(params: FleetWatchParams, *, mode: str) -> Result:
+    import argparse
+    import io
+
+    fw, scripts = _fw_scripts()
+    ns = argparse.Namespace(
+        tier=params.tier,
+        agent_id=params.agent_id,
+        endpoint=params.endpoint,
+        model=params.model,
+        registry=params.registry,
+        run=params.run,
+        python=params.python or fw.DEFAULT_PYTHON,
+    )
+    buf = io.StringIO()
+    with _redirect_stdout(buf):
+        code = fw.cmd_list_or_once(Path(params.root), scripts, ns, mode=mode)
+    res = Result("fleet-watch", mode, exit_code=code)
+    res.data["output"] = buf.getvalue()
+    return res
+
+
+def _redirect_stdout(buf):
+    import contextlib
+
+    return contextlib.redirect_stdout(buf)

@@ -3,9 +3,9 @@ name: fleet-watch
 description: >
   Configure durable multi-tier plan watchers for a project via /fleet-watch.
   Resolve the project from CWD or a name/path argument, inspect .plans/, and
-  emit or install reboot-persistent systemd user timers. Use when the user runs
-  /fleet-watch, wants background plan pollers, or asks to watch a project for
-  new ready plans.
+  emit or install reboot-persistent systemd user units. Use when the user runs
+  /fleet-watch, wants background plan watchers, or asks to watch a project for
+  new ready plans. The non-agent equivalent is `anchor fleet-watch`.
 argument-hint: "[project-name|path] [--status|--install] [--tiers mid,small]"
 disable-model-invocation: false
 metadata:
@@ -18,8 +18,11 @@ Make it **trivial** to configure always-on pullers for a project’s **`.plans/`
 tree. You resolve the project, inspect status, propose capability-tier workers,
 and print or install **systemd user timers** that survive reboot (with linger).
 
-This skill is the product UX. Helper scripts (`fleet_watch.py`, `work_once.py`)
-are implementation detail—use them; do not force the user to learn their flags.
+This skill is the product UX in a coding agent. The same inspect/emit/install
+path from a terminal is **`anchor fleet-watch`**. Helper scripts
+(`fleet_watch.py`, `work_once.py`, `plan_watch.py`) are implementation
+detail—use them; do not force the user to learn their flags. `--install-user`
+is operator-only: never install from MCP.
 
 The **skill session** only configures watchers. The **watchers** apply a
 work-style loop (claim → execute → complete) in the background—one plan per
@@ -92,6 +95,7 @@ python3 "$SCRIPTS/fleet_watch.py" --project "$PROJECT" …
    python3 "$SCRIPTS/fleet_watch.py" --project "$PROJECT" --emit systemd \
      --worker tier=mid,agent=<id>,interval=5m \
      --worker tier=small,agent=<id2>,interval=10m
+   # equivalent: anchor fleet-watch --project "$PROJECT" --emit systemd --worker …
    ```
 
 4. **Present a short “do this” block** to the user:

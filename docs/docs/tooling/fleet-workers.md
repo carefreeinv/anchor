@@ -7,7 +7,7 @@ sidebar_label: Fleet workers
 
 Configure several agents—with **different model capabilities**—to watch a project’s **`.plans/`** tree and pull only the plans they are fit to complete (and whose **Depends on** are met). This is the headless companion to interactive [**`/work`**](/skills/work): same selection rules — lane, then **`Priority`** (`P1`>`P2`>`P3`, default `P2`) then `Value`, then model-fit and dependencies; no central assigner; no daemon baked into `/work` itself.
 
-**Operator shortcut:** run [**`/fleet-watch`**](/skills/fleet-watch) in your coding agent from the project (or `/fleet-watch my-app` from the Anchor repo) to inspect and install **reboot-persistent** watchers. You should not need to memorize CLI flags—the skill is the entrypoint.
+**Operator shortcut:** `anchor fleet-watch --project <root> --status` inspects the tree; `--emit systemd --worker …` prints units; `--install-user` writes them after a TTY confirm. In a coding agent, [**`/fleet-watch`**](/skills/fleet-watch) is the same flow.
 
 ## What you are building
 
@@ -22,7 +22,7 @@ flowchart TB
   done[".plans/completed/<br/>when Done when holds"]
 
   planners -->|"human only: move to ready"| ready
-  ready -->|"each worker polls independently"| small
+  ready -->|"each worker watches .plans/ (inotify) and heartbeats"| small
   ready --> mid
   ready --> reasoner
   small -->|"claim: mv + lease"| ip
@@ -221,7 +221,7 @@ Workers do **not** watch `drafts/` or chat. Eligibility is entirely filesystem:
 | Event | Who | Effect |
 |-------|-----|--------|
 | New file under `drafts/` | planner / human | **Not** executable; pollers ignore |
-| Human `git mv` (or move) into `bugs/` or `features/` | human | Plan becomes ready on next poll |
+| Human `git mv` (or move) into `bugs/` or `features/` | human | Plan becomes ready on the next inotify poke (or heartbeat poll) |
 | Header `Preferred models: small` | plan author | Only small-fit workers pick it on bare pull |
 | Claim → `in-progress/` + lease | first claimer | Plan leaves ready lanes; **only that agent_id continues it** |
 | Foreign `in-progress/` | other workers | **Ignore** — do not list as pickable, do not execute |
@@ -231,7 +231,9 @@ Workers do **not** watch `drafts/` or chat. Eligibility is entirely filesystem:
 | `git mv` → `completed/` on `feature/<slug>` | owning executor, **autonomous** finish after critic **ACCEPT**, immediately before opening a PR | Never on **REVISE**. Never a merge. `pending_merges.py` treats this as completed awaiting merge |
 | `git mv` → `completed/` after local merge | **human** via `/review` Approve, or `/work` culmination “merge to `dev` now” | Agents must not self-certify a merge |
 
-So “monitor the project folder” means: **poll `.plans/bugs`, `.plans/features`, and your own `.plans/in-progress`**, not the whole repository. Prefer promoting drafts only when acceptance criteria and Preferred models are filled in.
+So “monitor the project folder” means: **watch `.plans/bugs`, `.plans/features`, and `.plans/in-progress`** (inotify on Linux, long-poll heartbeat everywhere else), not the whole repository. `work_once.py --watch` is the durable loop; timers still fire a one-shot `--once` as a heartbeat. Prefer promoting drafts only when acceptance criteria and Preferred models are filled in.
+
+Optional MQTT poke: when `ANCHOR_MQTT_URL` and `ANCHOR_MQTT_SITE` (or `ANCHOR_MQTT_PLANS_TOPIC`) are set, a local filesystem wake publishes to `anchor/v1/sites/{site}/plans/poke` so other hosts wake too. Unconfigured, the publisher is a no-op.
 
 ### 4. Isolation (git multi-writer)
 

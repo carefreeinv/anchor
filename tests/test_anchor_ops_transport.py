@@ -39,6 +39,15 @@ def _params(name: str, root: Path):
         "draft.list": ops.DraftListParams(root=r),
         "draft.create": ops.DraftCreateParams(root=r, slug="fresh"),
         "draft.promote": ops.DraftPromoteParams(root=r, slug="d1"),
+        "fleet-watch.status": ops.FleetWatchParams(root=r),
+        "fleet-watch.list": ops.FleetWatchParams(root=r, tier="mid", agent_id="t1"),
+        "fleet-watch.once": ops.FleetWatchParams(root=r, tier="mid", agent_id="t1"),
+        "fleet-watch.emit": ops.FleetWatchParams(
+            root=r, workers=("tier=mid,agent=t1,interval=5m",), emit="systemd",
+        ),
+        "fleet-watch.install": ops.FleetWatchParams(
+            root=r, workers=("tier=mid,agent=t1,interval=5m",), yes=True,
+        ),
     }[name]
 
 
@@ -65,6 +74,26 @@ def test_never_answers_adapter_covers_every_operation(project):
             assert ops.NEEDS_OPERATOR in pending, op.name
     names = {op.name for op in ops.operations()}
     assert {row[0] for row in seen} == names
+
+
+def test_fleet_watch_install_headless_writes_nothing(project, tmp_path, monkeypatch):
+    unit_dir = tmp_path / "systemd-user"
+    unit_dir.mkdir()
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    answers = ops.NeverAnswers()
+    ctx = _ctx()
+    res = ops.run(
+        "fleet-watch.install",
+        ops.FleetWatchParams(
+            root=str(project),
+            workers=("tier=mid,agent=t1,interval=5m",),
+            yes=True,
+        ),
+        answers,
+        ctx,
+    )
+    assert res.exit_code == ops.EXIT_NEEDS_OPERATOR
+    assert list(unit_dir.iterdir()) == []
 
 
 def test_operator_ops_do_not_merge(project):

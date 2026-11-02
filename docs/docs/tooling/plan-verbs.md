@@ -3,11 +3,11 @@ sidebar_position: 1.5
 sidebar_label: Plan workflow verbs
 ---
 
-<!-- synced-from: anchor/cli.md @ 83dee6292241cdac47eff12114e6eeb05569e389 -->
+<!-- synced-from: anchor/cli.md @ 1cce8ab421e449644deed0c3fb93c7d3ff590cb6 -->
 
 # The plan-workflow CLI: what `anchor` does itself, and what it hands back
 
-`anchor plans | work | review | draft` runs the `.plans/` workflow from a
+`anchor plans | work | review | draft | fleet-watch` runs the `.plans/` workflow from a
 terminal, with no chat harness. It is a small, deterministic program: every
 decision it makes comes from a fixed set of outcomes with a rule you can name,
 and it runs no model on any default path. Anything that needs judgment is either
@@ -117,6 +117,17 @@ output prints the plans-only commit command.
 
 The CLI edits no plan metadata. Priority, assignee and dependencies stay as
 their authors wrote them. `--goal` only seeds the skeleton of a new draft.
+
+### `anchor fleet-watch`
+
+| Part | Kind | Why |
+|------|------|-----|
+| `--status`, `--list`, `--triage` | deterministic | wraps `fleet_watch.py`; fit/lease unchanged |
+| `--once` | harness | one `work_once` pull |
+| `--emit systemd\|cron` | harness | prints units; does not write the host |
+| `--install-user` | **operator** | writes `~/.config/systemd/user`; headless (including `--yes` without a TTY) exits 3 and writes nothing |
+
+`--worker tier=…,agent=…,interval=5m` defaults to event-driven units (`work_once --watch`, `Type=simple`) plus a oneshot poll timer as heartbeat. `watch=0` restores interval-only oneshot timers.
 
 ## Two modes, one code path
 
@@ -295,4 +306,45 @@ options:
                         from the registry (bare flag: first endpoint for the
                         'planner' role)
   --registry REGISTRY   endpoints.yaml (default: scripts/endpoints.yaml)
+```
+
+### `anchor fleet-watch`
+
+```text
+usage: anchor fleet-watch [-h] [--root ROOT] [--json] [--non-interactive]
+                          [--project PROJECT] [--status] [--list] [--once]
+                          [--triage] [--emit {systemd,cron,both}]
+                          [--install-user] [--yes] [--worker SPEC]
+                          [--tier TIER] [--agent-id AGENT_ID]
+                          [--endpoint ENDPOINT] [--model MODEL]
+                          [--registry REGISTRY] [--run] [--load-watcher]
+                          [--write-dir WRITE_DIR] [--python PYTHON]
+
+options:
+  -h, --help            show this help message and exit
+  --root ROOT           project root containing .plans/ (default: cwd)
+  --json                machine-readable output (schema_version 1)
+  --non-interactive     never prompt; JSON output; stop with exit 3 where an
+                        answer is needed
+  --project PROJECT     project root (alias of --root)
+  --status              inspect .plans/ and installed timers
+  --list                work_once --list for this project
+  --once                work_once --once (one pull)
+  --triage              mechanical take/skip/reject
+  --emit {systemd,cron,both}
+                        print unit files / crontab lines (does not install)
+  --install-user        write systemd user units (interactive operator only)
+  --yes                 with --install-user, skip the confirm (still requires
+                        a TTY)
+  --worker SPEC         tier=mid,agent=id,interval=5m[,watch=0] (repeatable)
+  --tier TIER           for --list/--once/--triage
+  --agent-id AGENT_ID   for --list/--once/--triage
+  --endpoint ENDPOINT   registry endpoint for --list/--once
+  --model MODEL         model name for --list/--once
+  --registry REGISTRY   endpoints.yaml for --endpoint
+  --run                 with --once, pass --run to work_once
+  --load-watcher        also emit the inference_load --watch unit
+  --write-dir WRITE_DIR
+                        write emitted units into this directory
+  --python PYTHON       interpreter for ExecStart
 ```
