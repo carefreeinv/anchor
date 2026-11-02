@@ -55,6 +55,10 @@ Newest first.
 
 ### Fixed
 
+- **`orchestrate.py` exits 2 when no task is `ok`.** All-escalate / all-hold /
+  all-failed runs (with ≥1 task) no longer report success after `0/N tasks ok`.
+  One `ok` among mixed results still exits 0. `failed-noop` remains 2.
+
 - **Orphan `---` in an executor reply** no longer aborts apply. A whole-file
   fence plus a later prose `---` still writes the fenced file; residual that
   is only orphan `---` stays `NoApplyableHunks`.

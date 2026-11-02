@@ -1023,6 +1023,8 @@ def main() -> None:
         sys.exit(ROLE_VIOLATION_EXIT)
     if any(r.get("status") == "failed-noop" for r in results):
         sys.exit(FAILED_NOOP_EXIT)
+    if results and ok == 0:
+        sys.exit(FAILED_NOOP_EXIT)
 
 
 if __name__ == "__main__":

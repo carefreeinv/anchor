@@ -966,7 +966,9 @@ def test_human_report_is_written_to_disk_for_top_tier_exhaustion(git_repo, monke
     fleet = TopTierFleet([PLAN_TEXT, "review: ok"])
     out = _run_main(monkeypatch, git_repo, fleet)
 
-    orchestrate.main()  # no SystemExit — a human-report is not a role violation
+    with pytest.raises(SystemExit) as exc:
+        orchestrate.main()  # human-report is not a role violation (exit 4)
+    assert exc.value.code == orchestrate.FAILED_NOOP_EXIT  # no task ok
 
     assert fleet.ep.calls == 2  # planner + critic only; executor never dispatched
 
@@ -1086,6 +1088,60 @@ def test_main_all_noop_exits_nonzero_and_zero_ok_count(git_repo, monkeypatch):
     run = json.loads(out.read_text())
     assert run["results"][0]["status"] == "failed-noop"
     assert sum(r["status"] == "ok" for r in run["results"]) == 0
+
+
+PLAN_ESCALATE = (
+    "## Steps\n"
+    "| # | Task | Touches | Verify by | Route to |\n"
+    "|---|------|---------|-----------|----------|\n"
+    "| 1 | Drop Status from .plans/completed/x.local.md | "
+    ".plans/completed/x.local.md | none | mid |\n"
+)
+
+PLAN_MIXED = (
+    "## Steps\n"
+    "| # | Task | Touches | Verify by | Route to |\n"
+    "|---|------|---------|-----------|----------|\n"
+    "| 1 | say hello | README | none | mid |\n"
+    "| 2 | Drop Status from .plans/completed/x.local.md | "
+    ".plans/completed/x.local.md | none | mid |\n"
+)
+
+
+def test_main_all_escalate_exits_nonzero(git_repo, monkeypatch):
+    import json
+
+    import orchestrate
+
+    fleet = SideEffectFleet([
+        (None, PLAN_ESCALATE),
+        (None, "review: ok"),
+    ])
+    out = _run_main(monkeypatch, git_repo, fleet)
+    with pytest.raises(SystemExit) as exc:
+        orchestrate.main()
+    assert exc.value.code == orchestrate.FAILED_NOOP_EXIT
+    run = json.loads(out.read_text())
+    assert run["results"][0]["status"] == "escalate"
+    assert sum(r["status"] == "ok" for r in run["results"]) == 0
+
+
+def test_main_mixed_ok_and_escalate_exits_zero(git_repo, monkeypatch):
+    import json
+
+    import orchestrate
+
+    fleet = SideEffectFleet([
+        (None, PLAN_MIXED),
+        (lambda: (git_repo / "README").write_text("hello\n"), GOOD_OUTPUT),
+        (None, "review: ok"),
+    ])
+    out = _run_main(monkeypatch, git_repo, fleet)
+    orchestrate.main()
+    run = json.loads(out.read_text())
+    statuses = [r["status"] for r in run["results"]]
+    assert "ok" in statuses
+    assert "escalate" in statuses
 
 
 APPLY_OUTPUT = (
