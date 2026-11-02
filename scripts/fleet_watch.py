@@ -648,16 +648,41 @@ def install_user_units(
 
 
 def print_enable_commands(files: list[tuple[str, str]]) -> None:
+    print(enable_commands_text(files), end="")
+
+
+def enable_commands_text(files: list[tuple[str, str]]) -> str:
     timers = units_to_enable(files)
-    print("\n# --- install (user systemd; survives reboot with linger) ---")
-    print("mkdir -p ~/.config/systemd/user")
+    lines = [
+        "",
+        "# --- install (user systemd; survives reboot with linger) ---",
+        "mkdir -p ~/.config/systemd/user",
+    ]
     for name, _ in files:
-        print(f"# write unit body to ~/.config/systemd/user/{name}")
-    print("systemctl --user daemon-reload")
+        lines.append(f"# write unit body to ~/.config/systemd/user/{name}")
+    lines.append("systemctl --user daemon-reload")
     for t in timers:
-        print(f"systemctl --user enable --now {t}")
-    print("loginctl enable-linger $USER   # important for reboot persistence")
-    print("systemctl --user list-timers 'anchor-watch-*'")
+        lines.append(f"systemctl --user enable --now {t}")
+    lines.append("loginctl enable-linger $USER   # important for reboot persistence")
+    lines.append("systemctl --user list-timers 'anchor-watch-*'")
+    return "\n".join(lines) + "\n"
+
+
+def format_emit_text(
+    files: list[tuple[str, str]],
+    cron_lines: list[str],
+    emit: str | None,
+) -> str:
+    """Stdout of ``--emit systemd|cron|both`` (no write-dir lines)."""
+    parts: list[str] = []
+    if emit in ("systemd", "both"):
+        for name, content in files:
+            parts.append(f"### {name}\n{content}")
+        parts.append(enable_commands_text(files).rstrip("\n"))
+    if emit in ("cron", "both"):
+        parts.append("### crontab")
+        parts.extend(cron_lines)
+    return "\n".join(parts) + ("\n" if parts else "")
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -763,19 +788,14 @@ def main(argv: list[str] | None = None) -> int:
                 (out / name).write_text(content, encoding="utf-8")
                 print(f"wrote {out / name}")
 
-        if args.emit in ("systemd", "both"):
-            for name, content in files:
-                print(f"### {name}")
-                print(content)
-            print_enable_commands(files)
-
+        cron = []
         if args.emit in ("cron", "both"):
-            print("### crontab")
-            for line in emit_cron_lines(
+            cron = emit_cron_lines(
                 project, scripts, workers, python=args.python,
                 load_watcher=args.load_watcher,
-            ):
-                print(line)
+            )
+        if args.emit:
+            print(format_emit_text(files, cron, args.emit), end="")
 
         if args.install_user:
             return install_user_units(files, yes=args.yes)

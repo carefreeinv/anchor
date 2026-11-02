@@ -30,6 +30,11 @@ Newest first.
 
 ### Changed
 
+- **`anchor fleet-watch --emit`** prints the same `### name` / crontab text as
+  `fleet_watch.py`. `--write-dir` is operator-only (headless exits 3, writes
+  nothing). `--emit cron` prints crontab lines only. `--list` / `--once` /
+  `--triage` require `--tier` or `--endpoint`.
+
 - **NVIDIA Build example model** is `nvidia/nemotron-3.5-lightning-30b-a3b`
   (live `/v1/models` + chat, 2026-10-28). The previous catalog id
   `nvidia/llama-3.3-nemotron-super-49b-v1` returns HTTP 410 on

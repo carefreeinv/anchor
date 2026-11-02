@@ -3,7 +3,7 @@ sidebar_position: 1.5
 sidebar_label: Plan workflow verbs
 ---
 
-<!-- synced-from: anchor/cli.md @ 1cce8ab421e449644deed0c3fb93c7d3ff590cb6 -->
+<!-- synced-from: anchor/cli.md @ da662e1fe74b78145b440503b3b1151c4a6ec263 -->
 
 # The plan-workflow CLI: what `anchor` does itself, and what it hands back
 
@@ -124,7 +124,8 @@ their authors wrote them. `--goal` only seeds the skeleton of a new draft.
 |------|------|-----|
 | `--status`, `--list`, `--triage` | deterministic | wraps `fleet_watch.py`; fit/lease unchanged |
 | `--once` | harness | one `work_once` pull |
-| `--emit systemd\|cron` | harness | prints units; does not write the host |
+| `--emit systemd\|cron` | harness | prints the same unit / crontab text as `fleet_watch.py`; does not write the host |
+| `--write-dir` | **operator** | writes unit files into a directory; headless exits 3 and writes nothing |
 | `--install-user` | **operator** | writes `~/.config/systemd/user`; headless (including `--yes` without a TTY) exits 3 and writes nothing |
 
 `--worker tier=…,agent=…,interval=5m` defaults to event-driven units (`work_once --watch`, `Type=simple`) plus a oneshot poll timer as heartbeat. `watch=0` restores interval-only oneshot timers.
@@ -345,6 +346,7 @@ options:
   --run                 with --once, pass --run to work_once
   --load-watcher        also emit the inference_load --watch unit
   --write-dir WRITE_DIR
-                        write emitted units into this directory
+                        write emitted units into this directory (interactive
+                        operator only)
   --python PYTHON       interpreter for ExecStart
 ```

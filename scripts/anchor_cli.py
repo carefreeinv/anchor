@@ -142,8 +142,13 @@ def _render_text(res: Result, out: TextIO) -> None:
             print("\t".join(cols), file=out)
             for row in rows:
                 print("\t".join(_cell(row.get(c)) for c in cols), file=out)
+    text = res.data.get("text")
+    skip = {"plans", "columns"}
+    if isinstance(text, str) and text:
+        print(text, end="" if text.endswith("\n") else "\n", file=out)
+        skip |= {"text", "units", "cron"}
     for key, value in res.data.items():
-        if key in ("plans", "columns"):
+        if key in skip:
             continue
         if isinstance(value, list):
             print(f"{key}:", file=out)
@@ -313,7 +318,10 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--run", action="store_true", help="with --once, pass --run to work_once")
     p.add_argument("--load-watcher", action="store_true",
                    help="also emit the inference_load --watch unit")
-    p.add_argument("--write-dir", help="write emitted units into this directory")
+    p.add_argument(
+        "--write-dir",
+        help="write emitted units into this directory (interactive operator only)",
+    )
     p.add_argument("--python", help="interpreter for ExecStart")
     return ap
 
@@ -369,7 +377,11 @@ def _dispatch(args: argparse.Namespace, answers: Prompter, ctx: Ctx) -> Result:
         )
         if args.install_user:
             return run("fleet-watch.install", fw, answers, ctx)
-        if args.emit or args.write_dir:
+        if args.write_dir:
+            wr = run("fleet-watch.write", fw, answers, ctx)
+            if wr.exit_code != EXIT_OK or not args.emit:
+                return wr
+        if args.emit:
             return run("fleet-watch.emit", fw, answers, ctx)
         if args.once or args.triage:
             return run("fleet-watch.once", fw, answers, ctx)

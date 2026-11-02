@@ -117,7 +117,8 @@ their authors wrote them. `--goal` only seeds the skeleton of a new draft.
 |------|------|-----|
 | `--status`, `--list`, `--triage` | deterministic | wraps `fleet_watch.py`; fit/lease unchanged |
 | `--once` | harness | one `work_once` pull |
-| `--emit systemd\|cron` | harness | prints units; does not write the host |
+| `--emit systemd\|cron` | harness | prints the same unit / crontab text as `fleet_watch.py`; does not write the host |
+| `--write-dir` | **operator** | writes unit files into a directory; headless exits 3 and writes nothing |
 | `--install-user` | **operator** | writes `~/.config/systemd/user`; headless (including `--yes` without a TTY) exits 3 and writes nothing |
 
 `--worker tier=…,agent=…,interval=5m` defaults to event-driven units (`work_once --watch`, `Type=simple`) plus a oneshot poll timer as heartbeat. `watch=0` restores interval-only oneshot timers.

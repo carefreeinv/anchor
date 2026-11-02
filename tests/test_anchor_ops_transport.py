@@ -45,6 +45,10 @@ def _params(name: str, root: Path):
         "fleet-watch.emit": ops.FleetWatchParams(
             root=r, workers=("tier=mid,agent=t1,interval=5m",), emit="systemd",
         ),
+        "fleet-watch.write": ops.FleetWatchParams(
+            root=r, workers=("tier=mid,agent=t1,interval=5m",),
+            write_dir=str(root / "units"),
+        ),
         "fleet-watch.install": ops.FleetWatchParams(
             root=r, workers=("tier=mid,agent=t1,interval=5m",), yes=True,
         ),
@@ -94,6 +98,23 @@ def test_fleet_watch_install_headless_writes_nothing(project, tmp_path, monkeypa
     )
     assert res.exit_code == ops.EXIT_NEEDS_OPERATOR
     assert list(unit_dir.iterdir()) == []
+
+
+def test_fleet_watch_write_dir_headless_writes_nothing(project, tmp_path):
+    dest = tmp_path / "units"
+    dest.mkdir()
+    res = ops.run(
+        "fleet-watch.write",
+        ops.FleetWatchParams(
+            root=str(project),
+            workers=("tier=mid,agent=t1,interval=5m",),
+            write_dir=str(dest),
+        ),
+        ops.NeverAnswers(),
+        _ctx(),
+    )
+    assert res.exit_code == ops.EXIT_NEEDS_OPERATOR
+    assert list(dest.iterdir()) == []
 
 
 def test_operator_ops_do_not_merge(project):

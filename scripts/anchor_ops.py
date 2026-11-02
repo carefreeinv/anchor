@@ -869,32 +869,60 @@ def op_fleet_watch_once(params: FleetWatchParams, _answers: Answers, _ctx: Ctx) 
     return _fw_list_or_once(params, mode="triage" if params.triage else "once")
 
 
-@_op("fleet-watch.emit", mutates=False, requires=NEEDS_HARNESS)
-def op_fleet_watch_emit(params: FleetWatchParams, _answers: Answers, _ctx: Ctx) -> Result:
+def _fw_emit_payload(params: FleetWatchParams):
     fw, scripts = _fw_scripts()
     if not params.workers:
-        raise CliError("--emit needs at least one --worker")
+        raise CliError("--emit / --write-dir needs at least one --worker")
     workers = [fw.parse_worker(w) for w in params.workers]
     project = Path(params.root)
     python = params.python or fw.DEFAULT_PYTHON
     files = fw.emit_systemd(
         project, scripts, workers, python=python, load_watcher=params.load_watcher,
     )
-    res = Result("fleet-watch", "emit")
-    res.data["units"] = [{"name": n, "content": c} for n, c in files]
-    if params.emit in ("cron", "both"):
-        res.data["cron"] = fw.emit_cron_lines(
+    emit = params.emit
+    cron: list[str] = []
+    if emit in ("cron", "both"):
+        cron = fw.emit_cron_lines(
             project, scripts, workers, python=python, load_watcher=params.load_watcher,
         )
-    if params.write_dir:
-        out = Path(params.write_dir)
-        out.mkdir(parents=True, exist_ok=True)
-        written = []
-        for name, content in files:
-            dest = out / name
-            dest.write_text(content, encoding="utf-8")
-            written.append(str(dest))
-        res.data["written"] = written
+    text = fw.format_emit_text(files, cron, emit)
+    return fw, files, cron, text
+
+
+@_op("fleet-watch.emit", mutates=False, requires=NEEDS_HARNESS)
+def op_fleet_watch_emit(params: FleetWatchParams, _answers: Answers, _ctx: Ctx) -> Result:
+    _fw, files, cron, text = _fw_emit_payload(params)
+    res = Result("fleet-watch", "emit")
+    if params.emit in ("systemd", "both"):
+        res.data["units"] = [{"name": n, "content": c} for n, c in files]
+    if cron:
+        res.data["cron"] = cron
+    res.data["text"] = text
+    return res
+
+
+@_op("fleet-watch.write", mutates=True, requires=NEEDS_OPERATOR)
+def op_fleet_watch_write(params: FleetWatchParams, _answers: Answers, ctx: Ctx) -> Result:
+    if not ctx.mode.interactive:
+        res = Result("fleet-watch", "write", exit_code=EXIT_NEEDS_OPERATOR)
+        res.need(
+            "write-dir",
+            NEEDS_OPERATOR,
+            "writing unit files to --write-dir needs an interactive operator",
+        )
+        return res
+    if not params.write_dir:
+        raise CliError("--write-dir needs a directory")
+    _fw, files, _cron, _text = _fw_emit_payload(params)
+    out = Path(params.write_dir)
+    out.mkdir(parents=True, exist_ok=True)
+    written = []
+    for name, content in files:
+        dest = out / name
+        dest.write_text(content, encoding="utf-8")
+        written.append(str(dest))
+    res = Result("fleet-watch", "write")
+    res.data["written"] = written
     return res
 
 
@@ -935,6 +963,8 @@ def _fw_list_or_once(params: FleetWatchParams, *, mode: str) -> Result:
     import argparse
     import io
 
+    if not params.tier and not params.endpoint:
+        raise CliError(f"--{mode} needs --tier or --endpoint")
     fw, scripts = _fw_scripts()
     ns = argparse.Namespace(
         tier=params.tier,
