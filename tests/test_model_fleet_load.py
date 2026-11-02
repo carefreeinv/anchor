@@ -178,4 +178,4 @@ def test_list_fleet_reports_the_site_level(tmp_path, server):
         out = server.list_fleet()
     assert "site load: LOAD level=low" in out
     assert "local tiers allowed: small" in out
-    assert "- box [swarm] local" in out
+    assert "box · swarm" in out

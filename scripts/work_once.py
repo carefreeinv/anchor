@@ -46,8 +46,8 @@ import subprocess
 import sys
 from pathlib import Path
 
-from inference_load import check_local_work, endpoint_is_local, load_config
 import plan_store
+from inference_load import check_local_work, endpoint_is_local, load_config
 from plan_lease import (
     DEFAULT_TTL_SECONDS,
     ClaimError,

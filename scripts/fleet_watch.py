@@ -351,6 +351,8 @@ LOAD_ENV_KEYS = (
     "ANCHOR_MQTT_USERNAME",
     "ANCHOR_LOAD_FAILSAFE",
     "ANCHOR_LOAD_CACHE",
+    "ANCHOR_LOAD_MAX_AGE",
+    "ANCHOR_LOAD_DISABLE",
 )
 
 
@@ -497,6 +499,19 @@ def emit_systemd(
     return files
 
 
+def units_to_enable(files: list[tuple[str, str]]) -> list[str]:
+    """Timers plus standalone services (the load-watcher has no companion timer)."""
+    names = [n for n, _ in files]
+    timers = [n for n in names if n.endswith(".timer")]
+    timer_stems = {n[: -len(".timer")] for n in timers}
+    extra = [
+        n
+        for n in names
+        if n.endswith(".service") and n[: -len(".service")] not in timer_stems
+    ]
+    return timers + extra
+
+
 def emit_cron_lines(
     project: Path,
     scripts: Path,
@@ -504,6 +519,7 @@ def emit_cron_lines(
     *,
     python: str,
     env: dict | None = None,
+    load_watcher: bool = False,
 ) -> list[str]:
     lines = [
         f"# Anchor fleet_watch for {project.resolve()} — add to crontab -e",
@@ -513,6 +529,24 @@ def emit_cron_lines(
     load_env = " ".join(
         line[len("Environment="):] for line in load_env_lines(env)
     )
+    if load_watcher:
+        watch = " ".join(
+            _shell_quote(c)
+            for c in [
+                python,
+                str(scripts / "inference_load.py"),
+                "--root",
+                str(project.resolve()),
+                "--watch",
+            ]
+        )
+        log = project / ".plans" / "load-watch.log"
+        lines.append(
+            f"@reboot  cd {_shell_quote(str(project.resolve()))} && "
+            f"PYTHONPATH={_shell_quote(str(scripts))} "
+            + (load_env + " " if load_env else "")
+            + f"{watch} >>{_shell_quote(str(log))} 2>&1"
+        )
     for w in workers:
         mins = parse_interval_to_cron_step_minutes(w.interval)
         schedule = f"*/{mins} * * * *" if mins else "*/5 * * * *"
@@ -537,7 +571,6 @@ def install_user_units(
 ) -> int:
     user_dir = Path.home() / ".config" / "systemd" / "user"
     user_dir.mkdir(parents=True, exist_ok=True)
-    timers: list[str] = []
     for name, content in files:
         dest = user_dir / name
         if dest.exists() and not yes:
@@ -545,8 +578,7 @@ def install_user_units(
             return 2
         dest.write_text(content, encoding="utf-8")
         print(f"wrote {dest}")
-        if name.endswith(".timer"):
-            timers.append(name)
+    timers = units_to_enable(files)
     if not shutil.which("systemctl"):
         print("systemctl not found; units written but not enabled", file=sys.stderr)
         return 0
@@ -566,7 +598,7 @@ def install_user_units(
 
 
 def print_enable_commands(files: list[tuple[str, str]]) -> None:
-    timers = [n for n, _ in files if n.endswith(".timer")]
+    timers = units_to_enable(files)
     print("\n# --- install (user systemd; survives reboot with linger) ---")
     print("mkdir -p ~/.config/systemd/user")
     for name, _ in files:
@@ -689,7 +721,10 @@ def main(argv: list[str] | None = None) -> int:
 
         if args.emit in ("cron", "both"):
             print("### crontab")
-            for line in emit_cron_lines(project, scripts, workers, python=args.python):
+            for line in emit_cron_lines(
+                project, scripts, workers, python=args.python,
+                load_watcher=args.load_watcher,
+            ):
                 print(line)
 
         if args.install_user:

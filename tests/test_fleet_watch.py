@@ -1,3 +1,5 @@
+import contextlib
+import io
 from pathlib import Path
 
 import fleet_watch as fw
@@ -179,6 +181,20 @@ def test_unit_carries_load_env_when_configured(tmp_path):
     assert "Environment=ANCHOR_LOAD_FAILSAFE=hold" in body
 
 
+def test_unit_propagates_max_age(tmp_path):
+    project = tmp_path / "app"
+    project.mkdir()
+    (project / ".plans").mkdir()
+    env = {**LOAD_ENV, "ANCHOR_LOAD_MAX_AGE": "120"}
+    workers = [fw.parse_worker("tier=mid,agent=mid-1,interval=5m")]
+    body = next(
+        c for n, c in fw.emit_systemd(project, Path(fw.SCRIPTS_DIR), workers,
+                                      python="/usr/bin/python3", env=env)
+        if n.endswith(".service")
+    )
+    assert "Environment=ANCHOR_LOAD_MAX_AGE=120" in body
+
+
 def test_unit_never_writes_the_broker_password(tmp_path):
     project = tmp_path / "app"
     project.mkdir()
@@ -280,6 +296,13 @@ def test_load_watcher_unit_is_emitted_on_request(tmp_path):
     assert "Restart=always" in body          # the readers are timers; this is a daemon
     assert "Type=simple" in body
     assert "hunter2" not in body and "opuser" not in body
+    enable = fw.units_to_enable(files)
+    watcher = next(n for n in names if "anchor-load-watch-" in n)
+    assert watcher in enable
+    buf = io.StringIO()
+    with contextlib.redirect_stdout(buf):
+        fw.print_enable_commands(files)
+    assert f"enable --now {watcher}" in buf.getvalue()
 
 
 def test_no_load_watcher_unit_by_default(tmp_path):
@@ -290,3 +313,18 @@ def test_no_load_watcher_unit_by_default(tmp_path):
     files = fw.emit_systemd(project, Path(fw.SCRIPTS_DIR), workers,
                             python="/usr/bin/python3", env={})
     assert not any("anchor-load-watch-" in n for n, _ in files)
+
+
+def test_cron_emit_includes_load_watcher_at_reboot(tmp_path):
+    project = tmp_path / "app"
+    project.mkdir()
+    (project / ".plans").mkdir()
+    workers = [fw.parse_worker("tier=small,agent=swarm-1,interval=10m")]
+    body = "\n".join(
+        fw.emit_cron_lines(
+            project, Path(fw.SCRIPTS_DIR), workers,
+            python="/usr/bin/python3", env=LOAD_ENV, load_watcher=True,
+        )
+    )
+    assert "@reboot" in body
+    assert "inference_load.py" in body and "--watch" in body

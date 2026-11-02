@@ -29,6 +29,11 @@ Newest first.
 
 ### Fixed
 
+- **Site load: retained MQTT redelivery no longer resets freshness.** A
+  retained payload that matches the mirror keeps the original `received_at`.
+  `fleet_watch --load-watcher` enables the watcher `.service` (and `@reboot`
+  on cron emit). `ANCHOR_LOAD_MAX_AGE` is copied into emitted units.
+
 - **`anchor work --platform …` names the scaffold form.** A verb plus a
   scaffolder-only flag (or a cwd directory named like the verb, on parse
   failure) prints `did you mean \`anchor ./work …\` to scaffold the

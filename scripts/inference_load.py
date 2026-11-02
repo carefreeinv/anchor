@@ -758,20 +758,52 @@ def scope_for_topic(cfg: LoadConfig, topic: str) -> str:
     return SCOPE_SITE
 
 
-def apply_message(cfg: LoadConfig, topic: str, payload: str | bytes) -> LoadPolicy | None:
+def _payload_identity(policy: LoadPolicy) -> tuple:
+    """Fields a retained redelivery must match to be the same message."""
+    return (
+        policy.level,
+        policy.max_concurrent_local,
+        policy.allowed_tiers,
+        policy.reason,
+        policy.site_id,
+        policy.ts,
+        policy.ttl_s,
+    )
+
+
+def apply_message(
+    cfg: LoadConfig,
+    topic: str,
+    payload: str | bytes,
+    *,
+    retain: bool = False,
+) -> LoadPolicy | None:
     """Validate one received message and mirror it. Returns None if rejected.
 
     Split out from the paho callback so the accept/reject contract is testable
     without a broker: a malformed payload is dropped, never applied, and can
     never widen the cap. The topic decides the scope, so a periodic site
     heartbeat no longer overwrites a standing project override.
+
+    A retained redelivery whose payload matches the mirrored policy keeps the
+    existing ``received_at`` so a broker reconnect cannot revive a stale
+    ``high`` that omitted ``ts``.
     """
     try:
         policy = LoadPolicy.from_payload(payload, source=f"mqtt:{topic}")
     except LoadPolicyError as exc:
         print(f"[inference_load] ignored bad payload on {topic}: {exc}", file=sys.stderr)
         return None
-    write_cache(cfg.cache_path, policy, scope_for_topic(cfg, topic))
+    scope = scope_for_topic(cfg, topic)
+    if retain:
+        existing = read_cache_entries(cfg.cache_path).get(scope)
+        if (
+            existing is not None
+            and existing.received_at > 0
+            and _payload_identity(existing) == _payload_identity(policy)
+        ):
+            policy = replace(policy, received_at=existing.received_at)
+    write_cache(cfg.cache_path, policy, scope)
     return policy
 
 
@@ -828,7 +860,9 @@ def watch(cfg: LoadConfig, *, timeout: float | None = None, on_update=None) -> i
     def _on_message(_cli, _userdata, msg):  # noqa: ANN001 — same in v1 and v2
         # Project topic wins over site topic; both are mirrored to the same file
         # and the last fresh message decides.
-        policy = apply_message(cfg, msg.topic, msg.payload)
+        policy = apply_message(
+            cfg, msg.topic, msg.payload, retain=bool(getattr(msg, "retain", False))
+        )
         if policy is None:
             return
         state["received"] += 1

@@ -550,6 +550,23 @@ def test_write_cache_refuses_an_unknown_scope(tmp_path):
 
 # -- M3 / N4: freshness edge cases -----------------------------------------
 
+def test_retained_redelivery_without_ts_keeps_received_at(tmp_path):
+    """Broker reconnect must not revive a ts-less retained high (review F1)."""
+    from dataclasses import replace as dc_replace
+
+    cfg = _cfg(tmp_path, topic="anchor/v1/sites/t/inference/load", max_age_s=900)
+    payload = json.dumps({"level": "high"})
+    first = il.apply_message(cfg, cfg.topic, payload, retain=True)
+    assert first is not None
+    aged_at = first.received_at - 10_000
+    il.write_cache(cfg.cache_path, dc_replace(first, received_at=aged_at), il.SCOPE_SITE)
+
+    again = il.apply_message(cfg, cfg.topic, payload, retain=True)
+    assert again is not None
+    assert again.received_at == aged_at
+    assert again.is_expired(default_ttl_s=cfg.max_age_s)
+
+
 def test_publisher_timestamp_can_only_make_a_message_look_older():
     now = time.time()
     # A retained message redelivered after a broker reconnect gets a fresh
