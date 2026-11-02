@@ -3,9 +3,11 @@ from pathlib import Path
 import pytest
 
 from apply_executor_diff import (
+    EDIT_FORMAT,
     ApplyError,
     NoApplyableHunks,
     apply_reply,
+    extract_file_blocks,
     extract_patches,
 )
 
@@ -72,3 +74,87 @@ def test_apply_rejects_context_mismatch(tmp_path: Path):
             "--- a/f.txt\n+++ b/f.txt\n@@ -1 +1 @@\n-bbb\n+ccc\n",
             tmp_path,
         )
+
+
+def test_apply_fenced_path_whole_file(tmp_path: Path):
+    reply = (
+        "here is the file\n"
+        "```foo.py\n"
+        "x = 1\n"
+        "```\n"
+        "## Result\nwrote foo.py\n"
+        "## How to verify\ncat foo.py\n"
+        "## Deferred / concerns\nnone\n"
+    )
+    apply_reply(reply, tmp_path)
+    assert (tmp_path / "foo.py").read_text(encoding="utf-8") == "x = 1\n"
+
+
+def test_apply_file_header_then_python_fence(tmp_path: Path):
+    (tmp_path / "src").mkdir()
+    (tmp_path / "src" / "mod.py").write_text("old\n", encoding="utf-8")
+    reply = (
+        "File: src/mod.py\n"
+        "```python\n"
+        "new = True\n"
+        "```\n"
+    )
+    apply_reply(reply, tmp_path)
+    assert (tmp_path / "src" / "mod.py").read_text(encoding="utf-8") == "new = True\n"
+
+
+def test_edit_format_shows_fence_example():
+    assert "```path/to/file.py" in EDIT_FORMAT
+    assert "--- a/path/to/file" in EDIT_FORMAT
+
+
+def test_fenced_body_with_nested_diff_writes_only_that_file(tmp_path: Path):
+    reply = (
+        "```notes.md\n"
+        "see this example:\n"
+        "--- a/other\n"
+        "+++ b/other\n"
+        "@@ -1 +1 @@\n"
+        "-old\n"
+        "+new\n"
+        "```\n"
+    )
+    apply_reply(reply, tmp_path)
+    assert (tmp_path / "notes.md").read_text(encoding="utf-8").startswith("see this")
+    assert not (tmp_path / "other").exists()
+
+
+def test_overlapping_file_blocks_error():
+    reply = "```a.py\n1\n```\n```a.py\n2\n```\n"
+    with pytest.raises(ApplyError, match="overlapping"):
+        extract_file_blocks(reply)
+
+
+def test_empty_fence_is_no_hunks(tmp_path: Path):
+    with pytest.raises(NoApplyableHunks):
+        apply_reply("```foo.py\n```\n", tmp_path)
+    assert not (tmp_path / "foo.py").exists()
+
+
+def test_file_header_blank_line_then_fence(tmp_path: Path):
+    (tmp_path / "src").mkdir()
+    (tmp_path / "src" / "mod.py").write_text("old\n", encoding="utf-8")
+    reply = "File: src/mod.py\n\n```python\nnew = True\n```\n"
+    apply_reply(reply, tmp_path)
+    assert (tmp_path / "src" / "mod.py").read_text(encoding="utf-8") == "new = True\n"
+
+
+def test_fenced_plans_denied(tmp_path: Path):
+    with pytest.raises(ApplyError, match="may not write"):
+        apply_reply("```.plans/bugs/x.md\nhi\n```\n", tmp_path)
+
+
+def test_fenced_path_escape(tmp_path: Path):
+    with pytest.raises(ApplyError, match="escapes"):
+        apply_reply("```../../etc/passwd\nhacked\n```\n", tmp_path)
+
+
+def test_apply_fenced_scripts_x_py(tmp_path: Path):
+    reply = "```scripts/x.py\nprint(1)\n```\n"
+    apply_reply(reply, tmp_path)
+    assert (tmp_path / "scripts" / "x.py").read_text(encoding="utf-8") == "print(1)\n"

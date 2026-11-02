@@ -58,7 +58,9 @@ Newest first.
 - **`--run` applies executor unified diffs** into `--worktree` before
   scope/verify. `work_once.py --ensure-worktree --run` forwards `--worktree`.
   Footer-only replies still fail closed (`failed-noop`). Parser is stdlib-only
-  (`scripts/apply_executor_diff.py`); apply errors fail the attempt.
+  (`scripts/apply_executor_diff.py`); apply errors fail the attempt. Whole-file
+  fences (a markdown fence whose info-string is a path, or `File: path` plus a
+  language fence) apply the same way when the model cannot emit `@@` hunks.
 
 - **Orchestrate `failed-noop`.** A well-formed footer plus an already-green
   `--verify` is not `ok` when the worktree is unchanged, or when `## Result` is

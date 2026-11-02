@@ -12,15 +12,21 @@ from pathlib import Path
 from roles import EXECUTOR, can_write
 
 EDIT_FORMAT = (
-    "EDIT FORMAT: include a unified diff for every file you change, after any "
-    "thinking, before the footer:\n"
+    "EDIT FORMAT: after thinking, before the footer, include either a unified "
+    "diff or a whole-file fence for every file you change.\n"
+    "Unified diff:\n"
     "--- a/path/to/file\n"
     "+++ b/path/to/file\n"
     "@@ -1,2 +1,3 @@\n"
     " context\n"
     "-old line\n"
     "+new line\n"
-    "New files use --- /dev/null. Do not wrap the diff in a tool call. "
+    "Whole file (preferred if you cannot emit @@ hunks):\n"
+    "```path/to/file.py\n"
+    "full new contents\n"
+    "```\n"
+    "or: File: path/to/file.py  then a ```python fence with the full body.\n"
+    "New files use --- /dev/null or a fence for a path that does not exist. "
     "Still end with ## Result / ## How to verify / ## Deferred / concerns."
 )
 
@@ -48,6 +54,7 @@ class FilePatch:
     is_new: bool
     is_delete: bool
     hunks: list[Hunk] = field(default_factory=list)
+    whole_body: str | None = None  # set → replace/create entire file
 
 
 _HUNK_RE = re.compile(
@@ -134,6 +141,101 @@ def extract_patches(text: str) -> list[FilePatch]:
             raise ApplyError(f"no hunks for {path}")
         patches.append(FilePatch(path, is_new, is_delete, hunks))
     return patches
+
+
+_FENCE_OPEN_RE = re.compile(r"^```([^\s`]+)?\s*$")
+_FILE_HEADER_RE = re.compile(
+    r"^(?:#{1,6}\s*)?(?:File|FILE|path|Path)\s*:\s+(\S+)\s*$",
+)
+_PATHISH = re.compile(r"^[\w./+-]+\.[\w.+-]+$")
+_LANG_TAGS = frozenset(
+    {
+        "python", "py", "diff", "patch", "udiff", "text", "txt", "md",
+        "markdown", "json", "yaml", "yml", "toml", "bash", "sh", "js",
+        "ts", "tsx", "rs", "go", "c", "cpp", "java", "html", "css",
+        "ini", "cfg", "xml", "sql", "rb", "php", "swift", "kt",
+    }
+)
+
+
+def extract_file_blocks(text: str) -> list[FilePatch]:
+    """Parse fenced whole-file bodies. Overlapping paths are an error."""
+    patches, _residual = _extract_file_blocks(text)
+    return patches
+
+
+def _extract_file_blocks(text: str) -> tuple[list[FilePatch], str]:
+    """Return (patches, residual text with those fences removed).
+
+    Residual is what ``extract_patches`` may scan: a fenced ``notes.md`` whose
+    body quotes ``--- a/other`` must not become a second patch.
+    """
+    lines = text.splitlines()
+    keep = [True] * len(lines)
+    by_path: dict[str, FilePatch] = {}
+    pending_header: str | None = None
+    pending_header_i: int | None = None
+    i = 0
+    while i < len(lines):
+        hdr = _FILE_HEADER_RE.match(lines[i].strip())
+        if hdr:
+            pending_header = _norm_path(hdr.group(1).strip("`"))
+            pending_header_i = i
+            i += 1
+            continue
+        m = _FENCE_OPEN_RE.match(lines[i].strip())
+        if not m:
+            if lines[i].strip() == "" and pending_header:
+                i += 1
+                continue
+            pending_header = None
+            pending_header_i = None
+            i += 1
+            continue
+        tag = (m.group(1) or "").strip()
+        path: str | None = None
+        header_i = pending_header_i
+        if pending_header:
+            path = pending_header
+        elif tag and tag.lower() not in _LANG_TAGS:
+            path = _norm_path(tag)
+        pending_header = None
+        pending_header_i = None
+        fence_open = i
+        i += 1
+        body_lines: list[str] = []
+        closed = False
+        while i < len(lines):
+            if lines[i].strip() == "```":
+                closed = True
+                i += 1
+                break
+            body_lines.append(lines[i])
+            i += 1
+        if not closed or path is None:
+            continue
+        if not path or path == "dev/null":
+            raise ApplyError("file block has empty path")
+        if path in by_path:
+            raise ApplyError(f"overlapping patches for {path}")
+        body = "\n".join(body_lines)
+        if not body.strip():
+            # consume the empty fence so it is not scanned as a diff
+            for j in range(
+                header_i if header_i is not None else fence_open, i
+            ):
+                keep[j] = False
+            continue
+        if not body.endswith("\n"):
+            body += "\n"
+        by_path[path] = FilePatch(
+            path, is_new=False, is_delete=False, hunks=[], whole_body=body
+        )
+        start_mask = header_i if header_i is not None else fence_open
+        for j in range(start_mask, i):
+            keep[j] = False
+    residual = "\n".join(ln for k, ln in zip(keep, lines) if k)
+    return list(by_path.values()), residual
 
 
 def _resolve(worktree: Path, rel: str) -> Path:
@@ -225,7 +327,15 @@ def apply_reply(
     extra_deny: tuple[str, ...] = (),
 ) -> list[str]:
     """Write patches from ``text`` under ``worktree``. Returns relative paths."""
-    patches = extract_patches(text)
+    blocks, residual = _extract_file_blocks(text)
+    patches = extract_patches(residual)
+    if patches and blocks:
+        overlap = {p.path for p in patches} & {b.path for b in blocks}
+        if overlap:
+            raise ApplyError(f"overlapping patches for {sorted(overlap)[0]}")
+        patches = list(patches) + list(blocks)
+    elif not patches:
+        patches = blocks
     if not patches:
         raise NoApplyableHunks("no applyable hunks in executor reply")
     written: list[str] = []
@@ -236,6 +346,13 @@ def apply_reply(
         if not can_write(EXECUTOR, p.path, extra_deny=extra_deny):
             raise ApplyError(f"executor may not write {p.path}")
         dest = _resolve(worktree, p.path)
+        if p.whole_body is not None:
+            if "\0" in p.whole_body:
+                raise ApplyError(f"binary body refused for {p.path}")
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            dest.write_text(p.whole_body, encoding="utf-8")
+            written.append(p.path)
+            continue
         if p.is_delete:
             if dest.exists():
                 dest.unlink()

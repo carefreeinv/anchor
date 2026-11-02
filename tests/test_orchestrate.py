@@ -1137,3 +1137,36 @@ def test_execute_task_footer_only_with_worktree_is_failed_noop(git_repo):
     )
     assert result["status"] == "failed-noop"
     assert (git_repo / "README").read_text(encoding="utf-8") == "hi\n"
+
+
+FENCE_OUTPUT = (
+    "```README\n"
+    "applied from fence\n"
+    "```\n"
+    "## Result\n"
+    "changed README\n"
+    "## How to verify\n"
+    "cat README\n"
+    "## Deferred / concerns\n"
+    "None.\n"
+)
+
+
+def test_execute_task_applies_fenced_file_then_verify(git_repo):
+    from pathlib import Path
+
+    from orchestrate import execute_task
+
+    marker = git_repo / "verify-ran.txt"
+    fleet = FakeFleet([FENCE_OUTPUT])
+    result = execute_task(
+        "edit readme",
+        "plan",
+        fleet,
+        verify_cmd=f"touch {marker}",
+        hold_on_fail=False,
+        worktree=git_repo,
+    )
+    assert result["status"] == "ok"
+    assert (git_repo / "README").read_text(encoding="utf-8") == "applied from fence\n"
+    assert Path(marker).exists()
