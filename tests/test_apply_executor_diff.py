@@ -15,8 +15,9 @@ from apply_executor_diff import (
 def test_extract_rejects_garbage():
     with pytest.raises(NoApplyableHunks):
         apply_reply("## Result\nok\n", Path("/tmp"))
-    with pytest.raises(ApplyError, match="not followed"):
-        extract_patches("--- a/foo\nthis is not a plusplus\n")
+    assert extract_patches("--- a/foo\nthis is not a plusplus\n") == []
+    with pytest.raises(NoApplyableHunks):
+        apply_reply("--- notes\nstill prose\n", Path("/tmp"))
 
 
 def test_apply_unified_diff_tmp_path(tmp_path: Path):
@@ -74,6 +75,22 @@ def test_apply_rejects_context_mismatch(tmp_path: Path):
             "--- a/f.txt\n+++ b/f.txt\n@@ -1 +1 @@\n-bbb\n+ccc\n",
             tmp_path,
         )
+
+
+def test_orphan_dash_with_fence_still_writes(tmp_path: Path):
+    reply = (
+        "```foo.py\n"
+        "x = 1\n"
+        "```\n"
+        "--- notes\n"
+        "prose separator\n"
+        "## Result\nwrote foo.py\n"
+        "## How to verify\ncat foo.py\n"
+        "## Deferred / concerns\nnone\n"
+    )
+    written = apply_reply(reply, tmp_path)
+    assert written == ["foo.py"]
+    assert (tmp_path / "foo.py").read_text(encoding="utf-8") == "x = 1\n"
 
 
 def test_apply_fenced_path_whole_file(tmp_path: Path):

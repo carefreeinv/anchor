@@ -55,6 +55,10 @@ Newest first.
 
 ### Fixed
 
+- **Orphan `---` in an executor reply** no longer aborts apply. A whole-file
+  fence plus a later prose `---` still writes the fenced file; residual that
+  is only orphan `---` stays `NoApplyableHunks`.
+
 - **`--run` escalates before chat** when a task Touches `.plans/**`
   (executor write-deny). `insist` still dispatches. A task that only names
   `scripts/plan_store.py` still chats.

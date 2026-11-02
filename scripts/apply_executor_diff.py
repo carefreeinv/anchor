@@ -99,7 +99,8 @@ def extract_patches(text: str) -> list[FilePatch]:
             continue
         old_raw = line[4:].split("\t", 1)[0].strip()
         if i + 1 >= len(lines) or not lines[i + 1].startswith("+++ "):
-            raise ApplyError("unified diff --- line is not followed by +++")
+            i += 1
+            continue
         new_raw = lines[i + 1][4:].split("\t", 1)[0].strip()
         i += 2
         is_new = old_raw in ("/dev/null", "a/dev/null")
