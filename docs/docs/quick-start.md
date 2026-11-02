@@ -87,6 +87,8 @@ When it finishes, your project has Anchor instructions, plan folders under **`.p
 
 You do **not** need to understand every folder under `.plans/` on day one. Promote drafts when they look clear; run `/work` when you want implementation; use `/review` when the agent says work is ready for you.
 
+The same loop from a terminal (after Step 2) is `anchor draft`, `anchor work`, and `anchor review`. Full contract: [Plan workflow verbs](/tooling/plan-verbs).
+
 ### If something feels stuck
 
 - **`anchor` not found** → run [`/install-anchor`](/skills/install-anchor) again (or open a new terminal after install).
@@ -114,7 +116,7 @@ mkdir -p ~/.local/bin && ln -sfn "$(pwd)/bin/anchor" ~/.local/bin/anchor
 # ensure ~/.local/bin is on PATH
 ```
 
-`pip install -e .` (or `pipx install .`) from the repo root also works if you want a packaged `anchor` command. That install is the **scaffolder only** — fleet scripts under `scripts/` stay copy-paste by design.
+`pip install -e .` (or `pipx install .`) from the repo root also works if you want a packaged `anchor` command. That install is the scaffolder plus the plan-workflow verbs (`anchor plans | work | review | draft`). Fleet scripts under `scripts/` stay copy-paste by design, so `anchor work --run` still needs a checkout (`bin/anchor`).
 
 > **Editable install fails with "build backend is missing the 'build_editable' hook"?** Old distro pip/setuptools (e.g. Ubuntu 22.04 + setuptools 59) leaking into build isolation. Use a venv (`python3 -m venv .venv && . .venv/bin/activate && pip install -e .`), `pip install -e . --no-build-isolation`, or `pipx install .`.
 
@@ -162,6 +164,8 @@ Useful flags — full reference on [the CLI page](/tooling/cli):
 
 ### 5. Plan and execute
 
+In a coding agent, the slash skills:
+
 | Command | Role |
 |---------|------|
 | [`/draft`](/skills/draft) | Create, list, load drafts; `--promote <slug>` → bugs/features |
@@ -171,6 +175,21 @@ Useful flags — full reference on [the CLI page](/tooling/cli):
 | [`/audit`](/skills/audit) | Security audit → prioritized bug plans |
 | [`/deploy`](/skills/deploy) | Ship the project with the tooling it already uses |
 | [`/optimize`](/skills/optimize) | Standards scan → checkbox-picked improvement plans |
+
+From a terminal, the same `.plans/` loop with no chat harness ([Plan workflow verbs](/tooling/plan-verbs)):
+
+```bash
+cd /path/to/your-app          # directory that contains .plans/
+anchor plans                  # every plan, by lane; --board for the kanban
+anchor work --list --tier mid # ready plans with your fit; claim nothing
+anchor work                   # claim the highest-priority fit plan
+anchor work --finish <slug>   # in-progress → review-needed/
+anchor review --list
+anchor review <slug>          # package + Approve / Needs Work (TTY only)
+anchor draft <slug>
+```
+
+`anchor --help` is the scaffolder. Verb help is `anchor work --help` (etc.). Headless or `--json` prints schema-v1 JSON. The CLI claims, heartbeats, finishes, and (after an in-terminal Approve) fast-forward merges to `dev`; it does not write plan prose or carry out Steps unless you pass `--run` (interactive) or `--delegate`.
 
 Architecture for always-on workers: [Fleet workers](/tooling/fleet-workers). Skills map: [Skills overview](/skills/overview).
 

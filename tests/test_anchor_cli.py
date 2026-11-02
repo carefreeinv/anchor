@@ -627,3 +627,22 @@ def test_delegate_critic_banner_on_stderr_before_first_prompt(project, critic_fl
     assert seen, "decision prompt never ran"
     assert "--- critic" in seen[0]
     assert "REVISE" in seen[0]
+
+
+def test_scaffold_collision_hint_on_platform_flag():
+    assert "anchor ./work" in (anchor_cli.scaffold_collision_hint(
+        ["work", "--platform", "claude"]) or "")
+    with pytest.raises(SystemExit) as ei:
+        anchor_cli.main(["work", "--platform", "claude"])
+    assert ei.value.code == 2
+
+
+def test_scaffold_collision_hint_when_verb_named_dir_exists(tmp_path):
+    empty = tmp_path / "empty"
+    empty.mkdir()
+    named = tmp_path / "named"
+    named.mkdir()
+    (named / "review").mkdir()
+    assert "anchor ./review" in (anchor_cli.scaffold_collision_hint(
+        ["review", "--bogus"], cwd=named) or "")
+    assert anchor_cli.scaffold_collision_hint(["review", "--bogus"], cwd=empty) is None

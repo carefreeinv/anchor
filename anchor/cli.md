@@ -12,7 +12,19 @@ registry). `scripts/anchor_cli.py` is the terminal adapter — parser, prompts,
 text/JSON rendering — reached through `scripts/anchor.py` (`bin/anchor`) when
 the first argument is a verb. Every other invocation is the scaffolder,
 unchanged. A project directory that happens to be named `plans`, `work`,
-`review` or `draft` is scaffolded as `./work`.
+`review` or `draft` is scaffolded as `./work`. `anchor --help` is the
+scaffolder; verb help is `anchor work --help` (etc.). A verb plus a
+scaffolder-only flag (`--platform`, `--fleet`, …) still exits 2 and prints
+``did you mean `anchor ./work …` to scaffold the directory?``.
+
+`--delegate` / `--endpoint` read an endpoints YAML (`--registry`, default
+`scripts/endpoints.yaml`). A machine-local overlay such as
+`~/.config/anchor/endpoints.local.yaml` is the right place for localhost
+Ollama and NVIDIA Build. `anchor` loads a gitignored repo-root `.env`
+(setdefault) before verbs run; Authorization is the first set of
+`ANCHOR_API_KEY`, `NVIDIA_API_KEY`, `NGC_API_KEY`. `--run` hands the claimed
+plan to `orchestrate.py` with no extra registry args — it uses the default
+fleet file, not `--registry`.
 
 ## The rule for the split
 

@@ -124,6 +124,12 @@ def main() -> None:
     if not args.probe:
         raise SystemExit("Pass --probe to run the check.")
 
+    try:
+        from anchor_client import load_dotenv
+
+        load_dotenv()
+    except ImportError:
+        pass
     probe = probe_build()
     backend = preferred_backend(probe, prefer_local=args.prefer_local)
     print(f"configured: {probe.configured}")

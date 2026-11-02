@@ -1,4 +1,5 @@
 import json
+import os
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -177,9 +178,14 @@ def test_fleet_pick_raises_when_no_endpoint_available_for_role(tmp_path):
         fleet.pick("planner")
 
 
+def _clear_api_keys(monkeypatch):
+    for name in ("ANCHOR_API_KEY", "NVIDIA_API_KEY", "NGC_API_KEY"):
+        monkeypatch.delenv(name, raising=False)
+
+
 @patch("anchor_client.requests.post")
 def test_no_auth_header_sent_when_api_key_unset(mock_post, monkeypatch):
-    monkeypatch.delenv("ANCHOR_API_KEY", raising=False)
+    _clear_api_keys(monkeypatch)
     mock_post.return_value = make_response()
     ep = Endpoint(name="n", tier="swarm", base_url="http://x/v1", model="m")
 
@@ -190,6 +196,7 @@ def test_no_auth_header_sent_when_api_key_unset(mock_post, monkeypatch):
 
 @patch("anchor_client.requests.post")
 def test_auth_header_sent_when_api_key_set(mock_post, monkeypatch):
+    _clear_api_keys(monkeypatch)
     monkeypatch.setenv("ANCHOR_API_KEY", "secret")
     mock_post.return_value = make_response()
     ep = Endpoint(name="n", tier="swarm", base_url="http://x/v1", model="m")
@@ -197,6 +204,29 @@ def test_auth_header_sent_when_api_key_set(mock_post, monkeypatch):
     ep.chat([{"role": "user", "content": "hi"}])
 
     assert mock_post.call_args.kwargs["headers"]["Authorization"] == "Bearer secret"
+
+
+@patch("anchor_client.requests.post")
+def test_auth_header_falls_back_to_nvidia_api_key(mock_post, monkeypatch):
+    _clear_api_keys(monkeypatch)
+    monkeypatch.setenv("NVIDIA_API_KEY", "nvapi-test")
+    mock_post.return_value = make_response()
+    ep = Endpoint(name="n", tier="reasoner", base_url="http://x/v1", model="m")
+
+    ep.chat([{"role": "user", "content": "hi"}])
+
+    assert mock_post.call_args.kwargs["headers"]["Authorization"] == "Bearer nvapi-test"
+
+
+def test_load_dotenv_setdefault_does_not_override(tmp_path, monkeypatch):
+    env_file = tmp_path / ".env"
+    env_file.write_text("NVIDIA_API_KEY=from-file\nALREADY=file\n", encoding="utf-8")
+    monkeypatch.setenv("ALREADY", "exported")
+    monkeypatch.delenv("NVIDIA_API_KEY", raising=False)
+    loaded = __import__("anchor_client").load_dotenv(env_file)
+    assert loaded == env_file.resolve()
+    assert os.environ["NVIDIA_API_KEY"] == "from-file"
+    assert os.environ["ALREADY"] == "exported"
 
 
 @patch("anchor_client.time.sleep")

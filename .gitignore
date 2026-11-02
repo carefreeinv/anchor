@@ -11,9 +11,8 @@ orchestration_run.json
 benchmark_results.csv
 *:Zone.Identifier
 var/
-# Local secrets — Anchor itself reads ANCHOR_API_KEY / ~/.config/anchor, never a
-# .env file; keep any local .env out of the tree so key-shaped values can't be
-# committed by accident.
+# Local secrets — gitignored `.env` (NVIDIA_API_KEY, ANCHOR_API_KEY, …).
+# `anchor` / `nvidia_build_probe.py` load it with setdefault (exported env wins).
 .env
 .env.*
 !.env.example

@@ -87,6 +87,55 @@ def project_root_from(start: Path | None = None) -> Path:
 REPO_ROOT = project_root_from()
 DEFAULT_REGISTRY = Path(__file__).resolve().parent / "endpoints.yaml"
 THINK_RE = re.compile(r"<think>.*?</think>\s*", re.DOTALL)
+# Fleet Authorization: first present wins. NVIDIA_API_KEY is the Build inference
+# key; NGC_API_KEY is a NIM-pull fallback (may lack inference scope).
+API_KEY_ENV = ("ANCHOR_API_KEY", "NVIDIA_API_KEY", "NGC_API_KEY")
+
+
+def load_dotenv(path: Path | None = None) -> Path | None:
+    """Load ``KEY=VALUE`` from a gitignored ``.env`` into ``os.environ``.
+
+    Already-exported variables win (setdefault). Returns the first path that
+    existed, or None. Never prints values.
+    """
+    candidates: list[Path] = []
+    if path is not None:
+        candidates.append(Path(path))
+    else:
+        candidates.extend((Path.cwd() / ".env", REPO_ROOT / ".env"))
+    loaded: Path | None = None
+    seen: set[Path] = set()
+    for raw_path in candidates:
+        p = raw_path.resolve()
+        if p in seen or not p.is_file():
+            continue
+        seen.add(p)
+        if loaded is None:
+            loaded = p
+        for line in p.read_text(encoding="utf-8").splitlines():
+            s = line.strip()
+            if not s or s.startswith("#") or "=" not in s:
+                continue
+            if s.startswith("export "):
+                s = s[7:].strip()
+            key, _, val = s.partition("=")
+            key = key.strip()
+            val = val.strip()
+            if len(val) >= 2 and val[0] == val[-1] and val[0] in "\"'":
+                val = val[1:-1]
+            if key and key not in os.environ:
+                os.environ[key] = val
+    return loaded
+
+
+def request_api_key(env: dict[str, str] | None = None) -> tuple[str | None, str | None]:
+    """``(key, env_var_name)`` for the Authorization header; never logs the key."""
+    source = env if env is not None else os.environ
+    for name in API_KEY_ENV:
+        value = source.get(name)
+        if value:
+            return value, name
+    return None, None
 
 MAX_RETRIES = 2  # matches the Anchor stop condition elsewhere: retry twice, then surface the failure
 RETRY_BACKOFF_SECONDS = 1.0
@@ -182,7 +231,7 @@ class Endpoint:
             max_tokens = min(max_tokens, int(ceiling))
 
         headers = {}
-        api_key = os.environ.get("ANCHOR_API_KEY")
+        api_key, _src = request_api_key()
         if api_key:
             headers["Authorization"] = f"Bearer {api_key}"
 

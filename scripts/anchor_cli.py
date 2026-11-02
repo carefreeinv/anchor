@@ -53,12 +53,36 @@ __all__ = [
     "EXIT_ERROR", "EXIT_NEEDS_OPERATOR", "EXIT_NOTHING", "EXIT_OK",
     "Mode", "NeedsOperator", "Prompter", "Result", "SCHEMA_VERSION", "VERBS",
     "critic_verdict", "detect_mode", "is_verb_invocation", "main",
+    "scaffold_collision_hint",
 ]
+
+# Scaffolder-only flags. A verb plus one of these is almost always
+# `anchor ./work --platform …`, not a workflow invocation.
+_SCAFFOLD_ONLY_FLAGS = frozenset({
+    "--platform", "--fleet", "--framework", "--orchestrator",
+    "--set-orchestrator", "--set-review-batch", "--show-review-batch",
+    "--upgrade", "--update", "--check", "--diff", "--dry-run",
+    "--force", "--yes", "-y",
+})
 
 
 def is_verb_invocation(argv: list[str]) -> bool:
     """True when ``argv`` names a verb. A project dir called ``work`` is ``./work``."""
     return bool(argv) and argv[0] in VERBS
+
+
+def scaffold_collision_hint(argv: list[str], *, cwd: Path | None = None) -> str | None:
+    """One-line hint when a verb parse failed but the operator meant to scaffold."""
+    if not argv or argv[0] not in VERBS:
+        return None
+    verb = argv[0]
+    flags = [a.split("=", 1)[0] for a in argv[1:] if a.startswith("-")]
+    meant_scaffold = any(f in _SCAFFOLD_ONLY_FLAGS for f in flags)
+    if not meant_scaffold:
+        root = cwd if cwd is not None else Path.cwd()
+        if not (root / verb).is_dir():
+            return None
+    return f"did you mean `anchor ./{verb} …` to scaffold the directory?"
 
 
 # --- prompting (the CLI's Answers adapter) -------------------------------------
@@ -314,7 +338,14 @@ def main(
     env: dict[str, str] | None = None,
     read: Callable[[str], str] = input,
 ) -> int:
-    args = build_parser().parse_args(argv)
+    try:
+        args = build_parser().parse_args(argv)
+    except SystemExit as exc:
+        if exc.code == 2:
+            hint = scaffold_collision_hint(argv)
+            if hint:
+                print(hint, file=sys.stderr)
+        raise
     mode = detect_mode(args.non_interactive, stdin=stdin, stdout=stdout, env=env)
     out = stdout or sys.stdout
     as_json = args.json or not mode.interactive

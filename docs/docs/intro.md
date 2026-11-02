@@ -76,7 +76,7 @@ cd anchor
 Ready to try it? The **[Quick Start](/quick-start)** page has two tracks:
 
 - **[For Non-Technical People](/quick-start#for-non-technical-people)** — plain-language setup with Claude Code or Grok Build (`/install-anchor`, `/config`, `/draft`, `/work`).
-- **[For Technical People](/quick-start#for-technical-people)** — CLI, defaults, scaffold flags, plans, and optional fleet endpoints.
+- **[For Technical People](/quick-start#for-technical-people)** — CLI, defaults, scaffold flags, `anchor plans | work | review | draft`, and optional fleet endpoints.
 
 ## Start here
 

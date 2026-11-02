@@ -35,12 +35,24 @@ A Mythos-class model's edge is not intelligence-per-token — it's **discipline 
 
 1. Read `anchor/ANCHOR.md` — the doctrine everything else implements.
 2. Run `./config.sh` (or type `/config` in Claude Code / Grok Build) to pick your default platform(s), whether you want fleet tooling, model priority, and **preferred orchestrator** (who coordinates multi-step work; e.g. `claude:opus`). It saves your answer and shows you the exact `anchor <project-dir>` command to scaffold a project with it.
-3. Scaffold a project (`cd my-app && anchor`, or `anchor <project-dir>`). From the Anchor repo, **`/anchor <project-path>`** (path required) runs the CLI with conflict-aware help when the project already has agent config. **Inside a scaffolded project**, `/anchor` (no path) locates the local Anchor checkout and conforms **this** project. Then use **`/work`** for ready plans under `.plans/`, or **`/fleet-watch`** for reboot-persistent pullers. Set a durable orchestrator anytime: `anchor --set-orchestrator …`. Refresh an existing install: `anchor --check` / `anchor --diff` / `anchor --upgrade --yes` (or project `/anchor`).
+3. Scaffold a project (`cd my-app && anchor`, or `anchor <project-dir>`). From the Anchor repo, **`/anchor <project-path>`** (path required) runs the CLI with conflict-aware help when the project already has agent config. **Inside a scaffolded project**, `/anchor` (no path) locates the local Anchor checkout and conforms **this** project. Then use **`/work`** or **`anchor work`** for ready plans under `.plans/`, or **`/fleet-watch`** for reboot-persistent pullers. Set a durable orchestrator anytime: `anchor --set-orchestrator …`. Refresh an existing install: `anchor --check` / `anchor --diff` / `anchor --upgrade --yes` (or project `/anchor`).
 4. Point `scripts/endpoints.yaml` at your endpoints; use `scripts/orchestrate.py` to run the orchestrator pattern across them — see your `hardware/` folder's README to serve models on your own fleet. Fleet design: docs **Tooling → Fleet workers**.
 
 Skipping step 2 is fine too — `anchor --platform claude,grok` (etc.) or the interactive survey it falls back to both still work without saved defaults.
 
-Register the CLI with **`/install-anchor`** (agent skill: user-local symlink, no sudo), or symlink `bin/anchor` onto your PATH yourself. `pip install -e .` (or `pipx install .`) from the repo root also works if you'd rather have a packaged `anchor` command — it only installs the scaffolder itself, not the fleet scripts (those stay copy-paste, by design).
+Register the CLI with **`/install-anchor`** (agent skill: user-local symlink, no sudo), or symlink `bin/anchor` onto your PATH yourself. `pip install -e .` (or `pipx install .`) from the repo root also works if you'd rather have a packaged `anchor` command — that install is the scaffolder plus the plan-workflow verbs; fleet scripts under `scripts/` stay copy-paste by design.
+
+Once `anchor` is on PATH, the same binary runs the `.plans/` workflow from a terminal (no chat harness, no model on the default path):
+
+```bash
+anchor plans                 # every plan, by lane
+anchor work --list --tier mid
+anchor work [<slug>]         # claim; --run (interactive) hands Steps to orchestrate.py
+anchor review --list
+anchor draft <slug>
+```
+
+`anchor --help` is the scaffolder. Use `anchor work --help` (and the other verbs) for the plan workflow. Contract: `anchor/cli.md` / docs **Tooling → Plan workflow verbs**. `--root` if the cwd has no `.plans/`. A TTY prints tables; no TTY (or `--json` / `--non-interactive`) prints schema-v1 JSON.
 
 > **Editable install fails with "build backend is missing the 'build_editable' hook"?** That's an old distro pip/setuptools (e.g. Ubuntu 22.04 ships setuptools 59, which predates PEP 660) leaking into pip's build isolation — not a problem with this repo. Install into a virtualenv (`python3 -m venv .venv && . .venv/bin/activate && pip install -e .`), or use `pip install -e . --no-build-isolation`, or `pipx install .`.
 

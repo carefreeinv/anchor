@@ -1659,6 +1659,12 @@ def main(argv: list[str] | None = None) -> None:
 
     argv = sys.argv[1:] if argv is None else argv
     if anchor_cli.is_verb_invocation(argv):
+        try:
+            import anchor_client
+
+            anchor_client.load_dotenv()
+        except ImportError:
+            pass
         raise SystemExit(anchor_cli.main(argv))
     scaffold_main(argv)
 

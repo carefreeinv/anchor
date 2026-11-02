@@ -18,19 +18,32 @@ use it.
 
 ## Configure
 
-Get a key from [build.nvidia.com](https://build.nvidia.com), then export it:
+Get a key from [build.nvidia.com](https://build.nvidia.com), then either
+export it or put it in a gitignored repo-root `.env` (see `.env.example`):
 
 ```bash
 export NVIDIA_API_KEY=nvapi-...
+# or: NVIDIA_API_KEY=nvapi-...  in ./.env
 ```
 
-Verified against NVIDIA's own docs and model pages (2026-09-09):
+`anchor` plan verbs and `python scripts/nvidia_build_probe.py --probe` load
+that `.env` with setdefault (an already-exported variable wins). The fleet
+client (`anchor_client.Endpoint.chat`) sends `Authorization: Bearer …` from
+the first set of `ANCHOR_API_KEY`, `NVIDIA_API_KEY`, `NGC_API_KEY`. Never
+commit the key; never put it in `endpoints.yaml`.
+
+Hosted catalog ids **churn**. `GET https://integrate.api.nvidia.com/v1/models`
+lists what this key can call; a retired id returns HTTP 410. Recheck after
+NVIDIA catalog moves — do not treat a year-old example as still live.
+
+Verified against NVIDIA's own docs and a live `/v1/models` + chat smoke
+(2026-10-28):
 
 | | |
 |---|---|
 | Base URL | `https://integrate.api.nvidia.com/v1` |
 | Auth header | `Authorization: Bearer $NVIDIA_API_KEY` |
-| Example model id | `nvidia/llama-3.3-nemotron-super-49b-v1` |
+| Example model id | `nvidia/nemotron-3.5-lightning-30b-a3b` |
 
 `NGC_API_KEY` (normally a container-registry / NIM-pull credential) is
 accepted as a fallback if `NVIDIA_API_KEY` is absent — an operator already
@@ -71,7 +84,7 @@ the Build endpoint when the probe reports `build`:
 
 ```yaml
 openai-api-base: https://integrate.api.nvidia.com/v1
-model: openai/nvidia/llama-3.3-nemotron-super-49b-v1
+model: openai/nvidia/nemotron-3.5-lightning-30b-a3b
 ```
 
 Aider reads `OPENAI_API_KEY` for any `openai-api-base` target, so also set:

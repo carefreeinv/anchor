@@ -6,6 +6,32 @@ Newest first.
 
 ## [Unreleased]
 
+### Added
+
+- **Repo-root `.env` for fleet keys.** `anchor` plan verbs and
+  `nvidia_build_probe.py --probe` load a gitignored `.env` with setdefault
+  (exported environment wins). `Endpoint.chat` sends `Authorization` from the
+  first set of `ANCHOR_API_KEY`, `NVIDIA_API_KEY`, `NGC_API_KEY`. Template:
+  `.env.example`.
+
+### Changed
+
+- **NVIDIA Build example model** is `nvidia/nemotron-3.5-lightning-30b-a3b`
+  (live `/v1/models` + chat, 2026-10-28). The previous catalog id
+  `nvidia/llama-3.3-nemotron-super-49b-v1` returns HTTP 410 on
+  `integrate.api.nvidia.com`. Self-hosted NIM image names are unchanged.
+  Docs note that hosted ids churn.
+
+- **README / Quick Start** name `anchor plans | work | review | draft` as the
+  terminal `.plans/` loop (`anchor --help` stays the scaffolder).
+
+### Fixed
+
+- **`anchor work --platform …` names the scaffold form.** A verb plus a
+  scaffolder-only flag (or a cwd directory named like the verb, on parse
+  failure) prints `did you mean \`anchor ./work …\` to scaffold the
+  directory?` and still exits 2.
+
 ### Fixed
 
 - **`anchor review --delegate` prints the critic before the decision prompt.**

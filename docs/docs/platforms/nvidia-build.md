@@ -3,7 +3,7 @@ sidebar_position: 7
 sidebar_label: NVIDIA Build
 ---
 
-<!-- synced-from: platforms/nvidia-build/BUILD.md @ 96e784f6e9f40224c47972a831d1862593ce805b -->
+<!-- synced-from: platforms/nvidia-build/BUILD.md @ 793687e5b52bedc5f04cb99b76b2994e1db423f1 -->
 
 # NVIDIA Build
 
@@ -24,13 +24,19 @@ inference.
 
 ```bash
 export NVIDIA_API_KEY=nvapi-...
+# or NVIDIA_API_KEY= in a gitignored repo-root .env (see .env.example)
 ```
+
+`anchor` plan verbs and `nvidia_build_probe.py --probe` load `.env`
+(setdefault). The fleet client authorizes from the first set of
+`ANCHOR_API_KEY`, `NVIDIA_API_KEY`, `NGC_API_KEY`. Hosted catalog ids churn;
+`GET /v1/models` lists live ones, a retired id returns HTTP 410.
 
 | | |
 |---|---|
 | Base URL | `https://integrate.api.nvidia.com/v1` |
 | Auth header | `Authorization: Bearer $NVIDIA_API_KEY` |
-| Example model id | `nvidia/llama-3.3-nemotron-super-49b-v1` |
+| Example model id | `nvidia/nemotron-3.5-lightning-30b-a3b` |
 
 `NGC_API_KEY` (a container-registry / NIM-pull credential) is accepted as a
 fallback if `NVIDIA_API_KEY` is absent, but it isn't guaranteed to carry
@@ -60,7 +66,7 @@ live Build key.
 
 ```yaml
 openai-api-base: https://integrate.api.nvidia.com/v1
-model: openai/nvidia/llama-3.3-nemotron-super-49b-v1
+model: openai/nvidia/nemotron-3.5-lightning-30b-a3b
 ```
 
 ```bash
