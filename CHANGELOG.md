@@ -51,6 +51,9 @@ Newest first.
 
 ### Fixed
 
+- **`anchor work` claim** light-path commits a tracked `.plans/` move to
+  `in-progress/` (`Plans: <slug> → in-progress (anchor work claim)`).
+
 - **`anchor work` error JSON** names the sub-action (`heartbeat` / `finish` /
   `return` / `claim`) instead of repeating the verb.
 

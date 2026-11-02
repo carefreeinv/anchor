@@ -83,6 +83,21 @@ def test_commit_lane_move_refuses_foreign_staged(git_repo: Path):
     assert log == "seed plans"
 
 
+def test_work_claim_commits_on_tracked_plans(git_repo: Path):
+    root = _tracked_plans(git_repo)
+    code, doc = cli(["work", "f1", "--root", str(root), "--agent-id", "a1", "--no-fit-check"])
+    assert code == 0, doc
+    assert doc["result"]["lane_commit"]["outcome"] == "committed"
+    assert doc["result"]["lane_commit"]["message"] == (
+        "Plans: f1 → in-progress (anchor work claim)"
+    )
+    assert _git(root, "status", "--porcelain") == ""
+    assert _git(root, "log", "-1", "--format=%s") == (
+        "Plans: f1 → in-progress (anchor work claim)"
+    )
+    assert (root / ".plans/in-progress/f1.md").is_file()
+
+
 def test_work_finish_then_review_approve_on_tracked_plans(git_repo: Path):
     root = _tracked_plans(git_repo)
     _git(root, "branch", "dev")

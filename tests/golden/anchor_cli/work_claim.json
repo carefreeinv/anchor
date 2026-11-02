@@ -4,7 +4,9 @@
     "error": null,
     "exit_code": 0,
     "mode": "non-interactive",
-    "notes": [],
+    "notes": [
+      "lane move (untracked)"
+    ],
     "ok": true,
     "pending": [
       {
@@ -15,6 +17,10 @@
     ],
     "result": {
       "agent_id": "a1",
+      "lane_commit": {
+        "message": "Plans: b1 \u2192 in-progress (anchor work claim)",
+        "outcome": "untracked"
+      },
       "path": "<ROOT>/.plans/in-progress/b1.md",
       "plan": "in-progress/b1.md"
     },

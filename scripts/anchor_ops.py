@@ -527,6 +527,8 @@ def op_work_claim(params: WorkClaimParams, _answers: Answers, ctx: Ctx) -> Resul
     ref = plan_store.ref_for_path(plans, dest)
     rel = ref.rel if ref else str(dest)
     res.data.update(plan=rel, path=str(dest), agent_id=ctx.agent_id)
+    if ref:
+        _record_lane_commit(res, params.root, ref.slug, "in-progress", "anchor work claim")
     detail = (
         f"implement the plan's Steps: /work {rel} in your coding harness; "
         f"then anchor work --finish {ref.slug if ref else rel}"
