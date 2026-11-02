@@ -11,6 +11,8 @@ orchestration_run.json
 benchmark_results.csv
 *:Zone.Identifier
 var/
+# includes var/log/reasoning-YYYY-MM-DD.log (Endpoint.chat CoT) and
+# var/task-transcripts/ (orchestrate raw replies)
 # Local secrets — gitignored `.env` (NVIDIA_API_KEY, ANCHOR_API_KEY, …).
 # `anchor` / `nvidia_build_probe.py` load it with setdefault (exported env wins).
 .env

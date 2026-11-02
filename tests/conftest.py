@@ -15,6 +15,12 @@ def _git(cwd: Path, *args: str) -> None:
     )
 
 
+@pytest.fixture(autouse=True)
+def _disable_reasoning_logs_by_default(monkeypatch):
+    """Keep unit tests from writing ``<cwd>/var/log`` unless they opt in."""
+    monkeypatch.setenv("ANCHOR_NO_REASONING_LOG", "1")
+
+
 @pytest.fixture
 def git_repo(tmp_path: Path) -> Path:
     """A fresh git repo with one committed file (README) on branch main."""

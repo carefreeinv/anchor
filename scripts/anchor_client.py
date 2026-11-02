@@ -36,12 +36,14 @@ never silently block them.
 """
 from __future__ import annotations
 
+import hashlib
 import os
 import re
 import subprocess
 import sys
 import time
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from pathlib import Path
 
 import requests
@@ -100,6 +102,110 @@ def project_root_from(start: Path | None = None) -> Path:
 REPO_ROOT = project_root_from()
 DEFAULT_REGISTRY = Path(__file__).resolve().parent / "endpoints.yaml"
 THINK_RE = re.compile(r"<think>.*?</think>\s*", re.DOTALL)
+_THINK_CAPTURE = re.compile(r"<think>(.*?)</think>", re.DOTALL)
+_reasoning_log_warned = False
+
+
+def _env_flag(name: str) -> bool:
+    return os.environ.get(name, "").strip().lower() in ("1", "true", "yes", "on")
+
+
+def reasoning_log_dir() -> Path | None:
+    """Directory for per-call reasoning logs, or None when logging is off.
+
+    Default: ``<cwd>/var/log`` (gitignored via ``var/``). ``ANCHOR_LOG_DIR``
+    overrides the path; an empty value disables. ``ANCHOR_NO_REASONING_LOG``
+    also disables.
+    """
+    if _env_flag("ANCHOR_NO_REASONING_LOG"):
+        return None
+    raw = os.environ.get("ANCHOR_LOG_DIR")
+    if raw is not None:
+        s = raw.strip()
+        if not s:
+            return None
+        return Path(s)
+    return Path.cwd() / "var" / "log"
+
+
+def extract_think_blocks(text: str) -> str:
+    parts = _THINK_CAPTURE.findall(text or "")
+    return "\n".join(p.strip() for p in parts if p.strip())
+
+
+def _message_sizes(messages: list[dict]) -> str:
+    bits = []
+    last_user = ""
+    for m in messages or []:
+        role = m.get("role") or "?"
+        content = m.get("content") or ""
+        bits.append(f"{role}:{len(str(content))}")
+        if role == "user":
+            last_user = str(content)
+    digest = hashlib.sha256(last_user.encode("utf-8")).hexdigest()[:12] if last_user else "-"
+    return " ".join(bits) + f" last_user_sha256={digest}"
+
+
+def format_reasoning_record(
+    *,
+    endpoint: str,
+    model: str,
+    finish_reason: object,
+    usage: dict | None,
+    content: str,
+    reasoning: str,
+    think_blocks: str,
+    messages: list[dict],
+    include_prompts: bool,
+) -> str:
+    now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    usage = usage or {}
+    usage_s = (
+        f"{usage.get('prompt_tokens', '-')}/"
+        f"{usage.get('completion_tokens', '-')}/"
+        f"{usage.get('total_tokens', '-')}"
+    )
+    lines = [
+        f"--- {now} endpoint={endpoint} model={model} "
+        f"finish_reason={finish_reason!r} usage={usage_s} ---",
+        f"messages: {_message_sizes(messages)}",
+    ]
+    if include_prompts:
+        for m in messages or []:
+            role = m.get("role") or "?"
+            body = str(m.get("content") or "")
+            lines.append(f"prompt[{role}]:")
+            lines.append(body)
+    if think_blocks:
+        lines.append("think:")
+        lines.append(think_blocks)
+    if reasoning:
+        lines.append("reasoning:")
+        lines.append(reasoning)
+    if not think_blocks and not reasoning:
+        lines.append("no reasoning field")
+    lines.append("")
+    return "\n".join(lines) + "\n"
+
+
+def append_reasoning_log(record: str, *, log_dir: Path | None = None) -> Path | None:
+    """Append one call's record. Fail-open: IO errors print once to stderr."""
+    global _reasoning_log_warned
+    dest = log_dir if log_dir is not None else reasoning_log_dir()
+    if dest is None:
+        return None
+    day = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    path = dest / f"reasoning-{day}.log"
+    try:
+        dest.mkdir(parents=True, exist_ok=True)
+        with path.open("a", encoding="utf-8") as fh:
+            fh.write(record)
+        return path
+    except OSError as exc:
+        if not _reasoning_log_warned:
+            print(f"anchor: reasoning log write failed ({path}): {exc}", file=sys.stderr)
+            _reasoning_log_warned = True
+        return None
 # Fleet Authorization: first present wins. NVIDIA_API_KEY is the Build inference
 # key; NGC_API_KEY is a NIM-pull fallback (may lack inference scope).
 API_KEY_ENV = ("ANCHOR_API_KEY", "NVIDIA_API_KEY", "NGC_API_KEY")
@@ -516,7 +622,25 @@ class Endpoint:
         body = resp.json()
         choice = body["choices"][0]
         message = choice.get("message") or {}
-        text = message.get("content") or ""
+        raw_text = message.get("content") or ""
+        reasoning_field = (
+            message.get("reasoning") or message.get("thinking") or ""
+        )
+        think_blocks = extract_think_blocks(raw_text)
+        append_reasoning_log(
+            format_reasoning_record(
+                endpoint=self.name,
+                model=self.model,
+                finish_reason=choice.get("finish_reason"),
+                usage=body.get("usage") if isinstance(body.get("usage"), dict) else None,
+                content=raw_text,
+                reasoning=str(reasoning_field),
+                think_blocks=think_blocks,
+                messages=msgs,
+                include_prompts=_env_flag("ANCHOR_LOG_PROMPTS"),
+            )
+        )
+        text = raw_text
         if self.quirks.get("strip_think") or toggle:
             text = THINK_RE.sub("", text)
         text = text.strip()
@@ -525,7 +649,7 @@ class Endpoint:
 
         # Empty content after a 200 is never silent success. Prefer one recovery
         # attempt (think-off + higher budget) over returning chain-of-thought.
-        reasoning = (message.get("reasoning") or message.get("thinking") or "")
+        reasoning = reasoning_field
         finish = choice.get("finish_reason")
         if not _budget_retry:
             bump = max(max_tokens * 2, int(floor or 0), 256)

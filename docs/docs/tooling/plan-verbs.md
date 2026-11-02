@@ -3,7 +3,7 @@ sidebar_position: 1.5
 sidebar_label: Plan workflow verbs
 ---
 
-<!-- synced-from: anchor/cli.md @ 9001bbd4a9111b96f6e585c70cc9fe3681e9c646 -->
+<!-- synced-from: anchor/cli.md @ e2301fda114e071151e5fe0fcf69f16b1369e951 -->
 
 # The plan-workflow CLI: what `anchor` does itself, and what it hands back
 
@@ -73,6 +73,14 @@ is tiny-ok. `orchestrate.py` applies unified diffs or whole-file fences
 from the executor reply into `--worktree` before scope/verify. `work_once.py
 --once --ensure-worktree` forwards `--worktree`; extra `-- --worktree <dir>`
 still works. Footer-only replies do not write files.
+
+Model calls through `Endpoint.chat` (including `--delegate` and `--run`)
+append reasoning to the project `var/log/reasoning-YYYY-MM-DD.log`
+(gitignored with the rest of `var/`). Set `ANCHOR_LOG_DIR` to relocate,
+`ANCHOR_NO_REASONING_LOG=1` to disable, `ANCHOR_LOG_PROMPTS=1` to include
+prompt bodies (local debug only). Task transcripts remain
+`var/task-transcripts/` — full executor replies, not the per-HTTP reasoning
+field.
 
 ## The rule for the split
 

@@ -3,7 +3,7 @@ sidebar_position: 3
 sidebar_label: Doctrine
 ---
 
-<!-- synced-from: anchor/ANCHOR.md @ 6abc5a095adbfe9db2227477a5fc361806bc1274 -->
+<!-- synced-from: anchor/ANCHOR.md @ 86dcbd1bf1f66a79b7bbcfd6dfab3d031ebe7ce4 -->
 
 # The Doctrine
 
@@ -56,7 +56,7 @@ flowchart TB
   good --> ok["Checkable result"]
 ```
 
-- **Forced structure** — templates with mandatory sections; a model that must fill `## Acceptance criteria` cannot skip thinking about them. Outputs missing the required footer are rejected and retried by the pipeline, not forgiven. Only that footer crosses back into the coordinator's own context — `fleet_metrics.py`'s `extract_footer` tolerantly pulls `## Result` / `## How to verify` / `## Deferred / concerns` out of an executor's full reply (case/spacing drift, last-occurrence-wins), caps it so a transcript can't be smuggled inside `## Result`, and `orchestrate.py` archives the raw reply to `var/task-transcripts/<task-hash>.log` for post-mortem instead of relaying it further. A well-formed footer is format, not evidence of edits: stall `## Result` bodies and an unchanged worktree are `failed-noop` even when `--verify` already exits 0.
+- **Forced structure** — templates with mandatory sections; a model that must fill `## Acceptance criteria` cannot skip thinking about them. Outputs missing the required footer are rejected and retried by the pipeline, not forgiven. Only that footer crosses back into the coordinator's own context — `fleet_metrics.py`'s `extract_footer` tolerantly pulls `## Result` / `## How to verify` / `## Deferred / concerns` out of an executor's full reply (case/spacing drift, last-occurrence-wins), caps it so a transcript can't be smuggled inside `## Result`, and `orchestrate.py` archives the raw reply to `var/task-transcripts/<task-hash>.log` for post-mortem instead of relaying it further. A well-formed footer is format, not evidence of edits: stall `## Result` bodies and an unchanged worktree are `failed-noop` even when `--verify` already exits 0. Every `Endpoint.chat` call also appends reasoning (`message.reasoning` / thinking fields and `<think>` blocks) to `var/log/reasoning-YYYY-MM-DD.log` (`ANCHOR_LOG_DIR` / `ANCHOR_NO_REASONING_LOG=1`); that file is not coordinator context.
 - **One task per fresh context** — context rot hits small models hardest; never run task chains in one conversation.
 - **Declared budget + pre-flight gate** — every task spec's `## Budget` (context window, output ceiling) comes from tooling, not the model's guess; mythos-core rule 13 makes every executor print a fixed 6-item pass/fail block (goal, acceptance criteria, files-in-scope, budget, tier fit, task size) before doing any work, and stop on the first FAIL instead of plowing ahead.
 - **Role separation** — planner → executor → critic as three clean contexts outperforms one long chat, even on the same model. In the orchestrated path the split is harness-enforced by the `scripts/roles.py` capability map (planner writes only `.plans/**`; executor never `.plans/**` or its own spec; critic writes nothing), applied per phase by `orchestrate.py` and by the project-orchestrator MCP server's role-scoped toolsets. Role transitions are logged orchestrator events; single-model sessions keep the discipline by prompt alone.

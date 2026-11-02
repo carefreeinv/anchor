@@ -8,6 +8,14 @@ Newest first.
 
 ### Added
 
+- **Per-call model reasoning logs.** `Endpoint.chat` (CLI `--delegate` / `--run`,
+  orchestrate, MCP) appends `message.reasoning` / thinking and extracted
+  `<think>` blocks to `var/log/reasoning-YYYY-MM-DD.log` before think-strip.
+  Returned chat text is unchanged. `ANCHOR_LOG_DIR` relocates; empty dir or
+  `ANCHOR_NO_REASONING_LOG=1` disables; `ANCHOR_LOG_PROMPTS=1` includes prompt
+  bodies (local debug). Fail-open on write errors. Distinct from
+  `var/task-transcripts/` (full executor replies). `var/` remains gitignored.
+
 - **`anchor plans --board` one frame + JSON envelope.** Interactive runs pass `--once` to `plan_board` so the TTY board exits after one draw. `--json` / headless wrap `plan_board`'s dump as `result.board` in the schema-v1 envelope (`verb=plans`, `action=board`).
 
 - **CLI `--run` commit-prep.** After orchestrate exit 0, `work_once` / `anchor work --run` runs tests (and a CHANGELOG nudge when the apply is user-visible), then one product commit on `feature/<slug>` before auto-finish. Prep red stays in `in-progress/` with no commit. `--no-commit` keeps apply-only. Never commits on `main`/`master`/`dev`/`develop`.
