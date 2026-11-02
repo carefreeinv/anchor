@@ -3,6 +3,7 @@ from pathlib import Path
 import pytest
 
 from apply_executor_diff import (
+    EDIT_FORMAT,
     ApplyError,
     NoApplyableHunks,
     apply_reply,
@@ -72,3 +73,35 @@ def test_apply_rejects_context_mismatch(tmp_path: Path):
             "--- a/f.txt\n+++ b/f.txt\n@@ -1 +1 @@\n-bbb\n+ccc\n",
             tmp_path,
         )
+
+
+def test_apply_fenced_path_whole_file(tmp_path: Path):
+    reply = (
+        "here is the file\n"
+        "```foo.py\n"
+        "x = 1\n"
+        "```\n"
+        "## Result\nwrote foo.py\n"
+        "## How to verify\ncat foo.py\n"
+        "## Deferred / concerns\nnone\n"
+    )
+    apply_reply(reply, tmp_path)
+    assert (tmp_path / "foo.py").read_text(encoding="utf-8") == "x = 1\n"
+
+
+def test_apply_file_header_then_python_fence(tmp_path: Path):
+    (tmp_path / "src").mkdir()
+    (tmp_path / "src" / "mod.py").write_text("old\n", encoding="utf-8")
+    reply = (
+        "File: src/mod.py\n"
+        "```python\n"
+        "new = True\n"
+        "```\n"
+    )
+    apply_reply(reply, tmp_path)
+    assert (tmp_path / "src" / "mod.py").read_text(encoding="utf-8") == "new = True\n"
+
+
+def test_edit_format_shows_fence_example():
+    assert "```path/to/file.py" in EDIT_FORMAT
+    assert "--- a/path/to/file" in EDIT_FORMAT

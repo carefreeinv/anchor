@@ -3,7 +3,7 @@ sidebar_position: 1.5
 sidebar_label: Plan workflow verbs
 ---
 
-<!-- synced-from: anchor/cli.md @ 60b414874e11c73d2091446b0f936a82a19cb530 -->
+<!-- synced-from: anchor/cli.md @ e8ce2e1dbae1625d92d278e0e40730d4413f90fc -->
 
 # The plan-workflow CLI: what `anchor` does itself, and what it hands back
 
@@ -33,7 +33,7 @@ Ollama and NVIDIA Build. `anchor` loads a gitignored repo-root `.env`
 plan to `orchestrate.py` with no extra registry args — it uses the default
 fleet file, not `--registry`. That default `Fleet.pick` probes LAN rows
 before chat and falls back to NVIDIA Build when the probe is live (see
-`platforms/nvidia-build/BUILD.md`). `orchestrate.py` applies unified diffs
+`platforms/nvidia-build/BUILD.md`). `orchestrate.py` applies unified diffs or whole-file fences
 from the executor reply into `--worktree` before scope/verify. `work_once.py
 --run --ensure-worktree` forwards `--worktree`; extra `-- --worktree <dir>`
 still works. Footer-only replies do not write files.

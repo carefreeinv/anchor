@@ -26,7 +26,7 @@ Ollama and NVIDIA Build. `anchor` loads a gitignored repo-root `.env`
 plan to `orchestrate.py` with no extra registry args — it uses the default
 fleet file, not `--registry`. That default `Fleet.pick` probes LAN rows
 before chat and falls back to NVIDIA Build when the probe is live (see
-`platforms/nvidia-build/BUILD.md`). `orchestrate.py` applies unified diffs
+`platforms/nvidia-build/BUILD.md`). `orchestrate.py` applies unified diffs or whole-file fences
 from the executor reply into `--worktree` before scope/verify. `work_once.py
 --run --ensure-worktree` forwards `--worktree`; extra `-- --worktree <dir>`
 still works. Footer-only replies do not write files.
