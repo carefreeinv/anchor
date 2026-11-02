@@ -326,6 +326,24 @@ def build_parser() -> argparse.ArgumentParser:
     return ap
 
 
+def _cli_action(args: argparse.Namespace) -> str:
+    """Sub-action for the JSON envelope, including the CliError path."""
+    verb = args.verb
+    if verb == "work":
+        if getattr(args, "list", False):
+            return "list"
+        if getattr(args, "heartbeat", None):
+            return "heartbeat"
+        if getattr(args, "finish", None):
+            return "finish"
+        if getattr(args, "return_ready", None):
+            return "return"
+        return "claim"
+    if getattr(args, "list", False):
+        return "list"
+    return verb
+
+
 def _dispatch(args: argparse.Namespace, answers: Prompter, ctx: Ctx) -> Result:
     verb = args.verb
     if verb == "plans":
@@ -417,7 +435,7 @@ def main(
     mode = detect_mode(args.non_interactive, stdin=stdin, stdout=stdout, env=env)
     out = stdout or sys.stdout
     as_json = args.json or not mode.interactive
-    action = "list" if getattr(args, "list", False) else args.verb
+    action = _cli_action(args)
     agent_id = getattr(args, "agent_id", None) or _default_agent_id()
     ctx = Ctx(mode=mode, agent_id=agent_id)
     if mode.interactive:

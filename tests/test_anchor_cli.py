@@ -181,8 +181,13 @@ def test_work_heartbeat_finish_return(project):
     code, doc = cli(["work", "--heartbeat", "f1", "--root", str(project), "--agent-id", "a1"])
     assert code == 0 and doc["result"]["plan"] == "in-progress/f1.md"
 
+    code, doc = cli(["work", "--heartbeat", "f1", "--root", str(project), "--agent-id", "other"])
+    assert code == 2 and doc["action"] == "heartbeat"
+    assert "a1" in doc["error"]
+
     code, doc = cli(["work", "--finish", "f1", "--root", str(project), "--agent-id", "someone-else"])
     assert code == 2 and "lease holder" in doc["error"]
+    assert doc["action"] == "finish"
 
     code, doc = cli(["work", "--finish", "f1", "--root", str(project), "--agent-id", "a1"])
     assert code == 0 and doc["result"]["plan"] == "review-needed/f1.md"

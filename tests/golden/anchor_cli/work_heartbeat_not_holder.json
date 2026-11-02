@@ -1,0 +1,15 @@
+{
+  "doc": {
+    "action": "heartbeat",
+    "error": "cannot renew lease held by 'a1' as 'other' (in-progress/f1.md)",
+    "exit_code": 2,
+    "mode": "non-interactive",
+    "notes": [],
+    "ok": false,
+    "pending": [],
+    "result": {},
+    "schema_version": 1,
+    "verb": "work"
+  },
+  "exit_code": 2
+}

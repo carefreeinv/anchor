@@ -51,6 +51,9 @@ Newest first.
 
 ### Fixed
 
+- **`anchor work` error JSON** names the sub-action (`heartbeat` / `finish` /
+  `return` / `claim`) instead of repeating the verb.
+
 - **Site load: retained MQTT redelivery no longer resets freshness.** A
   retained payload that matches the mirror keeps the original `received_at`.
   `fleet_watch --load-watcher` enables the watcher `.service` (and `@reboot`

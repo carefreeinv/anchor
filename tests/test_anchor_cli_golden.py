@@ -191,6 +191,9 @@ def test_golden_work_heartbeat_finish_return(project):
     code, doc = cli(["work", "--heartbeat", "f1", "--root", str(project), "--agent-id", "a1"])
     assert_golden("work_heartbeat", code, doc, project)
 
+    code, doc = cli(["work", "--heartbeat", "f1", "--root", str(project), "--agent-id", "other"])
+    assert_golden("work_heartbeat_not_holder", code, doc, project)
+
     code, doc = cli(["work", "--finish", "f1", "--root", str(project), "--agent-id", "someone-else"])
     assert_golden("work_finish_not_holder", code, doc, project)
 
