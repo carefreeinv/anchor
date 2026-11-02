@@ -6,6 +6,13 @@ Newest first.
 
 ## [Unreleased]
 
+### Fixed
+
+- **`anchor review --delegate` prints the critic before the decision prompt.**
+  Interactive non-JSON runs display `--- critic (endpoint) ---` from the
+  operations core (`Ctx.display`) before Approve can merge. Headless runs
+  refuse `delegate` / `--run` even if an adapter injected the capability.
+
 ### Changed
 
 - **Two finish workflows for tracked plans.** Human-assisted `/work` still parks

@@ -38,6 +38,7 @@ MYTHOS_CORE = "anchor/system-prompts/mythos-core.md"
 
 DelegateFn = Callable[[str, str, str | None, str], tuple[str, str]]
 RunOrchFn = Callable[[Path, list[str]], int]
+DisplayFn = Callable[[str], None]
 
 
 # --- mode ----------------------------------------------------------------------
@@ -158,6 +159,7 @@ class Ctx:
     agent_id: str
     delegate: DelegateFn | None = None
     run_orchestrate: RunOrchFn | None = None
+    display: DisplayFn | None = None
 
 
 @dataclass(frozen=True)
@@ -324,7 +326,7 @@ def _worker(params: WorkListParams | WorkClaimParams):
 
 
 def _try_delegate(ctx: Ctx, *, endpoint: str, role: str, registry: str | None, user: str) -> tuple[str, str]:
-    if ctx.delegate is None:
+    if not ctx.mode.interactive or ctx.delegate is None:
         raise NotDelegated("non-interactive run: the calling agent does this step itself")
     return ctx.delegate(endpoint, role, registry, user)
 
@@ -447,7 +449,7 @@ def op_work_claim(params: WorkClaimParams, _answers: Answers, ctx: Ctx) -> Resul
         f"then anchor work --finish {ref.slug if ref else rel}"
     )
     if params.run:
-        if ctx.run_orchestrate is None:
+        if not ctx.mode.interactive or ctx.run_orchestrate is None:
             res.notes.append("--run ignored: non-interactive runs never start a model")
             res.need("execute", NEEDS_MODEL, detail)
             return res
@@ -655,6 +657,8 @@ def _critic(params: ReviewParams, ctx: Ctx, ref, pkg, root: Path, res: Result) -
                  "AI critic pass over the plan's Done when and the branch diff")
         return
     res.data["critic"] = {"endpoint": name, "verdict": critic_verdict(out), "text": out}
+    if ctx.display is not None:
+        ctx.display(f"--- critic ({name}) ---\n{out}\n---")
 
 
 def _approve(res: Result, root: Path, plans: Path, ref, pkg: dict[str, Any]) -> Result:

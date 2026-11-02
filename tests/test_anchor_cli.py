@@ -607,3 +607,23 @@ def test_delegation_reports_missing_doctrine(project, stub_fleet, monkeypatch):
                      "--registry", str(reg)], interactive=True)
     assert code == 0 and ep.calls == 0
     assert any("doctrine" in n for n in doc["notes"])
+
+
+def test_delegate_critic_banner_on_stderr_before_first_prompt(project, critic_fleet, capsys):
+    """H1: interactive non-JSON --delegate shows the critic before Approve."""
+    write(project, "review-needed", "r1")
+    seen: list[str] = []
+
+    def read(_prompt: str) -> str:
+        seen.append(capsys.readouterr().err)
+        return "skip"
+
+    code = anchor_cli.main(
+        ["review", "r1", "--root", str(project), "--delegate",
+         "--registry", str(critic_fleet)],
+        stdin=TTY(), stdout=TTY(), env={}, read=read,
+    )
+    assert code == 0
+    assert seen, "decision prompt never ran"
+    assert "--- critic" in seen[0]
+    assert "REVISE" in seen[0]

@@ -93,3 +93,49 @@ def test_operator_ops_do_not_merge(project):
     else:
         raise AssertionError("promote without --to must ask")
     assert (project / ".plans" / "drafts" / "d1.md").is_file()
+
+
+def test_headless_refuses_injected_delegate(project):
+    """M2: core refuses delegate even when the adapter injected the capability."""
+    calls: list[str] = []
+
+    def injected(endpoint, role, registry, user):
+        calls.append(role)
+        return endpoint, "should not run"
+
+    ctx = ops.Ctx(
+        mode=ops.Mode(False, "transport-test"),
+        agent_id="t1",
+        delegate=injected,
+    )
+    res = ops.run(
+        "review.review",
+        ops.ReviewParams(root=str(project), slug="r1", delegate="auto"),
+        ops.NeverAnswers(),
+        ctx,
+    )
+    assert calls == []
+    assert any("not delegated" in n for n in res.notes)
+    assert ops.NEEDS_OPERATOR in [p["needs"] for p in res.pending]
+
+
+def test_headless_refuses_injected_run(project):
+    ran = []
+
+    def orch(_dest, _argv):
+        ran.append(True)
+        return 0
+
+    ctx = ops.Ctx(
+        mode=ops.Mode(False, "transport-test"),
+        agent_id="t1",
+        run_orchestrate=orch,
+    )
+    res = ops.run(
+        "work.claim",
+        ops.WorkClaimParams(root=str(project), slug="f1", no_fit_check=True, run=True),
+        ops.NeverAnswers(),
+        ctx,
+    )
+    assert ran == []
+    assert any("--run ignored" in n for n in res.notes)

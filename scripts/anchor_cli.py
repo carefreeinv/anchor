@@ -328,6 +328,8 @@ def main(
         from work_once import run_orchestrate
 
         ctx.run_orchestrate = run_orchestrate
+        if not as_json:
+            ctx.display = lambda msg: print(msg, file=sys.stderr)
     try:
         res = _dispatch(args, Prompter(mode, read), ctx)
     except Passthrough as p:
@@ -337,9 +339,6 @@ def main(
         res.need(exc.step, "operator", exc.detail)
     except (CliError, plan_store.PlanMoveError, plan_lease.ClaimError, FileExistsError) as exc:
         res = Result(args.verb, action, exit_code=EXIT_ERROR, error=str(exc))
-    critic = (res.data or {}).get("critic")
-    if critic and mode.interactive and not as_json:
-        print(f"--- critic ({critic.get('endpoint')}) ---\n{critic.get('text')}\n---", file=sys.stderr)
     if as_json:
         print(json.dumps(res.to_json(mode), indent=2, default=str), file=out)
     else:
