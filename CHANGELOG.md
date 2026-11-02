@@ -30,6 +30,11 @@ Newest first.
 
 ### Changed
 
+- **`anchor` verbs commit their own plans-only lane moves** when `.plans/` is
+  tracked (`git commit -m "Plans: <slug> → <lane> (anchor …)" -- .plans/`).
+  Untracked / `*.local.md` trees note `lane move (untracked)`. A merge in
+  progress or staged paths outside `.plans/` refuse without committing.
+
 - **`anchor fleet-watch --emit`** prints the same `### name` / crontab text as
   `fleet_watch.py`. `--write-dir` is operator-only (headless exits 3, writes
   nothing). `--emit cron` prints crontab lines only. `--list` / `--once` /

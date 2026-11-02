@@ -11,6 +11,7 @@ pass an ``Answers`` that never answers and omit ``ctx.delegate``.
 from __future__ import annotations
 
 import os
+import subprocess
 import sys
 from collections.abc import Callable
 from dataclasses import dataclass, field
@@ -333,11 +334,63 @@ def _one(plans: Path, lane: str, slug: str) -> plan_store.PlanRef:
     return hits[0]
 
 
-def _lane_commit_hint(res: Result, slug: str, lane: str, why: str) -> None:
-    res.notes.append(
-        f"lane move not committed; if .plans/ is tracked: "
-        f'git add .plans/ && git commit -m "Plans: {slug} → {lane} ({why})" -- .plans/'
+def _git(root: Path, *args: str) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        ["git", "-C", str(root), *args],
+        capture_output=True, text=True, check=False,
     )
+
+
+def commit_lane_move(root: str | Path, slug: str, lane: str, why: str) -> dict[str, Any]:
+    """Light-path commit of a lane move. Never a bare ``git commit``.
+
+    Outcomes: ``committed``, ``untracked``, ``refused-merge-in-progress``,
+    ``refused-foreign-staged``.
+    """
+    root = Path(root).expanduser().resolve()
+    msg = f"Plans: {slug} → {lane} ({why})"
+    if _git(root, "rev-parse", "--is-inside-work-tree").returncode != 0:
+        return {"outcome": "untracked", "message": msg}
+    if _git(root, "rev-parse", "-q", "--verify", "MERGE_HEAD").returncode == 0:
+        return {"outcome": "refused-merge-in-progress", "message": msg}
+    staged = [
+        p for p in _git(root, "diff", "--cached", "--name-only").stdout.splitlines() if p
+    ]
+    foreign = [p for p in staged if p != ".plans" and not p.startswith(".plans/")]
+    if foreign:
+        return {
+            "outcome": "refused-foreign-staged",
+            "message": msg,
+            "paths": foreign,
+        }
+    add = _git(root, "add", "--", ".plans/")
+    if add.returncode != 0:
+        return {"outcome": "untracked", "message": msg}
+    cached = [
+        p for p in _git(root, "diff", "--cached", "--name-only", "--", ".plans/").stdout.splitlines()
+        if p
+    ]
+    if not cached:
+        return {"outcome": "untracked", "message": msg}
+    commit = _git(root, "commit", "-m", msg, "--", ".plans/")
+    if commit.returncode != 0:
+        raise CliError(
+            f"plans-only commit failed: {(commit.stderr or commit.stdout).strip() or commit.returncode}"
+        )
+    sha = _git(root, "rev-parse", "HEAD").stdout.strip()
+    return {"outcome": "committed", "message": msg, "sha": sha}
+
+
+def _record_lane_commit(res: Result, root: str, slug: str, lane: str, why: str) -> None:
+    out = commit_lane_move(root, slug, lane, why)
+    res.data["lane_commit"] = out
+    outcome = out["outcome"]
+    if outcome == "committed":
+        return
+    if outcome == "untracked":
+        res.notes.append("lane move (untracked)")
+        return
+    res.notes.append(f"lane move not committed: {outcome}")
 
 
 def _worker(params: WorkListParams | WorkClaimParams):
@@ -431,7 +484,9 @@ def op_work_finish(params: WorkSlugParams, _answers: Answers, ctx: Ctx) -> Resul
     res = Result("work", "finish")
     res.data.update(plan=ref.rel if ref else str(dest), agent_id=ctx.agent_id)
     res.need("review", NEEDS_OPERATOR, f"sign-off: anchor review {ref.slug if ref else ''}".strip())
-    _lane_commit_hint(res, ref.slug if ref else rel, "review-needed", "anchor work --finish")
+    _record_lane_commit(
+        res, params.root, ref.slug if ref else rel, "review-needed", "anchor work --finish",
+    )
     return res
 
 
@@ -443,6 +498,8 @@ def op_work_return(params: WorkSlugParams, _answers: Answers, ctx: Ctx) -> Resul
     ref = plan_store.ref_for_path(plans, dest)
     res = Result("work", "return")
     res.data.update(plan=ref.rel if ref else str(dest), agent_id=ctx.agent_id)
+    if ref:
+        _record_lane_commit(res, params.root, ref.slug, ref.lane, "anchor work --return")
     return res
 
 
@@ -643,13 +700,13 @@ def _decide(res: Result, answers: Answers, root: Path, plans: Path, ref, pkg) ->
         _append_section(ref, "Review notes", notes)
         new = plan_store.move(plans, ref.rel, lane)
         res.data["moved_to"] = new.rel
-        _lane_commit_hint(res, ref.slug, lane, "anchor review needs-work")
+        _record_lane_commit(res, str(root), ref.slug, lane, "anchor review needs-work")
         return res
     blocker = answers.text("defer-blocker", "What blocks it (required)")
     _append_section(ref, "Blocked", blocker)
     new = plan_store.move(plans, ref.rel, "blocked")
     res.data["moved_to"] = new.rel
-    _lane_commit_hint(res, ref.slug, "blocked", "anchor review defer")
+    _record_lane_commit(res, str(root), ref.slug, "blocked", "anchor review defer")
     return res
 
 
@@ -725,7 +782,7 @@ def _approve(res: Result, root: Path, plans: Path, ref, pkg: dict[str, Any]) -> 
             return res
     new = plan_store.move(plans, ref.rel, "completed")
     res.data["moved_to"] = new.rel
-    _lane_commit_hint(res, ref.slug, "completed", "anchor review approve")
+    _record_lane_commit(res, str(root), ref.slug, "completed", "anchor review approve")
     return res
 
 
@@ -806,7 +863,7 @@ def op_draft_promote(params: DraftPromoteParams, answers: Answers, _ctx: Ctx) ->
     new = plan_store.move(plans, ref.rel, lane)
     res = Result("draft", "promote")
     res.data.update(plan=new.rel)
-    _lane_commit_hint(res, ref.slug, lane, "anchor draft --promote")
+    _record_lane_commit(res, params.root, ref.slug, lane, "anchor draft --promote")
     return res
 
 

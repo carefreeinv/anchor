@@ -5,7 +5,7 @@
     "exit_code": 0,
     "mode": "interactive",
     "notes": [
-      "lane move not committed; if .plans/ is tracked: git add .plans/ && git commit -m \"Plans: r1 \u2192 blocked (anchor review defer)\" -- .plans/"
+      "lane move (untracked)"
     ],
     "ok": true,
     "pending": [],
@@ -16,6 +16,10 @@
       "decision": "defer",
       "fast_forward": null,
       "head": null,
+      "lane_commit": {
+        "message": "Plans: r1 \u2192 blocked (anchor review defer)",
+        "outcome": "untracked"
+      },
       "moved_to": "blocked/r1.md",
       "plan": "review-needed/r1.md",
       "remote_only": [],

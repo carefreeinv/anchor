@@ -3,7 +3,7 @@ sidebar_position: 1.5
 sidebar_label: Plan workflow verbs
 ---
 
-<!-- synced-from: anchor/cli.md @ da662e1fe74b78145b440503b3b1151c4a6ec263 -->
+<!-- synced-from: anchor/cli.md @ 029d015d7b15b94d20ab5a6c9de3959a2e2e1159 -->
 
 # The plan-workflow CLI: what `anchor` does itself, and what it hands back
 
@@ -102,8 +102,11 @@ exit 3 (`local-branch`), because approving would otherwise archive the plan
 without merging it. The gate gets the head **shown to the operator**
 as `--expect-head`, so if the branch moved after they looked, the merge is
 refused. Scope is everything they were shown. `main`/`master` is never a
-target: `merge_feature` refuses mainline. A lane move is not committed; the
-output prints the plans-only commit command.
+target: `merge_feature` refuses mainline. A lane move is committed on the
+light path (`git commit -m "Plans: …" -- .plans/`) when `.plans/` is tracked.
+Untracked trees (or `*.local.md`) note `lane move (untracked)` and commit
+nothing. A merge in progress, or staged paths outside `.plans/`, refuse
+without committing.
 
 ### `anchor draft`
 

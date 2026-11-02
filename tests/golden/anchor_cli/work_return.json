@@ -4,11 +4,17 @@
     "error": null,
     "exit_code": 0,
     "mode": "non-interactive",
-    "notes": [],
+    "notes": [
+      "lane move (untracked)"
+    ],
     "ok": true,
     "pending": [],
     "result": {
       "agent_id": "a1",
+      "lane_commit": {
+        "message": "Plans: f2 \u2192 features (anchor work --return)",
+        "outcome": "untracked"
+      },
       "plan": "features/f2.md"
     },
     "schema_version": 1,

@@ -5,7 +5,7 @@
     "exit_code": 0,
     "mode": "non-interactive",
     "notes": [
-      "lane move not committed; if .plans/ is tracked: git add .plans/ && git commit -m \"Plans: f1 \u2192 review-needed (anchor work --finish)\" -- .plans/"
+      "lane move (untracked)"
     ],
     "ok": true,
     "pending": [
@@ -17,6 +17,10 @@
     ],
     "result": {
       "agent_id": "a1",
+      "lane_commit": {
+        "message": "Plans: f1 \u2192 review-needed (anchor work --finish)",
+        "outcome": "untracked"
+      },
       "plan": "review-needed/f1.md"
     },
     "schema_version": 1,

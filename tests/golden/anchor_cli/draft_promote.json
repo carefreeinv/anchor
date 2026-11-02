@@ -5,11 +5,15 @@
     "exit_code": 0,
     "mode": "non-interactive",
     "notes": [
-      "lane move not committed; if .plans/ is tracked: git add .plans/ && git commit -m \"Plans: d1 \u2192 features (anchor draft --promote)\" -- .plans/"
+      "lane move (untracked)"
     ],
     "ok": true,
     "pending": [],
     "result": {
+      "lane_commit": {
+        "message": "Plans: d1 \u2192 features (anchor draft --promote)",
+        "outcome": "untracked"
+      },
       "plan": "features/d1.md"
     },
     "schema_version": 1,
