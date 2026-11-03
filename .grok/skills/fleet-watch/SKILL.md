@@ -18,7 +18,8 @@ Make it **trivial** to configure always-on pullers for a project’s **`.plans/`
 tree. You resolve the project, inspect status, propose capability-tier workers,
 and print or install **systemd user timers** that survive reboot (with linger).
 
-This skill is the product UX in a coding agent. The same inspect/emit/install
+Prefer **`anchor fleet-watch`** when the CLI is on PATH; this skill is the
+product UX in a coding agent. The same inspect/emit/install
 path from a terminal is **`anchor fleet-watch`**. Helper scripts
 (`fleet_watch.py`, `work_once.py`, `plan_watch.py`) are implementation
 detail—use them; do not force the user to learn their flags. `--install-user`

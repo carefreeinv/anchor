@@ -38,6 +38,12 @@ Newest first.
 
 ### Changed
 
+- **Claude and Grok standing rules prefer `anchor` / `work_once`** for
+  deterministic plan ops (list, finish, return, models, fleet-watch).
+  `/work` cheaper-capacity dispatch names `anchor work --list` then
+  `work_once.py --once --run --ensure-worktree`. Missing `anchor` falls
+  back to `python scripts/…` and `/install-anchor`.
+
 - **Shared-lease fetch warnings** collapse SSH/`ssh_askpass` failures to
   `SSH auth failed` and skip the network round-trip when every ready plan is
   `*.local.md`.

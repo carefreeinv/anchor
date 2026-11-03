@@ -205,7 +205,8 @@ session on `small`/`mid` Preferred, probe for a **lesser configured executor**:
 `/work` in this expensive session. Print one line with the dispatch path, e.g.:
 
 ```text
-python scripts/work_once.py --once --endpoint <name> --registry scripts/endpoints.yaml
+anchor work --list --endpoint <name>
+python scripts/work_once.py --once --run --ensure-worktree --endpoint <name> --registry scripts/endpoints.yaml
 ```
 
 (or “open a session on \<model\>”). Leave the plan unclaimed for that worker.
