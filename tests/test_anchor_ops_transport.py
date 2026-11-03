@@ -223,4 +223,7 @@ def test_interactive_run_forwards_endpoint(project, tmp_path):
         ctx,
     )
     assert res.exit_code == 0
-    assert seen == [["--registry", str(reg), "--endpoint", "nemoclaw"]]
+    assert seen
+    extra = seen[0]
+    assert extra[:4] == ["--registry", str(reg), "--endpoint", "nemoclaw"]
+    assert extra[4:6][0] == "--worktree"

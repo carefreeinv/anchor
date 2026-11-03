@@ -637,9 +637,11 @@ def op_work_claim(params: WorkClaimParams, _answers: Answers, ctx: Ctx) -> Resul
                 )
             res.need("execute", NEEDS_MODEL, detail)
             return res
-        from work_once import orchestrate_identity_args
+        from work_once import orchestrate_identity_args, orchestrate_worktree_args, plan_slug
 
         extra = orchestrate_identity_args(params)
+        slug = (ref.slug if ref else None) or params.slug or plan_slug(dest)
+        extra = extra + orchestrate_worktree_args(params.root, ctx.agent_id, slug)
         code = ctx.run_orchestrate(dest, extra)
         res.data["orchestrate_exit"] = code
         if code != 0:

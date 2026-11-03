@@ -30,7 +30,9 @@ flag. `anchor` loads a gitignored repo-root `.env`
 (setdefault) before verbs run; Authorization is the first set of
 `ANCHOR_API_KEY`, `NVIDIA_API_KEY`, `NGC_API_KEY`. `--run` hands the claimed
 plan to `orchestrate.py` with the same `--endpoint`/`--registry` used to claim
-(omit them to use the default fleet file). That default `Fleet.pick` probes LAN rows
+(omit them to use the default fleet file) and forwards `--worktree` to the
+feature worktree (`var/worktrees/<agent-id>/`, never main/master/dev/develop).
+That default `Fleet.pick` probes LAN rows
 before chat and falls back to NVIDIA Build when the probe is live (see
 `platforms/nvidia-build/BUILD.md`). `orchestrate.py` applies unified diffs or whole-file fences
 from the executor reply into `--worktree` before scope/verify. `work_once.py
@@ -74,7 +76,7 @@ that answer, so the CLI has none that tries.
 | `--list`: ready plans with your fit and deps | deterministic | `plan_select.inventory` |
 | claim (bare pick or named slug) | deterministic | `work_once.pick_claim_one`: the same pick, skip and lease rules as `work_once.py` |
 | `--heartbeat`, `--finish` (→ `review-needed/`), `--return` | deterministic | `plan_lease`; only the lease holder may move its plan |
-| carry out the plan's Steps | **model** | returned as pending `execute`; `--run` (interactive only) hands the plan to `orchestrate.py` with the same `--endpoint`/`--registry` used to claim |
+| carry out the plan's Steps | **model** | returned as pending `execute`; `--run` (interactive only) hands the plan to `orchestrate.py` with the same `--endpoint`/`--registry` used to claim, plus `--worktree` |
 
 `anchor work` has no merge. Finishing moves the plan to `review-needed/`, the
 same place every unattended finish goes. Landing work is `anchor review`'s job

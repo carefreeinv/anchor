@@ -269,7 +269,40 @@ def test_work_run_forwards_endpoint_interactive(project, monkeypatch, tmp_path):
         interactive=True,
     )
     assert code == 0
-    assert seen == [["--registry", str(reg), "--endpoint", "nemoclaw"]]
+    assert seen
+    extra = seen[0]
+    assert extra[:4] == ["--registry", str(reg), "--endpoint", "nemoclaw"]
+    assert extra[4:6][0] == "--worktree"
+    assert len(extra) >= 6
+
+
+def test_work_run_interactive_extras_include_worktree(project, monkeypatch, tmp_path):
+    import work_once
+
+    seen: list[list[str]] = []
+    wt = tmp_path / "agent-wt"
+    wt.mkdir()
+
+    class Rec:
+        path = wt
+
+    def fake_orch(_dest, extra):
+        seen.append(list(extra))
+        return 0
+
+    monkeypatch.setattr(work_once, "run_orchestrate", fake_orch)
+    monkeypatch.setattr(
+        work_once,
+        "orchestrate_worktree_args",
+        lambda *a, **k: ["--worktree", str(wt)],
+    )
+    write(project, "features", "f1")
+    code, _doc = cli(
+        ["work", "--root", str(project), "--agent-id", "a1", "--run"],
+        interactive=True,
+    )
+    assert code == 0
+    assert seen and seen[0][:2] == ["--worktree", str(wt)]
 
 
 def test_work_run_headless_notes_dropped_endpoint(project, monkeypatch):

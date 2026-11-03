@@ -67,6 +67,10 @@ Newest first.
 
 ### Fixed
 
+- **Interactive `anchor work --run` forwards `--worktree`** to `orchestrate.py`
+  (feature worktree under `var/worktrees/<agent-id>/`; never apply on
+  main/master/dev/develop). Headless `--run` still does not start a model.
+
 - **`orchestrate.py` skips the critic chat when no executor task is `ok`.**
   Zero-task and all-fail runs still write `orchestration_run.json` with
   `review` set to `critic skipped: 0/N tasks ok` (plus statuses). Mixed

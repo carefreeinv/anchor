@@ -612,6 +612,38 @@ def test_run_with_ensure_worktree_forwards_worktree_to_orchestrate(tmp_path, mon
     assert captured and captured[0][:2] == ["--worktree", str(Rec.path)]
 
 
+def test_orchestrate_worktree_args_uses_ensure(tmp_path, monkeypatch):
+    class Rec:
+        path = tmp_path / "wt"
+        branch = "feature/a"
+
+    Rec.path.mkdir()
+
+    def fake_ensure(project, agent_id, slug=None):
+        assert slug == "a"
+        return Rec()
+
+    monkeypatch.setattr("worktree_for_agent.ensure_worktree", fake_ensure)
+    monkeypatch.setattr(work_once, "_git_branch", lambda _p: "feature/a")
+    extra = work_once.orchestrate_worktree_args(tmp_path, "w", "a")
+    assert extra == ["--worktree", str(Rec.path)]
+
+
+def test_orchestrate_worktree_args_skips_mainline(tmp_path, monkeypatch):
+    class Rec:
+        path = tmp_path / "wt"
+
+    Rec.path.mkdir()
+
+    monkeypatch.setattr(
+        "worktree_for_agent.ensure_worktree",
+        lambda *a, **k: Rec(),
+    )
+    monkeypatch.setattr(work_once, "_git_branch", lambda _p: "main")
+    extra = work_once.orchestrate_worktree_args(tmp_path, "w", "a")
+    assert extra == []
+
+
 def test_run_forwards_endpoint_and_registry_before_worktree(tmp_path, monkeypatch):
     root = _root(tmp_path)
     _plan(root / ".plans" / "features" / "a.md", preferred="mid")

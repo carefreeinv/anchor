@@ -229,6 +229,55 @@ def orchestrate_identity_args(args) -> list[str]:
     return extra
 
 
+MAINLINE_BRANCHES = frozenset({"main", "master", "dev", "develop"})
+
+
+def _git_branch(cwd: Path) -> str | None:
+    r = subprocess.run(
+        ["git", "rev-parse", "--abbrev-ref", "HEAD"],
+        cwd=str(cwd),
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if r.returncode != 0:
+        return None
+    name = (r.stdout or "").strip()
+    return name or None
+
+
+def orchestrate_worktree_args(
+    root: Path | str,
+    agent_id: str | None,
+    slug: str | None,
+) -> list[str]:
+    """``--worktree`` for a feature tree; never main/master/dev/develop."""
+    path: Path | None = None
+    if agent_id:
+        try:
+            from worktree_for_agent import ensure_worktree
+
+            rec = ensure_worktree(Path(root), agent_id, slug=slug)
+            path = Path(rec.path)
+        except Exception as exc:  # noqa: BLE001 — WorktreeError or missing git
+            print(
+                f"[work_once] worktree ensure skipped: {exc}",
+                file=sys.stderr,
+            )
+            path = None
+    if path is None:
+        path = Path.cwd()
+    branch = _git_branch(path)
+    if branch in MAINLINE_BRANCHES:
+        print(
+            f"[work_once] refusing --worktree on integration/mainline "
+            f"branch {branch!r} at {path}",
+            file=sys.stderr,
+        )
+        return []
+    return ["--worktree", str(path)]
+
+
 def run_orchestrate(plan_path: Path, extra: list[str]) -> int:
     script = Path(__file__).resolve().parent / "orchestrate.py"
     cmd = [sys.executable, str(script), "--plan-file", str(plan_path), *extra]
