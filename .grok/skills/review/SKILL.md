@@ -29,6 +29,7 @@ project, where fleet tooling lives under **`.anchor/scripts/`** instead —
 substitute that prefix throughout when `scripts/<name>.py` isn't at the
 project root but `.anchor/scripts/<name>.py` is.
 
+CLI equivalent (deterministic list/package, no survey): `anchor review --list`.
 This skill **embeds** an AI critic pass; it is not a separate “code review any
 diff” product. For ad-hoc uncommitted/PR review outside these modes, use the
 platform’s code-review tools.

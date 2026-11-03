@@ -12,9 +12,11 @@ metadata:
 
 # /draft — planning mode → `./.plans/drafts`
 
-Operate on plans under **`.plans/drafts/`**. Modes: **create/refine**, **list**,
-**load/discuss**, and **promote** (to the ready lane the plan implies: `bugs/`
-or `features/`) when the user explicitly requests promote.
+CLI equivalent for list/promote when `anchor` is on PATH: `anchor draft --list`,
+`anchor draft --promote <slug>`. Operate on plans under **`.plans/drafts/`**.
+Modes: **create/refine**, **list**, **load/discuss**, and **promote** (to the
+ready lane the plan implies: `bugs/` or `features/`) when the user explicitly
+requests promote.
 
 Do **not** implement product code in this skill. Do **not** run `/work` here.
 Promotion is allowed **only** via the promote subcommand below — never as a
