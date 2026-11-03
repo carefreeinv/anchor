@@ -1023,18 +1023,25 @@ def main() -> None:
         )
         results.append(r)
 
-    log_event(events, "role-transition", role_from="executor", role_to="critic",
-              note="execution finished; review starts")
-    before = snapshot_changes(root)
-    verdict = review(args.goal or "(plan file)", plan, results, fleet)
-    guard(CRITIC, before)
+    ok = sum(r["status"] == "ok" for r in results)
+    if ok == 0:
+        statuses = ", ".join(f"{r.get('status')}" for r in results) or "(no tasks)"
+        verdict = f"critic skipped: 0/{len(results)} tasks ok; statuses: {statuses}"
+        log_event(events, "role-transition", role_from="executor", role_to="critic",
+                  note="critic skipped")
+        print(f"[review] {verdict}", file=sys.stderr)
+    else:
+        log_event(events, "role-transition", role_from="executor", role_to="critic",
+                  note="execution finished; review starts")
+        before = snapshot_changes(root)
+        verdict = review(args.goal or "(plan file)", plan, results, fleet)
+        guard(CRITIC, before)
 
     run = {"time": time.strftime("%Y-%m-%dT%H:%M:%S"), "goal": args.goal, "plan": plan,
            "results": results, "review": verdict,
            "events": events, "role_violations": violations}
     Path(args.out).write_text(json.dumps(run, indent=2), encoding="utf-8")
 
-    ok = sum(r["status"] == "ok" for r in results)
     print(f"\n{ok}/{len(results)} tasks ok → {args.out}\n\n{verdict}")
     if violations:
         print(f"\n{len(violations)} role violation(s) — see {args.out}", file=sys.stderr)

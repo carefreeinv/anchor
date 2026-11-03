@@ -963,14 +963,14 @@ def test_human_report_is_written_to_disk_for_top_tier_exhaustion(git_repo, monke
         )
 
     # planner call → PLAN_TEXT; executor call is refused before dispatch; critic call → verdict
-    fleet = TopTierFleet([PLAN_TEXT, "review: ok"])
+    fleet = TopTierFleet([PLAN_TEXT])
     out = _run_main(monkeypatch, git_repo, fleet)
 
     with pytest.raises(SystemExit) as exc:
         orchestrate.main()  # human-report is not a role violation (exit 4)
     assert exc.value.code == orchestrate.FAILED_NOOP_EXIT  # no task ok
 
-    assert fleet.ep.calls == 2  # planner + critic only; executor never dispatched
+    assert fleet.ep.calls == 1  # planner only; critic skipped (0 ok / human-report)
 
     run = json.loads(out.read_text())
     assert run["results"][0]["status"] == "human-report"
@@ -1079,7 +1079,6 @@ def test_main_all_noop_exits_nonzero_and_zero_ok_count(git_repo, monkeypatch):
         (None, PLAN_TEXT),
         (None, GOOD_OUTPUT),
         (None, GOOD_OUTPUT),
-        (None, "review: ok"),
     ])
     out = _run_main(monkeypatch, git_repo, fleet)
     with pytest.raises(SystemExit) as exc:
@@ -1088,6 +1087,9 @@ def test_main_all_noop_exits_nonzero_and_zero_ok_count(git_repo, monkeypatch):
     run = json.loads(out.read_text())
     assert run["results"][0]["status"] == "failed-noop"
     assert sum(r["status"] == "ok" for r in run["results"]) == 0
+    assert run["review"].startswith("critic skipped: 0/")
+    assert "failed-noop" in run["review"]
+    assert fleet.ep.calls == 3  # planner + two executor retries; no critic
 
 
 PLAN_ESCALATE = (
@@ -1115,7 +1117,6 @@ def test_main_all_escalate_exits_nonzero(git_repo, monkeypatch):
 
     fleet = SideEffectFleet([
         (None, PLAN_ESCALATE),
-        (None, "review: ok"),
     ])
     out = _run_main(monkeypatch, git_repo, fleet)
     with pytest.raises(SystemExit) as exc:
@@ -1124,6 +1125,9 @@ def test_main_all_escalate_exits_nonzero(git_repo, monkeypatch):
     run = json.loads(out.read_text())
     assert run["results"][0]["status"] == "escalate"
     assert sum(r["status"] == "ok" for r in run["results"]) == 0
+    assert run["review"].startswith("critic skipped: 0/")
+    assert "escalate" in run["review"]
+    assert fleet.ep.calls == 1  # planner only; critic not chatted
 
 
 def test_main_mixed_ok_and_escalate_exits_zero(git_repo, monkeypatch):
@@ -1142,6 +1146,28 @@ def test_main_mixed_ok_and_escalate_exits_zero(git_repo, monkeypatch):
     statuses = [r["status"] for r in run["results"]]
     assert "ok" in statuses
     assert "escalate" in statuses
+    assert run["review"] == "review: ok"
+    assert fleet.ep.calls == 3  # planner + ok executor + critic (mixed still reviews)
+
+
+def test_main_all_escalate_insist_still_skips_critic(git_repo, monkeypatch):
+    import json
+
+    import orchestrate
+
+    fleet = SideEffectFleet([
+        (None, PLAN_ESCALATE),
+        (None, GOOD_OUTPUT),
+        (None, GOOD_OUTPUT),
+    ])
+    out = _run_main(monkeypatch, git_repo, fleet, extra_args=("--insist",))
+    with pytest.raises(SystemExit) as exc:
+        orchestrate.main()
+    assert exc.value.code == orchestrate.FAILED_NOOP_EXIT
+    run = json.loads(out.read_text())
+    assert run["review"].startswith("critic skipped: 0/")
+    assert "review: ok" not in run["review"]
+    assert fleet.ep.calls == 3  # planner + executor retries; critic still skipped
 
 
 APPLY_OUTPUT = (

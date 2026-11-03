@@ -67,6 +67,12 @@ Newest first.
 
 ### Fixed
 
+- **`orchestrate.py` skips the critic chat when no executor task is `ok`.**
+  Zero-task and all-fail runs still write `orchestration_run.json` with
+  `review` set to `critic skipped: 0/N tasks ok` (plus statuses). Mixed
+  ok+fail still reviews. `--insist` does not force a critic on an empty
+  executor. Exit 2 on 0 ok is unchanged.
+
 - **Executor apply runs even when the Result footer is missing.** A reply
   with a whole-file fence or unified diff is applied before the FORMAT
   retry; prose with neither payload nor footer still FORMAT-retries.
