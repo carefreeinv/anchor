@@ -47,9 +47,12 @@ Once `anchor` is on PATH, the same binary runs the `.plans/` workflow from a ter
 ```bash
 anchor plans                 # every plan, by lane
 anchor work --list --tier mid
-anchor work [<slug>]         # claim; --run (interactive) hands Steps to orchestrate.py
+anchor work --run --endpoint <nick>  # TTY: claim + orchestrate; exit 0 → review-needed/
+anchor work --finish <slug>  # or --no-finish to keep the lease after --run
 anchor review --list
 anchor draft <slug>
+anchor models list           # registry + overlay nicknames
+anchor fleet-watch --status
 ```
 
 `anchor --help` is the scaffolder. Use `anchor work --help` (and the other verbs) for the plan workflow. Contract: `anchor/cli.md` / docs **Tooling → Plan workflow verbs**. `--root` if the cwd has no `.plans/`. A TTY prints tables; no TTY (or `--json` / `--non-interactive`) prints schema-v1 JSON.

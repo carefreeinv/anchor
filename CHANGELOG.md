@@ -38,6 +38,11 @@ Newest first.
 
 ### Changed
 
+- **CLI docs lead with the work loop.** README, Quick Start, the scaffolder
+  CLI page, `anchor/cli.md` / Plan workflow verbs, and `/work` skill docs
+  name `anchor work --list|--run|--finish`, `models`, and `fleet-watch`
+  as the terminal path; slash `/work` stays the harness execute skill.
+
 - **`work_once --run` exit 0 auto-finishes** the claim to `review-needed/`
   (same as `anchor work --finish`). Exit 2 / nonzero leaves the lease.
   `--no-finish` keeps the in-progress hold. Interactive

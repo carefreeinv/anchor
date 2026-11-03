@@ -182,14 +182,16 @@ From a terminal, the same `.plans/` loop with no chat harness ([Plan workflow ve
 cd /path/to/your-app          # directory that contains .plans/
 anchor plans                  # every plan, by lane; --board for the kanban
 anchor work --list --tier mid # ready plans with your fit; claim nothing
-anchor work                   # claim the highest-priority fit plan
-anchor work --finish <slug>   # in-progress → review-needed/
+anchor work --run --endpoint <nick>  # TTY: claim + orchestrate.py
+anchor work --finish <slug>   # in-progress → review-needed/ (--run exit 0 also parks)
 anchor review --list
 anchor review <slug>          # package + Approve / Needs Work (TTY only)
 anchor draft <slug>
+anchor models list
+anchor fleet-watch --status
 ```
 
-`anchor --help` is the scaffolder. Verb help is `anchor work --help` (etc.). Headless or `--json` prints schema-v1 JSON. The CLI claims, heartbeats, finishes, and (after an in-terminal Approve) fast-forward merges to `dev`; it does not write plan prose or carry out Steps unless you pass `--run` (interactive) or `--delegate`.
+`anchor --help` is the scaffolder. Verb help is `anchor work --help` (etc.). Headless or `--json` prints schema-v1 JSON. Headless `--run` does not start a model — use `python scripts/work_once.py --once --run --ensure-worktree --endpoint …`. The CLI claims, heartbeats, finishes, and (after an in-terminal Approve) fast-forward merges to `dev`; `--no-finish` keeps the lease after a successful `--run`.
 
 Architecture for always-on workers: [Fleet workers](/tooling/fleet-workers). Skills map: [Skills overview](/skills/overview).
 

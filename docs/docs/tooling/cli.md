@@ -9,7 +9,19 @@ sidebar_label: The anchor CLI
 
 **Hard rule (all projects):** docs describe **current shipped state**, not plan backlog. Never document the **contents** of `.plans/` as product docs or roadmap; when plan work ships, document the code. Documenting the `.plans/` **workflow** is fine when it is a shipped feature. See doctrine and mythos-core rule 12.
 
-The same command also runs the `.plans/` workflow: `anchor plans`, `anchor work`, `anchor review`, `anchor draft`. See [Plan workflow verbs](/tooling/plan-verbs). This page covers scaffolding.
+The same binary also runs the `.plans/` workflow. **Day-to-day plan work lives on the verbs**, not on this page:
+
+```bash
+anchor plans
+anchor work --list --tier mid
+anchor work --run --endpoint <nick>   # TTY only; headless --run does not start a model
+anchor work --finish <slug>
+anchor review --list
+anchor models list
+anchor fleet-watch --status
+```
+
+Full contract (deterministic vs model vs operator, `--no-finish`, nicknames, JSON): [Plan workflow verbs](/tooling/plan-verbs). `anchor --help` is the scaffolder; `anchor work --help` is the work verb. **This page covers scaffolding.**
 
 ## Install
 

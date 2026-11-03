@@ -7,6 +7,21 @@ and it runs no model on any default path. Anything that needs judgment is either
 **delegated** (only when you ask, and only interactively) or **handed back** as
 a named pending step.
 
+**Operator loop** (cwd is a project with `.plans/`; `anchor --help` is still the scaffolder):
+
+```bash
+anchor plans                         # every lane
+anchor work --list --tier mid        # ready + fit; add --endpoint <nick> after `anchor models nick`
+anchor work --run --endpoint <nick>  # TTY: claim + orchestrate.py (headless --run is ignored)
+anchor work --finish <slug>          # in-progress → review-needed/ (or let --run exit 0 park it)
+anchor review --list
+anchor review <slug>                 # TTY Approve / Needs Work
+anchor models list
+anchor fleet-watch --status
+```
+
+`--run` is **interactive only**. Exit 0 parks in `review-needed/` unless `--no-finish`. Headless `work_once.py --once --run --ensure-worktree --endpoint …` is the unattended execute path. `--root` if cwd has no `.plans/`.
+
 Implementation: verb logic lives in `scripts/anchor_ops.py` (a typed operations
 registry). `scripts/anchor_cli.py` is the terminal adapter — parser, prompts,
 text/JSON rendering — reached through `scripts/anchor.py` (`bin/anchor`) when

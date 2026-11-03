@@ -10,6 +10,8 @@ sidebar_label: /work · execute plans
 
 Execute the next (or named) ready plan from **`.plans/`**. Same contract on every platform — only install paths and “no shell” adaptations differ.
 
+**Prefer the CLI for deterministic plan ops** when `anchor` is on PATH (or `./bin/anchor`): `anchor work --list|--finish|--return`, `anchor models list|nick`, `anchor fleet-watch`, `anchor plans`. Unattended execute is `python scripts/work_once.py --once --run --ensure-worktree --endpoint …` (headless `anchor work --run` does not start a model). Slash **`/work`** stays the operator-facing skill for in-session implementation; do not re-implement lane moves in chat when the CLI can do them. Missing `anchor` → `python scripts/…`, then mention [`/install-anchor`](/skills/install-anchor). Full verb contract: [Plan workflow verbs](/tooling/plan-verbs).
+
 To **create** a plan first, use [**`/draft`**](/skills/draft) (writes under `.plans/drafts/`; optional `--local`).
 
 Plans are git-tracked markdown under the **`.plans/`** dotdir. Do not gitignore the whole tree (scaffold ignores only `*.local.md`). Many UIs hide dotfolders — use the explicit path.

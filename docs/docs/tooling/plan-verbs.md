@@ -3,7 +3,7 @@ sidebar_position: 1.5
 sidebar_label: Plan workflow verbs
 ---
 
-<!-- synced-from: anchor/cli.md @ f5bbe20c1415d55a15fdaf15d915d6716a4afb48 -->
+<!-- synced-from: anchor/cli.md @ 2cd15f742b31dd02f674df84a10b42df8333b35e -->
 
 # The plan-workflow CLI: what `anchor` does itself, and what it hands back
 
@@ -13,6 +13,21 @@ decision it makes comes from a fixed set of outcomes with a rule you can name,
 and it runs no model on any default path. Anything that needs judgment is either
 **delegated** (only when you ask, and only interactively) or **handed back** as
 a named pending step.
+
+**Operator loop** (cwd is a project with `.plans/`; `anchor --help` is still the scaffolder):
+
+```bash
+anchor plans                         # every lane
+anchor work --list --tier mid        # ready + fit; add --endpoint <nick> after `anchor models nick`
+anchor work --run --endpoint <nick>  # TTY: claim + orchestrate.py (headless --run is ignored)
+anchor work --finish <slug>          # in-progress → review-needed/ (or let --run exit 0 park it)
+anchor review --list
+anchor review <slug>                 # TTY Approve / Needs Work
+anchor models list
+anchor fleet-watch --status
+```
+
+`--run` is **interactive only**. Exit 0 parks in `review-needed/` unless `--no-finish`. Headless `work_once.py --once --run --ensure-worktree --endpoint …` is the unattended execute path. `--root` if cwd has no `.plans/`.
 
 Implementation: verb logic lives in `scripts/anchor_ops.py` (a typed operations
 registry). `scripts/anchor_cli.py` is the terminal adapter — parser, prompts,
