@@ -3,7 +3,7 @@ sidebar_position: 1.5
 sidebar_label: Plan workflow verbs
 ---
 
-<!-- synced-from: anchor/cli.md @ bf0a62f3d2578649c796419af0bebe7640044551 -->
+<!-- synced-from: anchor/cli.md @ f5bbe20c1415d55a15fdaf15d915d6716a4afb48 -->
 
 # The plan-workflow CLI: what `anchor` does itself, and what it hands back
 
@@ -87,7 +87,7 @@ that answer, so the CLI has none that tries.
 
 `anchor work` has no merge. Interactive `--run` that exits 0 (and
 `work_once --run` exit 0) moves the plan to `review-needed/` the same way
-`--finish` does. `--no-finish` on `work_once` leaves the lease. Exit 2
+`--finish` does. `--no-finish` on `work_once` or `anchor work --run` leaves the lease. Exit 2
 never finishes. Landing work is `anchor review`'s job
 (or `/work`'s culmination question inside a harness).
 
@@ -253,7 +253,8 @@ usage: anchor work [-h] [--root ROOT] [--json] [--non-interactive] [--list]
                    [--agent-id AGENT_ID] [--tier TIER] [--model MODEL]
                    [--effort EFFORT] [--endpoint ENDPOINT]
                    [--registry REGISTRY] [--no-fit-check] [--run]
-                   [--heartbeat SLUG] [--finish SLUG] [--return SLUG]
+                   [--no-finish] [--heartbeat SLUG] [--finish SLUG]
+                   [--return SLUG]
                    [slug]
 
 positional arguments:
@@ -276,7 +277,9 @@ options:
   --no-fit-check       ignore Preferred models
   --run                interactive only: hand the claimed plan to
                        orchestrate.py (uses the same --endpoint/--registry as
-                       claim)
+                       claim); exit 0 parks in review-needed/
+  --no-finish          with --run, leave the plan in in-progress/ even when
+                       orchestrate exits 0
   --heartbeat SLUG     extend your lease on SLUG
   --finish SLUG        your in-progress SLUG → review-needed/
   --return SLUG        release your in-progress SLUG back to its ready lane

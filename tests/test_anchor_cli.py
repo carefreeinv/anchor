@@ -331,6 +331,52 @@ def test_work_run_interactive_extras_include_worktree(project, monkeypatch, tmp_
     assert seen and seen[0][:2] == ["--worktree", str(wt)]
 
 
+def test_work_run_interactive_exit_0_parks_review_needed(project, monkeypatch):
+    import work_once
+
+    monkeypatch.setattr(work_once, "run_orchestrate", lambda *a, **k: 0)
+    monkeypatch.setattr(work_once, "orchestrate_worktree_args", lambda *a, **k: [])
+    write(project, "features", "f1")
+    code, doc = cli(
+        ["work", "--root", str(project), "--agent-id", "a1", "--run", "--json"],
+        interactive=True,
+    )
+    assert code == 0
+    assert doc["result"]["plan"] == "review-needed/f1.md"
+    assert (project / ".plans" / "review-needed" / "f1.md").is_file()
+    assert not (project / ".plans" / "in-progress" / "f1.md").is_file()
+
+
+def test_work_run_interactive_exit_2_stays_in_progress(project, monkeypatch):
+    import work_once
+
+    monkeypatch.setattr(work_once, "run_orchestrate", lambda *a, **k: 2)
+    monkeypatch.setattr(work_once, "orchestrate_worktree_args", lambda *a, **k: [])
+    write(project, "features", "f1")
+    code, doc = cli(
+        ["work", "--root", str(project), "--agent-id", "a1", "--run"],
+        interactive=True,
+    )
+    assert code == 2
+    assert (project / ".plans" / "in-progress" / "f1.md").is_file()
+    assert not (project / ".plans" / "review-needed" / "f1.md").is_file()
+
+
+def test_work_run_interactive_no_finish_keeps_lease(project, monkeypatch):
+    import work_once
+
+    monkeypatch.setattr(work_once, "run_orchestrate", lambda *a, **k: 0)
+    monkeypatch.setattr(work_once, "orchestrate_worktree_args", lambda *a, **k: [])
+    write(project, "features", "f1")
+    code, doc = cli(
+        ["work", "--root", str(project), "--agent-id", "a1", "--run", "--no-finish", "--json"],
+        interactive=True,
+    )
+    assert code == 0
+    assert (project / ".plans" / "in-progress" / "f1.md").is_file()
+    assert any("no-finish" in n for n in doc["notes"])
+
+
 def test_work_run_headless_notes_dropped_endpoint(project, monkeypatch):
     import work_once
 

@@ -12,14 +12,13 @@ agents ignore foreign in-progress plans. Not a daemon; not a central assigner.
 **Never merges, never asks.** Interactive `/work` may land a finished branch on the
 integration branch when the operator answers its end-of-run culmination question
 (see `.claude/commands/work.md` §6). That path requires a human answer in-session,
-so it does not exist here. A headless worker's finish is the **autonomous critic
-loop** (work → review → review → PR): work → critic → (REVISE → work)* →
-**ACCEPT** (critic ACCEPT), then `in-progress/` → `completed/` **on
-``feature/<slug>``**, push, and open a PR targeting integration.
-Do not add a flag that stands in for a merge answer — an unattended merge is
-exactly what the gate is designed to prevent. Do not open a PR or archive to
-`completed/` on critic **REVISE**. `review-needed/` is not this worker's finish
-lane.
+so it does not exist here. On ``--run`` exit 0 this worker parks the claim in
+``review-needed/`` (same as ``anchor work --finish``) unless ``--no-finish``.
+Nonzero orchestrate leaves the lease on ``in-progress/``. Do not add a flag
+that stands in for a merge answer — an unattended merge is exactly what the
+gate is designed to prevent. Do not open a PR or archive to ``completed/``
+from ``--run``. The autonomous critic ACCEPT → completed-on-branch + PR loop
+is a separate unattended path, not this flag.
 
 Usage:
   python work_once.py --list
@@ -602,7 +601,7 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument(
         "--run",
         action="store_true",
-        help="invoke orchestrate.py --plan-file on each claimed plan",
+        help="invoke orchestrate.py --plan-file on each claimed plan; exit 0 parks in review-needed/",
     )
     ap.add_argument(
         "--no-finish",

@@ -80,7 +80,7 @@ that answer, so the CLI has none that tries.
 
 `anchor work` has no merge. Interactive `--run` that exits 0 (and
 `work_once --run` exit 0) moves the plan to `review-needed/` the same way
-`--finish` does. `--no-finish` on `work_once` leaves the lease. Exit 2
+`--finish` does. `--no-finish` on `work_once` or `anchor work --run` leaves the lease. Exit 2
 never finishes. Landing work is `anchor review`'s job (or `/work`'s
 culmination question inside a harness).
 
