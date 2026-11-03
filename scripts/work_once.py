@@ -54,6 +54,7 @@ from plan_lease import (
     active_lease,
     claim_and_move,
     claimed_rels,
+    finish_to_review,
     park,
     release,
     renew,
@@ -604,6 +605,11 @@ def main(argv: list[str] | None = None) -> int:
         help="invoke orchestrate.py --plan-file on each claimed plan",
     )
     ap.add_argument(
+        "--no-finish",
+        action="store_true",
+        help="with --run, leave the plan in in-progress/ even when orchestrate exits 0",
+    )
+    ap.add_argument(
         "--release",
         metavar="PLAN_REL",
         help="release lease for plan rel (e.g. in-progress/foo.md) and exit",
@@ -851,6 +857,16 @@ def _one_claim(root: Path, plans_root: Path, worker, args) -> tuple[int, int]:
                 file=sys.stderr,
             )
             return code, 1
+        if not args.no_finish:
+            try:
+                rel = str(plan_path.resolve().relative_to(plans_root.resolve()))
+                dest = finish_to_review(plans_root, rel, args.agent_id)
+                print(
+                    f"[work_once] orchestrate exit 0 → {dest.relative_to(plans_root)}",
+                    file=sys.stderr,
+                )
+            except ClaimError as exc:
+                print(f"[work_once] auto-finish skipped: {exc}", file=sys.stderr)
     return 0, 1
 
 

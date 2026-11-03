@@ -78,9 +78,11 @@ that answer, so the CLI has none that tries.
 | `--heartbeat`, `--finish` (→ `review-needed/`), `--return` | deterministic | `plan_lease`; only the lease holder may move its plan |
 | carry out the plan's Steps | **model** | returned as pending `execute`; `--run` (interactive only) hands the plan to `orchestrate.py` with the same `--endpoint`/`--registry` used to claim, plus `--worktree` |
 
-`anchor work` has no merge. Finishing moves the plan to `review-needed/`, the
-same place every unattended finish goes. Landing work is `anchor review`'s job
-(or `/work`'s culmination question inside a harness).
+`anchor work` has no merge. Interactive `--run` that exits 0 (and
+`work_once --run` exit 0) moves the plan to `review-needed/` the same way
+`--finish` does. `--no-finish` on `work_once` leaves the lease. Exit 2
+never finishes. Landing work is `anchor review`'s job (or `/work`'s
+culmination question inside a harness).
 
 ### `anchor review`
 

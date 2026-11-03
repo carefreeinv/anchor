@@ -38,6 +38,11 @@ Newest first.
 
 ### Changed
 
+- **`work_once --run` exit 0 auto-finishes** the claim to `review-needed/`
+  (same as `anchor work --finish`). Exit 2 / 0-ok leaves the lease.
+  `--no-finish` keeps today’s in-progress hold. Interactive
+  `anchor work --run` does the same on exit 0.
+
 - **Claude and Grok standing rules prefer `anchor` / `work_once`** for
   deterministic plan ops (list, finish, return, models, fleet-watch).
   `/work` cheaper-capacity dispatch names `anchor work --list` then
