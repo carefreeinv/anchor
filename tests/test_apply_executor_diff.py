@@ -9,6 +9,7 @@ from apply_executor_diff import (
     apply_reply,
     extract_file_blocks,
     extract_patches,
+    reply_has_applyable,
 )
 
 
@@ -175,3 +176,26 @@ def test_apply_fenced_scripts_x_py(tmp_path: Path):
     reply = "```scripts/x.py\nprint(1)\n```\n"
     apply_reply(reply, tmp_path)
     assert (tmp_path / "scripts" / "x.py").read_text(encoding="utf-8") == "print(1)\n"
+
+
+OVERLAP = (
+    "--- a/foo.py\n"
+    "+++ b/foo.py\n"
+    "@@ -1 +1 @@\n"
+    "-a\n"
+    "+b\n"
+    "--- a/foo.py\n"
+    "+++ b/foo.py\n"
+    "@@ -1 +1 @@\n"
+    "-a\n"
+    "+c\n"
+)
+
+
+def test_extract_patches_raises_on_overlap():
+    with pytest.raises(ApplyError, match="overlapping patches"):
+        extract_patches(OVERLAP)
+
+
+def test_reply_has_applyable_true_on_overlap():
+    assert reply_has_applyable(OVERLAP) is True

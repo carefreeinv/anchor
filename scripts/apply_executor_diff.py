@@ -321,11 +321,18 @@ def _apply_hunks(
 
 
 def reply_has_applyable(text: str) -> bool:
-    """True when ``text`` contains a whole-file fence or a unified-diff patch."""
+    """True when ``text`` contains a whole-file fence or a unified-diff patch.
+
+    Overlapping or malformed patches still count as applyable so
+    ``apply_reply`` can record APPLY instead of crashing the probe.
+    """
     blocks, residual = _extract_file_blocks(text)
     if blocks:
         return True
-    return bool(extract_patches(residual))
+    try:
+        return bool(extract_patches(residual))
+    except ApplyError:
+        return True
 
 
 def apply_reply(

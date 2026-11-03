@@ -73,6 +73,10 @@ Newest first.
 
 ### Fixed
 
+- **`reply_has_applyable` does not raise on overlapping patches.** The probe
+  treats `ApplyError` as applyable so orchestrate records APPLY instead of
+  traceback exit 1. `extract_patches` still rejects overlap when applying.
+
 - **`anchor models nick` resolves overlay-only endpoints.** Lookup includes
   the target overlay’s existing rows, so a name that lives only in
   `~/.config/anchor/endpoints.local.yaml` can receive an alias without
