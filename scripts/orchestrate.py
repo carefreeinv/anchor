@@ -36,13 +36,13 @@ import time
 from pathlib import Path
 
 import plan_store
+from anchor_client import Endpoint, Fleet, has_required_footer, load_prompt
 from apply_executor_diff import (
     EDIT_FORMAT,
     ApplyError,
     NoApplyableHunks,
     apply_reply,
 )
-from anchor_client import Endpoint, Fleet, has_required_footer, load_prompt
 from fleet_metrics import (
     DEFAULT_FOOTER_MAX_LINES,
     FIT_TIER_LADDER,
@@ -918,13 +918,16 @@ def main() -> None:
         fleet_kw["registry_path"] = args.registry
     if args.prefer_local:
         fleet_kw["prefer_local"] = True
-    fleet = Fleet(**fleet_kw) if fleet_kw else Fleet()
+    fleet_kw.setdefault("overlay_root", Path(args.worktree))
+    fleet = Fleet(**fleet_kw)
     if args.endpoint:
-        matches = [e for e in fleet.endpoints if e.name == args.endpoint]
-        if not matches:
+        try:
+            pinned = fleet.lookup(args.endpoint)
+        except LookupError:
             ap.error(f"no endpoint named {args.endpoint!r} in the registry")
-        fleet.endpoints = matches
-        tier = matches[0].tier
+        fleet.endpoints = [pinned]
+        fleet._by_key = {pinned.name: pinned, **{a: pinned for a in pinned.aliases}}
+        tier = pinned.tier
         fleet.roles = {role: [tier] for role in ("planner", "executor", "critic", "tuner")}
     context = Path(args.context).read_text(encoding="utf-8") if args.context else ""
     root = Path(args.worktree)

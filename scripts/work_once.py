@@ -74,7 +74,11 @@ from plan_select import (
 )
 
 
-def _load_endpoint(registry: Path | None, name: str) -> tuple[str, str, bool]:
+def _load_endpoint(
+    registry: Path | None,
+    name: str,
+    overlay_root: Path | None = None,
+) -> tuple[str, str, bool]:
     """Return (model_or_name, fit_tier, is_local) from endpoints.yaml."""
     try:
         import yaml  # type: ignore
@@ -84,6 +88,21 @@ def _load_endpoint(registry: Path | None, name: str) -> tuple[str, str, bool]:
     path = registry or Path(__file__).resolve().parent / "endpoints.yaml"
     if not path.is_file():
         raise SystemExit(f"registry not found: {path}")
+
+    try:
+        from anchor_client import Fleet, RegistryConflict
+        fleet = Fleet(
+            path,
+            overlay_root=overlay_root or Path.cwd(),
+            probe_health=False,
+        )
+        ep = fleet.lookup(name)
+        fit = REGISTRY_TIER_TO_FIT.get(ep.tier, normalize_fit_tier(ep.tier))
+        return ep.model or ep.name, fit, ep.is_local
+    except LookupError:
+        raise SystemExit(f"endpoint {name!r} not found in {path}") from None
+    except RegistryConflict as exc:
+        raise SystemExit(str(exc)) from None
 
     text = path.read_text(encoding="utf-8")
     if yaml is not None:
@@ -96,7 +115,7 @@ def _load_endpoint(registry: Path | None, name: str) -> tuple[str, str, bool]:
     for ep in endpoints:
         if not isinstance(ep, dict):
             continue
-        if ep.get("name") == name:
+        if ep.get("name") == name or name in (ep.get("aliases") or []):
             reg_tier = str(ep.get("tier") or "executor")
             fit = REGISTRY_TIER_TO_FIT.get(reg_tier, normalize_fit_tier(reg_tier))
             model = str(ep.get("model") or name)
@@ -156,8 +175,11 @@ def resolve_worker(args: argparse.Namespace) -> Worker:
 
     effort = getattr(args, "effort", None)
     if args.endpoint:
+        root = getattr(args, "root", None)
         model, tier, is_local = _load_endpoint(
-            Path(args.registry) if args.registry else None, args.endpoint
+            Path(args.registry) if args.registry else None,
+            args.endpoint,
+            overlay_root=Path(root) if root else Path.cwd(),
         )
         args.endpoint_is_local = is_local
         name = args.model or model

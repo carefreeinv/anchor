@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""``anchor plans | work | review | draft | fleet-watch`` — CLI adapter over ``anchor_ops``.
+"""``anchor plans | work | review | draft | fleet-watch | models`` — CLI adapter over ``anchor_ops``.
 
 Parser, mode detection, interactive prompting, text rendering, exit-code
 mapping. Workflow lives in ``anchor_ops``; this file does not list lanes,
@@ -33,6 +33,8 @@ from anchor_ops import (
     DraftPromoteParams,
     FleetWatchParams,
     Mode,
+    ModelsListParams,
+    ModelsNickParams,
     NeedsOperator,
     NotDelegated,
     Passthrough,
@@ -134,16 +136,18 @@ def _default_agent_id() -> str:
 
 def _render_text(res: Result, out: TextIO) -> None:
     rows = res.data.get("plans")
+    if not isinstance(rows, list):
+        rows = res.data.get("endpoints")
     if isinstance(rows, list):
         if not rows:
-            print("(no plans)", file=out)
+            print("(none)", file=out)
         cols = res.data.get("columns") or (list(rows[0]) if rows else [])
         if rows:
             print("\t".join(cols), file=out)
             for row in rows:
                 print("\t".join(_cell(row.get(c)) for c in cols), file=out)
     text = res.data.get("text")
-    skip = {"plans", "columns"}
+    skip = {"plans", "endpoints", "columns"}
     if isinstance(text, str) and text:
         print(text, end="" if text.endswith("\n") else "\n", file=out)
         skip |= {"text", "units", "cron"}
@@ -198,7 +202,7 @@ def delegate(
     if not reg.is_file():
         raise NotDelegated(f"no endpoint registry at {reg}")
     try:
-        fleet = anchor_client.Fleet(reg)
+        fleet = anchor_client.Fleet(reg, overlay_root=Path.cwd())
     except Exception as exc:
         raise NotDelegated(f"cannot load {reg}: {exc}") from exc
     if not fleet.endpoints:
@@ -209,10 +213,10 @@ def delegate(
         except LookupError as exc:
             raise NotDelegated(str(exc)) from exc
     else:
-        matches = [e for e in fleet.endpoints if e.name == endpoint]
-        if not matches:
+        try:
+            ep = fleet.lookup(endpoint)
+        except LookupError:
             raise NotDelegated(f"no endpoint named {endpoint!r} in {reg}")
-        ep = matches[0]
     try:
         system = anchor_client.load_prompt(MYTHOS_CORE)
     except OSError as exc:
@@ -252,7 +256,7 @@ def build_parser() -> argparse.ArgumentParser:
                "3 an operator answer (or harness step) is required",
     )
     sub = ap.add_subparsers(
-        dest="verb", required=True, metavar="{plans,work,review,draft,fleet-watch}",
+        dest="verb", required=True, metavar="{plans,work,review,draft,fleet-watch,models}",
     )
 
     p = sub.add_parser("plans", help="list plans in every lane")
@@ -324,6 +328,17 @@ def build_parser() -> argparse.ArgumentParser:
         help="write emitted units into this directory (interactive operator only)",
     )
     p.add_argument("--python", help="interpreter for ExecStart")
+
+    p = sub.add_parser("models", help="list configured endpoints; assign nicknames")
+    _common(p)
+    p.add_argument("action", nargs="?", choices=("list", "nick"), default="list")
+    p.add_argument("alias", nargs="?", help="with nick: the short name")
+    p.add_argument("--endpoint", help="canonical registry name to nickname")
+    p.add_argument("--machine", help="operator machine label (flippy, rack, …)")
+    p.add_argument("--effort", help="default reasoning effort for this nickname")
+    p.add_argument("--overlay", help="write nicknames here (default: ~/.config/anchor/endpoints.local.yaml)")
+    p.add_argument("--registry", help="shared endpoints.yaml to resolve --endpoint")
+    p.add_argument("--list", action="store_true", help="same as `models list`")
     return ap
 
 
@@ -342,6 +357,10 @@ def _cli_action(args: argparse.Namespace) -> str:
         return "claim"
     if getattr(args, "list", False):
         return "list"
+    if verb == "models":
+        if getattr(args, "list", False) or args.action == "list":
+            return "list"
+        return args.action or "list"
     return verb
 
 
@@ -370,6 +389,30 @@ def _dispatch(args: argparse.Namespace, answers: Prompter, ctx: Ctx) -> Result:
         return run("work.claim", WorkClaimParams(
             root=args.root, slug=args.slug, no_fit_check=args.no_fit_check, run=args.run, **worker,
         ), answers, ctx)
+    if verb == "models":
+        if args.list or args.action == "list" or not args.alias:
+            if args.action == "nick" and not args.alias:
+                raise CliError("models nick needs an alias")
+            return run(
+                "models.list",
+                ModelsListParams(root=args.root, registry=args.registry),
+                answers, ctx,
+            )
+        if not args.endpoint:
+            raise CliError("models nick needs --endpoint <canonical-name>")
+        return run(
+            "models.nick",
+            ModelsNickParams(
+                root=args.root,
+                alias=args.alias,
+                endpoint=args.endpoint,
+                machine=args.machine,
+                effort=args.effort,
+                overlay=args.overlay,
+                registry=args.registry,
+            ),
+            answers, ctx,
+        )
     if verb == "review":
         if args.list or not args.slug:
             return run("review.list", ReviewListParams(root=args.root), answers, ctx)

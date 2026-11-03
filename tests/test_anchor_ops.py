@@ -10,6 +10,7 @@ EXPECTED = {
     "draft.list", "draft.create", "draft.promote",
     "fleet-watch.status", "fleet-watch.list", "fleet-watch.once",
     "fleet-watch.emit", "fleet-watch.write", "fleet-watch.install",
+    "models.list", "models.nick",
 }
 
 
@@ -36,6 +37,8 @@ def test_safety_flags_on_mutating_ops():
     assert by_name["fleet-watch.emit"].requires == ops.NEEDS_HARNESS
     assert by_name["fleet-watch.write"].mutates
     assert by_name["fleet-watch.write"].requires == ops.NEEDS_OPERATOR
+    assert not by_name["models.list"].mutates
+    assert by_name["models.nick"].mutates
 
 
 def test_result_needs_operator_and_mode_live_in_the_core():

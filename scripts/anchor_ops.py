@@ -22,7 +22,7 @@ import plan_lease
 import plan_store
 
 SCHEMA_VERSION = 1
-VERBS = ("plans", "work", "review", "draft", "fleet-watch")
+VERBS = ("plans", "work", "review", "draft", "fleet-watch", "models")
 
 EXIT_OK = 0
 EXIT_NOTHING = 1
@@ -244,6 +244,23 @@ class WorkSlugParams:
 
 
 @dataclass(frozen=True)
+class ModelsListParams:
+    root: str
+    registry: str | None = None
+
+
+@dataclass(frozen=True)
+class ModelsNickParams:
+    root: str
+    alias: str
+    endpoint: str
+    machine: str | None = None
+    effort: str | None = None
+    overlay: str | None = None
+    registry: str | None = None
+
+
+@dataclass(frozen=True)
 class ReviewListParams:
     root: str
 
@@ -400,7 +417,7 @@ def _worker(params: WorkListParams | WorkClaimParams):
 
     return resolve_worker(SimpleNamespace(
         effort=params.effort, endpoint=params.endpoint, registry=params.registry,
-        model=params.model, tier=params.tier,
+        model=params.model, tier=params.tier, root=params.root,
     ))
 
 
@@ -435,6 +452,83 @@ def op_plans_board(params: PlansBoardParams, _answers: Answers, ctx: Ctx) -> Res
     if not ctx.mode.interactive or params.as_json:
         argv.append("--json")
     raise Passthrough(plan_board.main(argv))
+
+
+# --- models --------------------------------------------------------------------
+
+
+def _models_fleet(root: str, registry: str | None):
+    from anchor_client import DEFAULT_REGISTRY, Fleet
+
+    path = Path(registry) if registry else DEFAULT_REGISTRY
+    return Fleet(path, overlay_root=Path(root), probe_health=False)
+
+
+@_op("models.list", mutates=False, requires=None)
+def op_models_list(params: ModelsListParams, _answers: Answers, _ctx: Ctx) -> Result:
+    from anchor_client import RegistryConflict
+
+    res = Result("models", "list")
+    try:
+        fleet = _models_fleet(params.root, params.registry)
+    except RegistryConflict as exc:
+        raise CliError(str(exc)) from exc
+    res.data["columns"] = ["name", "aliases", "machine", "model", "effort", "tier"]
+    res.data["endpoints"] = [
+        {
+            "name": ep.name,
+            "aliases": list(ep.aliases),
+            "machine": ep.machine,
+            "model": ep.model,
+            "effort": ep.effort,
+            "tier": ep.tier,
+        }
+        for ep in fleet.endpoints
+    ]
+    return res
+
+
+@_op("models.nick", mutates=True, requires=None)
+def op_models_nick(params: ModelsNickParams, _answers: Answers, _ctx: Ctx) -> Result:
+    from anchor_client import (
+        DEFAULT_REGISTRY,
+        RegistryConflict,
+        overlay_paths,
+        write_endpoint_nick,
+    )
+
+    root = Path(params.root)
+    overlay = Path(params.overlay) if params.overlay else (
+        Path(os.environ.get("ANCHOR_CONFIG_DIR") or (Path.home() / ".config/anchor"))
+        / "endpoints.local.yaml"
+    )
+    shared = Path(params.registry) if params.registry else DEFAULT_REGISTRY
+    if overlay.resolve() == Path(shared).resolve():
+        raise CliError("refusing to write nicknames into the shared registry")
+    others = [p for p in overlay_paths(root) if p.resolve() != overlay.resolve()]
+    res = Result("models", "nick")
+    try:
+        ep = write_endpoint_nick(
+            overlay,
+            alias=params.alias,
+            endpoint=params.endpoint,
+            machine=params.machine,
+            effort=params.effort,
+            registry_path=shared,
+            overlays=others,
+        )
+    except RegistryConflict as exc:
+        raise CliError(str(exc)) from exc
+    res.data.update(
+        overlay=str(overlay),
+        name=ep.name,
+        aliases=list(ep.aliases),
+        machine=ep.machine,
+        model=ep.model,
+        effort=ep.effort,
+    )
+    res.notes.append(f"wrote {overlay}")
+    return res
 
 
 # --- work ----------------------------------------------------------------------

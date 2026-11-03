@@ -11,9 +11,11 @@ from anchor_client import (
     EmptyAssistantText,
     Endpoint,
     Fleet,
+    RegistryConflict,
     load_prompt,
     project_root_from,
     resolve_doctrine_path,
+    write_endpoint_nick,
 )
 
 FIXTURES = Path(__file__).resolve().parent / "fixtures" / "openai_chat"
@@ -542,6 +544,91 @@ def test_endpoint_explicit_local_flag_wins():
                     model="m", local=True).is_local
     assert not Endpoint(name="n", tier="executor", base_url="http://10.0.1.10:8000/v1",
                         model="m", local=False).is_local
+
+
+def test_overlay_aliases_load_and_lookup(tmp_path):
+    registry = tmp_path / "endpoints.yaml"
+    registry.write_text(
+        "endpoints:\n"
+        "  - name: nemotron-build\n    tier: executor\n"
+        "    base_url: https://integrate.api.nvidia.com/v1\n"
+        "    model: nvidia/nemotron-3.5-lightning-30b-a3b\n"
+        "roles:\n  executor: [executor]\n",
+        encoding="utf-8",
+    )
+    overlay = tmp_path / "var" / "endpoints.local.yaml"
+    overlay.parent.mkdir()
+    overlay.write_text(
+        "endpoints:\n"
+        "  - name: nemotron-build\n    aliases: [lightning]\n"
+        "    machine: flippy\n    effort: low\n",
+        encoding="utf-8",
+    )
+    fleet = Fleet(registry, overlays=[overlay], probe_health=False)
+    by_name = fleet.lookup("nemotron-build")
+    by_nick = fleet.lookup("lightning")
+    assert by_name is by_nick
+    assert by_nick.machine == "flippy"
+    assert by_nick.effort == "low"
+    assert "lightning" in by_nick.aliases
+
+
+def test_duplicate_alias_raises_registry_conflict(tmp_path):
+    registry = tmp_path / "endpoints.yaml"
+    registry.write_text(
+        "endpoints:\n"
+        "  - name: a\n    tier: swarm\n    base_url: http://a/v1\n    model: m\n"
+        "    aliases: [shared]\n"
+        "  - name: b\n    tier: swarm\n    base_url: http://b/v1\n    model: m\n"
+        "    aliases: [shared]\n",
+        encoding="utf-8",
+    )
+    with pytest.raises(RegistryConflict, match="shared"):
+        Fleet(registry, probe_health=False)
+
+
+def test_write_endpoint_nick_only_touches_overlay(tmp_path):
+    registry = tmp_path / "endpoints.yaml"
+    registry.write_text(
+        "endpoints:\n"
+        "  - name: pin\n    tier: executor\n    base_url: http://x/v1\n    model: m\n",
+        encoding="utf-8",
+    )
+    overlay = tmp_path / "overlay.yaml"
+    before = registry.read_text(encoding="utf-8")
+    ep = write_endpoint_nick(
+        overlay,
+        alias="lightning",
+        endpoint="pin",
+        machine="flippy",
+        effort="low",
+        registry_path=registry,
+        overlays=[],
+    )
+    assert ep.name == "pin"
+    assert "lightning" in ep.aliases
+    assert overlay.is_file()
+    assert registry.read_text(encoding="utf-8") == before
+    again = Fleet(registry, overlays=[overlay], probe_health=False)
+    assert again.lookup("lightning").name == "pin"
+
+
+def test_write_endpoint_nick_refuses_stolen_alias(tmp_path):
+    registry = tmp_path / "endpoints.yaml"
+    registry.write_text(
+        "endpoints:\n"
+        "  - name: a\n    tier: swarm\n    base_url: http://a/v1\n    model: m\n"
+        "  - name: b\n    tier: swarm\n    base_url: http://b/v1\n    model: m\n",
+        encoding="utf-8",
+    )
+    overlay = tmp_path / "overlay.yaml"
+    write_endpoint_nick(
+        overlay, alias="x", endpoint="a", registry_path=registry, overlays=[],
+    )
+    with pytest.raises(RegistryConflict, match="already maps"):
+        write_endpoint_nick(
+            overlay, alias="x", endpoint="b", registry_path=registry, overlays=[overlay],
+        )
 
 
 def test_registry_parses_the_local_field(tmp_path):

@@ -8,6 +8,16 @@ Newest first.
 
 ### Added
 
+- **`anchor models`.** `list` prints registry name, aliases, machine, model,
+  effort, and tier. `nick ALIAS --endpoint NAME [--machine …] [--effort …]`
+  writes only a machine-local overlay (`~/.config/anchor/endpoints.local.yaml`
+  or `--overlay`). `--endpoint lightning` on `work` / `--run` / `--delegate`
+  resolves through `Fleet.lookup` (canonical `name:` or overlay alias).
+  Duplicate aliases fail at load (`RegistryConflict`).
+
+### Added
+
+
 - **Event-driven plan watchers.** `work_once.py --watch` stays up and pulls on
   `.plans/{bugs,features,in-progress}` inotify events (debounced) with a long
   poll heartbeat when inotify is missing. Optional MQTT poke

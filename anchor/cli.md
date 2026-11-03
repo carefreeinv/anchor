@@ -1,6 +1,6 @@
 # The plan-workflow CLI: what `anchor` does itself, and what it hands back
 
-`anchor plans | work | review | draft | fleet-watch` runs the `.plans/` workflow from a
+`anchor plans | work | review | draft | fleet-watch | models` runs the `.plans/` workflow from a
 terminal, with no chat harness. It is a small, deterministic program: every
 decision it makes comes from a fixed set of outcomes with a rule you can name,
 and it runs no model on any default path. Anything that needs judgment is either
@@ -18,9 +18,15 @@ scaffolder-only flag (`--platform`, `--fleet`, …) still exits 2 and prints
 ``did you mean `anchor ./work …` to scaffold the directory?``.
 
 `--delegate` / `--endpoint` read an endpoints YAML (`--registry`, default
-`scripts/endpoints.yaml`). A machine-local overlay such as
-`~/.config/anchor/endpoints.local.yaml` is the right place for localhost
-Ollama and NVIDIA Build. `anchor` loads a gitignored repo-root `.env`
+`scripts/endpoints.yaml`) and resolve a canonical `name:` **or an overlay
+nickname**. A machine-local overlay such as
+`~/.config/anchor/endpoints.local.yaml` (or `var/endpoints.local.yaml`) holds
+localhost Ollama, NVIDIA Build, and operator nicknames (`aliases`, `machine`,
+`effort`). Duplicate names/aliases fail at load (`RegistryConflict`). Two
+overlays that both define the same alias also fail. `anchor models nick`
+writes only the overlay, never the shared registry. `--effort` on the CLI
+still wins over a nickname default. Machine is a label, not a locality
+flag. `anchor` loads a gitignored repo-root `.env`
 (setdefault) before verbs run; Authorization is the first set of
 `ANCHOR_API_KEY`, `NVIDIA_API_KEY`, `NGC_API_KEY`. `--run` hands the claimed
 plan to `orchestrate.py` with the same `--endpoint`/`--registry` used to claim
@@ -130,6 +136,15 @@ their authors wrote them. `--goal` only seeds the skeleton of a new draft.
 | `--install-user` | **operator** | writes `~/.config/systemd/user`; headless (including `--yes` without a TTY) exits 3 and writes nothing |
 
 `--worker tier=…,agent=…,interval=5m` defaults to event-driven units (`work_once --watch`, `Type=simple`) plus a oneshot poll timer as heartbeat. `watch=0` restores interval-only oneshot timers.
+
+### `anchor models`
+
+| Part | Kind | Why |
+|------|------|-----|
+| `list` (`--json`) | deterministic | merged registry + overlays: name, aliases, machine, model, effort, tier |
+| `nick ALIAS --endpoint NAME [--machine …] [--effort …]` | deterministic | writes `endpoints.local.yaml`; refuses the shared registry |
+
+`anchor work --endpoint lightning --list` is a good-fit list for that row’s tier once the nickname exists.
 
 ## Two modes, one code path
 

@@ -52,6 +52,11 @@ def _params(name: str, root: Path):
         "fleet-watch.install": ops.FleetWatchParams(
             root=r, workers=("tier=mid,agent=t1,interval=5m",), yes=True,
         ),
+        "models.list": ops.ModelsListParams(root=r),
+        "models.nick": ops.ModelsNickParams(
+            root=r, alias="lightning", endpoint="missing",
+            overlay=str(root / "overlay.yaml"),
+        ),
     }[name]
 
 

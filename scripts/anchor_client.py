@@ -174,6 +174,182 @@ def _post_with_retry(url: str, *, json: dict, headers: dict, timeout: int) -> re
     raise last_exc
 
 
+class RegistryConflict(ValueError):
+    """Duplicate endpoint ``name:`` or alias across the merged registry."""
+
+
+def overlay_paths(project_root: Path | None = None) -> list[Path]:
+    """Machine-local overlay files (home config, then project ``var/``)."""
+    found: list[Path] = []
+    cfg = Path(os.environ.get("ANCHOR_CONFIG_DIR") or (Path.home() / ".config/anchor"))
+    home = cfg / "endpoints.local.yaml"
+    if home.is_file():
+        found.append(home)
+    root = Path(project_root) if project_root is not None else Path.cwd()
+    var = root / "var" / "endpoints.local.yaml"
+    if var.is_file() and var.resolve() not in {p.resolve() for p in found}:
+        found.append(var)
+    return found
+
+
+def endpoint_from_mapping(row: dict) -> Endpoint:
+    """Build an ``Endpoint`` from a registry YAML mapping (unknown keys dropped)."""
+    aliases = row.get("aliases") or []
+    if isinstance(aliases, str):
+        aliases = [aliases]
+    return Endpoint(
+        name=str(row["name"]),
+        tier=str(row.get("tier") or "executor"),
+        base_url=str(row.get("base_url") or ""),
+        model=str(row.get("model") or row["name"]),
+        quirks=dict(row.get("quirks") or {}),
+        local=row.get("local"),
+        aliases=[str(a) for a in aliases if str(a).strip()],
+        machine=(str(row["machine"]) if row.get("machine") not in (None, "") else None),
+        effort=(str(row["effort"]).strip().lower() if row.get("effort") not in (None, "") else None),
+    )
+
+
+def _merge_endpoint_rows(base: list[dict], overlay: list[dict]) -> list[dict]:
+    by_name: dict[str, dict] = {}
+    order: list[str] = []
+    for row in base:
+        name = row.get("name")
+        if not name:
+            continue
+        by_name[str(name)] = dict(row)
+        order.append(str(name))
+    for row in overlay:
+        name = row.get("name")
+        if not name:
+            continue
+        name = str(name)
+        if name in by_name:
+            cur = by_name[name]
+            extra = row.get("aliases") or []
+            if isinstance(extra, str):
+                extra = [extra]
+            aliases = list(cur.get("aliases") or [])
+            if isinstance(aliases, str):
+                aliases = [aliases]
+            for a in extra:
+                if a not in aliases:
+                    aliases.append(a)
+            cur["aliases"] = aliases
+            if row.get("machine") not in (None, ""):
+                cur["machine"] = row["machine"]
+            if row.get("effort") not in (None, ""):
+                cur["effort"] = row["effort"]
+            for key, val in row.items():
+                if key in {"name", "aliases", "machine", "effort"} or val is None:
+                    continue
+                cur[key] = val
+        else:
+            by_name[name] = dict(row)
+            order.append(name)
+    return [by_name[n] for n in order]
+
+
+def load_endpoint_rows(
+    registry_path: str | Path,
+    overlays: list[Path] | tuple[Path, ...] = (),
+) -> list[dict]:
+    data = yaml.safe_load(Path(registry_path).read_text(encoding="utf-8")) or {}
+    rows = list(data.get("endpoints") or [])
+    for ov in overlays:
+        path = Path(ov)
+        if not path.is_file():
+            continue
+        extra = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+        rows = _merge_endpoint_rows(rows, list(extra.get("endpoints") or []))
+    return rows
+
+
+def build_alias_index(endpoints: list[Endpoint]) -> dict[str, Endpoint]:
+    idx: dict[str, Endpoint] = {}
+    for ep in endpoints:
+        keys = [ep.name, *ep.aliases]
+        for key in keys:
+            if not key:
+                continue
+            prev = idx.get(key)
+            if prev is not None and prev.name != ep.name:
+                raise RegistryConflict(
+                    f"alias {key!r} maps to both {prev.name!r} and {ep.name!r}"
+                )
+            idx[key] = ep
+    return idx
+
+
+def write_endpoint_nick(
+    overlay: Path,
+    *,
+    alias: str,
+    endpoint: str,
+    machine: str | None = None,
+    effort: str | None = None,
+    registry_path: str | Path | None = None,
+    overlays: list[Path] | None = None,
+) -> Endpoint:
+    """Record *alias* on *endpoint* in *overlay* only (never the shared registry)."""
+    alias = str(alias).strip()
+    if not alias:
+        raise RegistryConflict("nickname is empty")
+    fleet = Fleet(
+        registry_path or DEFAULT_REGISTRY,
+        overlays=overlays if overlays is not None else [],
+        probe_health=False,
+    )
+    try:
+        canon = fleet.lookup(endpoint)
+    except LookupError as exc:
+        raise RegistryConflict(str(exc)) from exc
+    if alias != canon.name:
+        hit = fleet._by_key.get(alias)
+        if hit is not None and hit.name != canon.name:
+            raise RegistryConflict(
+                f"alias {alias!r} already maps to {hit.name!r}"
+            )
+    overlay = Path(overlay)
+    overlay.parent.mkdir(parents=True, exist_ok=True)
+    data: dict = {}
+    if overlay.is_file():
+        data = yaml.safe_load(overlay.read_text(encoding="utf-8")) or {}
+    rows = list(data.get("endpoints") or [])
+    found = False
+    for row in rows:
+        if row.get("name") == canon.name:
+            aliases = list(row.get("aliases") or [])
+            if isinstance(aliases, str):
+                aliases = [aliases]
+            if alias not in aliases and alias != canon.name:
+                aliases.append(alias)
+            row["aliases"] = aliases
+            if machine is not None:
+                row["machine"] = machine
+            if effort is not None:
+                row["effort"] = str(effort).strip().lower()
+            found = True
+            break
+    if not found:
+        row = {"name": canon.name, "aliases": []}
+        if alias != canon.name:
+            row["aliases"] = [alias]
+        if machine is not None:
+            row["machine"] = machine
+        if effort is not None:
+            row["effort"] = str(effort).strip().lower()
+        rows.append(row)
+    data["endpoints"] = rows
+    overlay.write_text(yaml.safe_dump(data, sort_keys=False), encoding="utf-8")
+    merged = Fleet(
+        registry_path or DEFAULT_REGISTRY,
+        overlays=[*(overlays or []), overlay],
+        probe_health=False,
+    )
+    return merged.lookup(canon.name)
+
+
 @dataclass
 class Endpoint:
     name: str
@@ -184,6 +360,9 @@ class Endpoint:
     # Set after a 400 on body `think` so later calls (and budget retries) skip it.
     _think_unsupported: bool = field(default=False, init=False, repr=False)
     local: bool | None = None
+    aliases: list[str] = field(default_factory=list)
+    machine: str | None = None
+    effort: str | None = None
 
     @property
     def is_local(self) -> bool:
@@ -349,9 +528,15 @@ class Fleet:
         *,
         prefer_local: bool | None = None,
         probe_health: bool = True,
+        overlays: list[Path] | None = None,
+        overlay_root: Path | None = None,
     ):
-        data = yaml.safe_load(Path(registry_path).read_text(encoding="utf-8"))
-        self.endpoints = [Endpoint(**e) for e in data.get("endpoints", [])]
+        path = Path(registry_path)
+        data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+        ovs = overlays if overlays is not None else overlay_paths(overlay_root) if overlay_root is not None else []
+        rows = load_endpoint_rows(path, ovs)
+        self.endpoints = [endpoint_from_mapping(e) for e in rows]
+        self._by_key = build_alias_index(self.endpoints)
         self.roles: dict[str, list[str]] = data.get("roles", {})
         self._rr: dict[str, int] = {}
         self._health: dict[str, bool] = {}
@@ -359,6 +544,13 @@ class Fleet:
             prefer_local = _truthy_env("ANCHOR_PREFER_LOCAL")
         self.prefer_local = bool(prefer_local)
         self.probe_health = probe_health
+
+    def lookup(self, name: str) -> Endpoint:
+        """Resolve a canonical ``name:`` or an overlay alias."""
+        ep = self._by_key.get(name)
+        if ep is None:
+            raise LookupError(f"endpoint {name!r} not found in the registry")
+        return ep
 
     def by_tier(self, tier: str) -> list[Endpoint]:
         return [e for e in self.endpoints if e.tier == tier]

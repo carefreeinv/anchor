@@ -136,6 +136,80 @@ def test_missing_plans_tree_is_a_hard_error(tmp_path):
 # --- work -------------------------------------------------------------------------
 
 
+def _mini_registry(root: Path) -> Path:
+    reg = root / "endpoints.yaml"
+    reg.write_text(
+        "endpoints:\n"
+        "  - name: nemotron-build\n    tier: executor\n"
+        "    base_url: https://integrate.api.nvidia.com/v1\n"
+        "    model: pin-model\n"
+        "roles:\n  executor: [executor]\n",
+        encoding="utf-8",
+    )
+    return reg
+
+
+def test_models_list_json_includes_aliases(project):
+    reg = _mini_registry(project)
+    overlay = project / "var" / "endpoints.local.yaml"
+    overlay.parent.mkdir()
+    overlay.write_text(
+        "endpoints:\n"
+        "  - name: nemotron-build\n    aliases: [lightning]\n"
+        "    machine: flippy\n    effort: low\n",
+        encoding="utf-8",
+    )
+    code, doc = cli(
+        ["models", "list", "--root", str(project), "--registry", str(reg), "--json"]
+    )
+    assert code == 0
+    row = next(r for r in doc["result"]["endpoints"] if r["name"] == "nemotron-build")
+    assert row["aliases"] == ["lightning"]
+    assert row["machine"] == "flippy"
+    assert row["effort"] == "low"
+    assert row["model"]
+
+
+def test_models_nick_writes_overlay_not_shared(project, tmp_path):
+    reg = _mini_registry(project)
+    overlay = tmp_path / "nick.yaml"
+    code, doc = cli([
+        "models", "nick", "lightning",
+        "--root", str(project),
+        "--endpoint", "nemotron-build",
+        "--machine", "flippy",
+        "--effort", "low",
+        "--overlay", str(overlay),
+        "--registry", str(reg),
+        "--json",
+    ])
+    assert code == 0
+    assert overlay.is_file()
+    assert "lightning" in overlay.read_text(encoding="utf-8")
+    assert "aliases:" not in reg.read_text(encoding="utf-8")
+    assert doc["result"]["name"] == "nemotron-build"
+    assert "lightning" in doc["result"]["aliases"]
+
+
+def test_work_list_resolves_endpoint_nickname(project):
+    write(project, "features", "f1")
+    reg = _mini_registry(project)
+    overlay = project / "var" / "endpoints.local.yaml"
+    overlay.parent.mkdir()
+    overlay.write_text(
+        "endpoints:\n  - name: nemotron-build\n    aliases: [lightning]\n",
+        encoding="utf-8",
+    )
+    code, doc = cli([
+        "work", "--list", "--root", str(project),
+        "--endpoint", "lightning", "--registry", str(reg), "--tier", "mid",
+    ])
+    assert code == 0
+    (row,) = doc["result"]["plans"]
+    assert row["rel"] == "features/f1.md"
+    assert row["fit"] == "good"
+
+
 def test_work_list_uses_plan_select_fit(project):
     write(project, "features", "f1")
     code, doc = cli(["work", "--list", "--root", str(project), "--tier", "mid"])
@@ -396,10 +470,13 @@ def stub_fleet(monkeypatch, tmp_path):
     ep = _StubEndpoint(reply)
 
     class StubFleet:
-        def __init__(self, _path):
+        def __init__(self, _path, **_kw):
             self.endpoints = [ep]
 
         def pick(self, _role):
+            return ep
+
+        def lookup(self, _name):
             return ep
 
     reg = tmp_path / "endpoints.yaml"
@@ -603,10 +680,13 @@ def critic_fleet(monkeypatch, tmp_path):
     ep = _StubEndpoint("Findings: H1 is real.\n\n**Verdict: REVISE**")
 
     class StubFleet:
-        def __init__(self, _path):
+        def __init__(self, _path, **_kw):
             self.endpoints = [ep]
 
         def pick(self, _role):
+            return ep
+
+        def lookup(self, _name):
             return ep
 
     reg = tmp_path / "endpoints.yaml"
