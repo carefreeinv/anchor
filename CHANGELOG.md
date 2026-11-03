@@ -67,6 +67,11 @@ Newest first.
 
 ### Fixed
 
+- **`anchor models nick` resolves overlay-only endpoints.** Lookup includes
+  the target overlay’s existing rows, so a name that lives only in
+  `~/.config/anchor/endpoints.local.yaml` can receive an alias without
+  `--overlay`. Stolen-alias `RegistryConflict` is unchanged.
+
 - **Interactive `anchor work --run` forwards `--worktree`** to `orchestrate.py`
   (feature worktree under `var/worktrees/<agent-id>/`; never apply on
   main/master/dev/develop). Headless `--run` still does not start a model.

@@ -295,9 +295,15 @@ def write_endpoint_nick(
     alias = str(alias).strip()
     if not alias:
         raise RegistryConflict("nickname is empty")
+    extra = list(overlays) if overlays is not None else []
+    overlay_p = Path(overlay)
+    if overlay_p.is_file():
+        seen = {p.resolve() for p in extra}
+        if overlay_p.resolve() not in seen:
+            extra.append(overlay_p)
     fleet = Fleet(
         registry_path or DEFAULT_REGISTRY,
-        overlays=overlays if overlays is not None else [],
+        overlays=extra,
         probe_health=False,
     )
     try:

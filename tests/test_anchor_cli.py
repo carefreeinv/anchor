@@ -191,6 +191,32 @@ def test_models_nick_writes_overlay_not_shared(project, tmp_path):
     assert "lightning" in doc["result"]["aliases"]
 
 
+def test_models_nick_finds_overlay_only_endpoint(project, monkeypatch, tmp_path):
+    cfg = tmp_path / "cfg"
+    cfg.mkdir()
+    overlay = cfg / "endpoints.local.yaml"
+    overlay.write_text(
+        "endpoints:\n"
+        "  - name: nemotron-build\n    tier: executor\n"
+        "    base_url: https://integrate.api.nvidia.com/v1\n"
+        "    model: pin-model\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("ANCHOR_CONFIG_DIR", str(cfg))
+    empty = tmp_path / "empty.yaml"
+    empty.write_text("endpoints: []\n", encoding="utf-8")
+    code, doc = cli([
+        "models", "nick", "lightning",
+        "--root", str(project),
+        "--endpoint", "nemotron-build",
+        "--registry", str(empty),
+        "--json",
+    ])
+    assert code == 0, doc
+    assert "lightning" in overlay.read_text(encoding="utf-8")
+    assert "lightning" in doc["result"]["aliases"]
+
+
 def test_work_list_resolves_endpoint_nickname(project):
     write(project, "features", "f1")
     reg = _mini_registry(project)
