@@ -67,6 +67,10 @@ Newest first.
 
 ### Fixed
 
+- **Executor apply runs even when the Result footer is missing.** A reply
+  with a whole-file fence or unified diff is applied before the FORMAT
+  retry; prose with neither payload nor footer still FORMAT-retries.
+
 - **`orchestrate.py` exits 2 when no task is `ok`.** All-escalate / all-hold /
   all-failed runs (with ≥1 task) no longer report success after `0/N tasks ok`.
   One `ok` among mixed results still exits 0. `failed-noop` remains 2.

@@ -42,6 +42,7 @@ from apply_executor_diff import (
     ApplyError,
     NoApplyableHunks,
     apply_reply,
+    reply_has_applyable,
 )
 from fleet_metrics import (
     DEFAULT_FOOTER_MAX_LINES,
@@ -649,19 +650,21 @@ def execute_task(task: str, plan: str, fleet: Fleet, verify_cmd: str | None,
             )
             continue
 
-        if not extract_footer(out).ok:
-            history.append(
-                "FORMAT: output missing one or more required footer sections "
-                "('## Result' / '## How to verify' / '## Deferred / concerns')"
-            )
-            continue
-        if result_is_placeholder(out):
-            history.append(
-                "FORMAT: ## Result is empty, checkbox-only, or a stall phrase "
-                "(will produce / let me examine / TODO implement); implement the "
-                "task or fail — do not claim work that has not happened"
-            )
-            continue
+        applyable = reply_has_applyable(out)
+        if not applyable:
+            if not extract_footer(out).ok:
+                history.append(
+                    "FORMAT: output missing one or more required footer sections "
+                    "('## Result' / '## How to verify' / '## Deferred / concerns')"
+                )
+                continue
+            if result_is_placeholder(out):
+                history.append(
+                    "FORMAT: ## Result is empty, checkbox-only, or a stall phrase "
+                    "(will produce / let me examine / TODO implement); implement the "
+                    "task or fail — do not claim work that has not happened"
+                )
+                continue
 
         if tree is not None:
             try:

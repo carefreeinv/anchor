@@ -282,7 +282,6 @@ def _apply_hunks(
                 start = h.old_start  # insert after this many existing lines? 
                 # unified: @@ -0,0 +1,1 @@ for new file; @@ -3,0 +4,1 @@ insert after line 3
                 start = h.old_start
-        old_slice = body[start : start + h.old_count] if h.old_count else []
         expected: list[str] = []
         replacement: list[str] = []
         for hl in h.lines:
@@ -319,6 +318,14 @@ def _apply_hunks(
     if not ended_nl and out:
         out[-1] = out[-1].rstrip("\n")
     return out
+
+
+def reply_has_applyable(text: str) -> bool:
+    """True when ``text`` contains a whole-file fence or a unified-diff patch."""
+    blocks, residual = _extract_file_blocks(text)
+    if blocks:
+        return True
+    return bool(extract_patches(residual))
 
 
 def apply_reply(

@@ -1208,6 +1208,52 @@ FENCE_OUTPUT = (
 )
 
 
+FENCE_NO_FOOTER = (
+    "```README\n"
+    "applied from fence without footer\n"
+    "```\n"
+)
+
+
+def test_execute_task_applies_fence_without_footer(git_repo):
+    from pathlib import Path
+
+    from orchestrate import execute_task
+
+    marker = git_repo / "verify-ran.txt"
+    fleet = FakeFleet([FENCE_NO_FOOTER])
+    result = execute_task(
+        "edit readme",
+        "plan",
+        fleet,
+        verify_cmd=f"touch {marker}",
+        hold_on_fail=False,
+        worktree=git_repo,
+    )
+    assert result["status"] == "ok"
+    assert (git_repo / "README").read_text(encoding="utf-8") == "applied from fence without footer\n"
+    assert Path(marker).exists()
+    assert fleet.ep.calls == 1
+
+
+def test_execute_task_prose_without_footer_still_format_retries(git_repo):
+    from orchestrate import execute_task
+
+    fleet = FakeFleet(["I will edit README now.", "still no patch and no footer"])
+    result = execute_task(
+        "edit readme",
+        "plan",
+        fleet,
+        verify_cmd="true",
+        hold_on_fail=False,
+        worktree=git_repo,
+    )
+    assert result["status"] == "escalate"
+    assert all(h.startswith("FORMAT:") for h in result["history"])
+    assert (git_repo / "README").read_text(encoding="utf-8") == "hi\n"
+    assert fleet.ep.calls == 2
+
+
 def test_execute_task_applies_fenced_file_then_verify(git_repo):
     from pathlib import Path
 
