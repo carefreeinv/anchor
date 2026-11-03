@@ -326,7 +326,7 @@ use tiers + names only — profile tags guide self-assessment.
 
    ```text
    skip: features/<slug> — underqualified (Preferred: reasoner; you: Sonnet 5/mid)
-   → python scripts/work_once.py --once --endpoint h100-nemotron --registry scripts/endpoints.yaml
+   → python scripts/work_once.py --once --run --ensure-worktree --endpoint h100-nemotron --registry scripts/endpoints.yaml
    → /work --no-fit-check <slug> to run it here anyway
    ```
 
