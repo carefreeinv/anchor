@@ -1,3 +1,4 @@
+import argparse
 import subprocess
 import sys
 from pathlib import Path
@@ -652,3 +653,29 @@ def test_run_forwards_endpoint_and_registry_before_worktree(tmp_path, monkeypatc
     extra = captured[0]
     assert extra[:4] == ["--registry", str(reg), "--endpoint", "pin"]
     assert extra[4:6] == ["--worktree", str(Rec.path)]
+
+
+def test_nick_effort_applies_unless_cli_effort_wins(tmp_path):
+    root = _root(tmp_path)
+    reg = tmp_path / "ep.yaml"
+    overlay = root / "var" / "endpoints.local.yaml"
+    overlay.parent.mkdir()
+    reg.write_text(
+        "endpoints:\n"
+        "  - name: pin\n    tier: executor\n    model: grok-4.6\n"
+        "    base_url: http://x/v1\n",
+        encoding="utf-8",
+    )
+    overlay.write_text(
+        "endpoints:\n  - name: pin\n    aliases: [lightning]\n    effort: low\n",
+        encoding="utf-8",
+    )
+    ns = argparse.Namespace(
+        endpoint="lightning", registry=str(reg), root=str(root),
+        model=None, tier=None, effort=None,
+    )
+    w = work_once.resolve_worker(ns)
+    assert w.tier == "mid"  # grok + low
+    ns.effort = "high"
+    w2 = work_once.resolve_worker(ns)
+    assert w2.tier == "reasoner"  # CLI --effort wins

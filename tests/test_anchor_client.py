@@ -390,6 +390,35 @@ def test_endpoint_sends_reasoning_effort_quirk(monkeypatch):
     assert captured["json"].get("reasoning_effort") == "xhigh"
 
 
+def test_endpoint_overlay_effort_fills_chat_when_quirk_absent(monkeypatch):
+    import anchor_client as ac
+    from anchor_client import Endpoint
+
+    captured = {}
+
+    class FakeResp:
+        status_code = 200
+        def raise_for_status(self):
+            return None
+        def json(self):
+            return {"choices": [{"message": {"content": "ok"}}]}
+
+    def fake_post(url, *, json, headers, timeout):
+        captured["json"] = json
+        return FakeResp()
+
+    monkeypatch.setattr(ac, "_post_with_retry", fake_post)
+    ep = Endpoint(
+        name="grok",
+        tier="mid",
+        base_url="http://example/v1",
+        model="grok-4.6",
+        effort="low",
+    )
+    ep.chat([{"role": "user", "content": "hi"}], max_tokens=16)
+    assert captured["json"].get("reasoning_effort") == "low"
+
+
 def test_fixtures_load():
     for name in (
         "empty_content_reasoning_length.json",

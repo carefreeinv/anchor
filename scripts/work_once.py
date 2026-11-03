@@ -78,8 +78,8 @@ def _load_endpoint(
     registry: Path | None,
     name: str,
     overlay_root: Path | None = None,
-) -> tuple[str, str, bool]:
-    """Return (model_or_name, fit_tier, is_local) from endpoints.yaml."""
+) -> tuple[str, str, bool, str | None]:
+    """Return (model_or_name, fit_tier, is_local, effort) from endpoints.yaml."""
     try:
         import yaml  # type: ignore
     except ImportError:
@@ -98,7 +98,7 @@ def _load_endpoint(
         )
         ep = fleet.lookup(name)
         fit = REGISTRY_TIER_TO_FIT.get(ep.tier, normalize_fit_tier(ep.tier))
-        return ep.model or ep.name, fit, ep.is_local
+        return ep.model or ep.name, fit, ep.is_local, ep.effort
     except LookupError:
         raise SystemExit(f"endpoint {name!r} not found in {path}") from None
     except RegistryConflict as exc:
@@ -119,7 +119,9 @@ def _load_endpoint(
             reg_tier = str(ep.get("tier") or "executor")
             fit = REGISTRY_TIER_TO_FIT.get(reg_tier, normalize_fit_tier(reg_tier))
             model = str(ep.get("model") or name)
-            return model, fit, endpoint_is_local(ep)
+            nick_effort = ep.get("effort")
+            effort = str(nick_effort).strip().lower() if nick_effort not in (None, "") else None
+            return model, fit, endpoint_is_local(ep), effort
     raise SystemExit(f"endpoint {name!r} not found in {path}")
 
 
@@ -176,7 +178,7 @@ def resolve_worker(args: argparse.Namespace) -> Worker:
     effort = getattr(args, "effort", None)
     if args.endpoint:
         root = getattr(args, "root", None)
-        model, tier, is_local = _load_endpoint(
+        model, tier, is_local, nick_effort = _load_endpoint(
             Path(args.registry) if args.registry else None,
             args.endpoint,
             overlay_root=Path(root) if root else Path.cwd(),
@@ -185,7 +187,7 @@ def resolve_worker(args: argparse.Namespace) -> Worker:
         name = args.model or model
         if args.tier:
             tier = normalize_fit_tier(args.tier)
-        return worker_with_effort(name, tier, effort)
+        return worker_with_effort(name, tier, effort or nick_effort)
     # Lease / worktree ids are not product names — never feed --agent-id into
     # effective_fit_tier (``grok-effort-*`` would look like the Grok family).
     name = args.model or "work-once"

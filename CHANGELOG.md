@@ -13,10 +13,8 @@ Newest first.
   writes only a machine-local overlay (`~/.config/anchor/endpoints.local.yaml`
   or `--overlay`). `--endpoint lightning` on `work` / `--run` / `--delegate`
   resolves through `Fleet.lookup` (canonical `name:` or overlay alias).
-  Duplicate aliases fail at load (`RegistryConflict`).
-
-### Added
-
+  Duplicate aliases fail at load (`RegistryConflict`). Overlay `effort`
+  is the worker default when `--effort` is omitted; the CLI flag still wins.
 
 - **Event-driven plan watchers.** `work_once.py --watch` stays up and pulls on
   `.plans/{bugs,features,in-progress}` inotify events (debounced) with a long

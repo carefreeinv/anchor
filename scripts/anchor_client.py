@@ -449,7 +449,7 @@ class Endpoint:
         if extra:
             payload = {**extra, **payload}
         # Grok-family reasoning dial (4.5/4.6). xhigh is 4.6-only at the API.
-        reff = self.quirks.get("reasoning_effort")
+        reff = self.quirks.get("reasoning_effort") or self.effort
         if reff:
             payload["reasoning_effort"] = str(reff).strip().lower()
         # Ollama OpenAI extension: body `think` mirrors the call flag when the

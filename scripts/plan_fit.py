@@ -58,12 +58,12 @@ def _resolve_worker(args: argparse.Namespace) -> Worker:
     if args.endpoint:
         from work_once import _load_endpoint  # local: keeps YAML cost off the common path
 
-        model, tier = _load_endpoint(
+        model, tier, _is_local, nick_effort = _load_endpoint(
             Path(args.registry) if args.registry else None, args.endpoint
         )
         name = args.model or model
         base = args.tier or tier
-        return worker_with_effort(name, base, effort)
+        return worker_with_effort(name, base, effort or nick_effort)
     if not args.tier and not args.model:
         raise SystemExit(
             "say who you are: --tier small|mid|reasoner|frontier "
