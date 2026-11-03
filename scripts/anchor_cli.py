@@ -277,7 +277,11 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--no-fit-check", action="store_true", help="ignore Preferred models")
     p.add_argument("--run", action="store_true",
                    help="interactive only: hand the claimed plan to orchestrate.py "
-                        "(uses the same --endpoint/--registry as claim)")
+                        "(uses the same --endpoint/--registry as claim); exit 0 "
+                        "parks in review-needed/")
+    p.add_argument("--no-finish", action="store_true",
+                   help="with --run, leave the plan in in-progress/ even when "
+                        "orchestrate exits 0")
     p.add_argument("--heartbeat", metavar="SLUG", help="extend your lease on SLUG")
     p.add_argument("--finish", metavar="SLUG", help="your in-progress SLUG → review-needed/")
     p.add_argument("--return", dest="return_ready", metavar="SLUG",
@@ -387,7 +391,8 @@ def _dispatch(args: argparse.Namespace, answers: Prompter, ctx: Ctx) -> Result:
         if args.return_ready:
             return run("work.return", WorkSlugParams(root=args.root, slug=args.return_ready), answers, ctx)
         return run("work.claim", WorkClaimParams(
-            root=args.root, slug=args.slug, no_fit_check=args.no_fit_check, run=args.run, **worker,
+            root=args.root, slug=args.slug, no_fit_check=args.no_fit_check,
+            run=args.run, no_finish=args.no_finish, **worker,
         ), answers, ctx)
     if verb == "models":
         if args.list or args.action == "list" or not args.alias:

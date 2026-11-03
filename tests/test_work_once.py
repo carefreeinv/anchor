@@ -687,6 +687,47 @@ def test_run_forwards_endpoint_and_registry_before_worktree(tmp_path, monkeypatc
     assert extra[4:6] == ["--worktree", str(Rec.path)]
 
 
+def test_run_exit_0_finishes_to_review_needed(tmp_path, monkeypatch):
+    root = _root(tmp_path)
+    (root / ".plans" / "review-needed").mkdir()
+    _plan(root / ".plans" / "features" / "a.md", preferred="mid")
+    monkeypatch.setattr(work_once, "run_orchestrate", lambda *a, **k: 0)
+    code = work_once.main([
+        "--root", str(root), "--once", "--slug", "a", "--run",
+        "--tier", "mid", "--agent-id", "t", "--no-fit-check",
+    ])
+    assert code == 0
+    assert (root / ".plans" / "review-needed" / "a.md").is_file()
+    assert not (root / ".plans" / "in-progress" / "a.md").is_file()
+
+
+def test_run_exit_2_does_not_finish(tmp_path, monkeypatch):
+    root = _root(tmp_path)
+    (root / ".plans" / "review-needed").mkdir()
+    _plan(root / ".plans" / "features" / "a.md", preferred="mid")
+    monkeypatch.setattr(work_once, "run_orchestrate", lambda *a, **k: 2)
+    code = work_once.main([
+        "--root", str(root), "--once", "--slug", "a", "--run",
+        "--tier", "mid", "--agent-id", "t", "--no-fit-check",
+    ])
+    assert code == 2
+    assert (root / ".plans" / "in-progress" / "a.md").is_file()
+    assert not (root / ".plans" / "review-needed" / "a.md").is_file()
+
+
+def test_run_exit_0_no_finish_flag(tmp_path, monkeypatch):
+    root = _root(tmp_path)
+    (root / ".plans" / "review-needed").mkdir()
+    _plan(root / ".plans" / "features" / "a.md", preferred="mid")
+    monkeypatch.setattr(work_once, "run_orchestrate", lambda *a, **k: 0)
+    code = work_once.main([
+        "--root", str(root), "--once", "--slug", "a", "--run", "--no-finish",
+        "--tier", "mid", "--agent-id", "t", "--no-fit-check",
+    ])
+    assert code == 0
+    assert (root / ".plans" / "in-progress" / "a.md").is_file()
+
+
 def test_nick_effort_applies_unless_cli_effort_wins(tmp_path):
     root = _root(tmp_path)
     reg = tmp_path / "ep.yaml"
