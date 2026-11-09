@@ -622,14 +622,10 @@ class Fleet:
                     continue
                 seen.add(ep.name)
                 found.append(ep)
-        if not self.prefer_local:
+        if not found and not self.prefer_local:
             fb, _ = self._nvidia_build_fallback()
             if fb is not None:
-                key = (fb.base_url.rstrip("/"), fb.model)
-                if fb.name not in seen and all(
-                    (e.base_url.rstrip("/"), e.model) != key for e in found
-                ):
-                    found = [fb, *found]
+                found.append(fb)
         return found
 
     def _nvidia_build_fallback(self) -> tuple[Endpoint | None, str]:

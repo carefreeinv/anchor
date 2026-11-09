@@ -1525,3 +1525,26 @@ def test_main_failed_scope_does_not_failover(git_repo, monkeypatch):
     assert exc.value.code in (
         orchestrate.FAILED_NOOP_EXIT, orchestrate.ROLE_VIOLATION_EXIT,
     )
+
+
+def test_main_failover_all_noop_exits_2(git_repo, monkeypatch):
+    import json
+
+    import orchestrate
+
+    planner = NamedEndpoint("planner", [PLAN_TEXT], model="p")
+    first = NamedEndpoint("ep-a", [BAD_EXEC, BAD_EXEC], model="a")
+    second = NamedEndpoint("ep-b", [BAD_EXEC, BAD_EXEC], model="b")
+    critic = NamedEndpoint("critic", ["review: ok"], model="c")
+    fleet = RosterFleet(
+        planner=planner, executors=[first, second], critic=critic,
+    )
+    out = _run_main(monkeypatch, git_repo, fleet)
+    with pytest.raises(SystemExit) as exc:
+        orchestrate.main()
+    assert exc.value.code == orchestrate.FAILED_NOOP_EXIT
+    run = json.loads(out.read_text())
+    assert run["review"].startswith("critic skipped: 0/")
+    assert first.calls == 2
+    assert second.calls == 2
+    assert critic.calls == 0

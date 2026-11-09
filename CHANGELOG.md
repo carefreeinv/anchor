@@ -13,6 +13,7 @@ Newest first.
   `--endpoint` is the first try and does not pin planner/critic.
   `--no-failover` keeps a single executor. `failed-scope` / `failed-role`
   stop failover. Exhausted roster still exits 2 and skips the critic.
+  NVIDIA Build is appended only when no healthy LAN executor remains.
 
 - **GROK standing rules match Claude on CLI ops.** Rule 13 names `anchor
   plans` and the `scripts/work_once.py` exists-fallback. `/fleet-watch`
