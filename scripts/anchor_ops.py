@@ -871,6 +871,7 @@ def _decide(res: Result, answers: Answers, root: Path, plans: Path, ref, pkg) ->
 CRITIC_DIFF_CHUNK = 8000
 CRITIC_VERIFY_CAP = 2000
 CRITIC_PRIOR_CAP = 2500
+CRITIC_PYTEST_TIMEOUT = 60.0
 
 
 def diff_chunks(diff: str, limit: int = CRITIC_DIFF_CHUNK) -> list[str]:
@@ -932,6 +933,48 @@ def critic_docs_sync(root: Path, timeout: float = 30.0) -> str:
     return f"check_docs_sync.py exit {p.returncode}\n{body}"
 
 
+def critic_pytest_paths(pkg: dict[str, Any]) -> list[str]:
+    """``tests/*.py`` paths from the review range (posix, no pycache)."""
+    out: list[str] = []
+    seen: set[str] = set()
+    for rel in pkg.get("changed") or []:
+        n = str(rel).replace("\\", "/")
+        if not n.startswith("tests/") or not n.endswith(".py"):
+            continue
+        if "/__pycache__/" in n or n in seen:
+            continue
+        seen.add(n)
+        out.append(n)
+    return out
+
+
+def critic_pytest_touched(
+    root: Path, pkg: dict[str, Any], timeout: float = CRITIC_PYTEST_TIMEOUT,
+) -> str:
+    """Scoped pytest on tests/ files in ``pkg['changed']``. Fail-closed on timeout."""
+    paths = critic_pytest_paths(pkg)
+    if not paths:
+        return "pytest skipped (no tests/ in range)"
+    listed = ", ".join(paths)
+    try:
+        p = subprocess.run(
+            [sys.executable, "-m", "pytest", "-q", "--tb=line", *paths],
+            cwd=str(root), capture_output=True, text=True,
+            timeout=timeout, check=False,
+        )
+    except subprocess.TimeoutExpired:
+        return (
+            f"pytest TIMEOUT after {int(timeout)}s ({listed}) — treat as "
+            "failure, do not ACCEPT"
+        )
+    except OSError as exc:
+        return f"pytest: {exc}"
+    body = ((p.stdout or "") + (p.stderr or "")).strip()
+    if len(body) > CRITIC_VERIFY_CAP:
+        body = body[:CRITIC_VERIFY_CAP] + "\n…"
+    return f"pytest exit {p.returncode} ({listed})\n{body}"
+
+
 def critic_verification_block(root: Path, pkg: dict[str, Any], diff: str) -> str:
     """Evidence the review template asks for — missing logs were a false REVISE."""
     parts: list[str] = []
@@ -942,11 +985,7 @@ def critic_verification_block(root: Path, pkg: dict[str, Any], diff: str) -> str
             + critic_changed_stat(Path(root), str(target), str(head))
         )
     parts.append(critic_docs_sync(Path(root)))
-    parts.append(
-        "pytest is not auto-run in this package. Do not REVISE solely because a "
-        "pytest log is missing unless Done when requires it and this block or "
-        "the DIFF shows a failure."
-    )
+    parts.append(critic_pytest_touched(Path(root), pkg))
     return "\n\n".join(parts)
 
 
@@ -968,10 +1007,10 @@ def critic_instruct(index: int, total: int, *, last: bool) -> str:
         "VERIFICATION + CHANGED FILES + earlier slice notes + this DIFF. "
         "Do not REVISE because: this slice is tests or docs only; a Changed "
         "File is absent from this DIFF; an earlier slice said Partial/Pending; "
-        "or verification was not pasted into the DIFF hunks. REVISE only for a "
-        "concrete Done-when failure with evidence. If VERIFICATION shows "
-        "docs-sync OK (or skipped) and earlier slices named no blocking defect, "
-        "ACCEPT."
+        "or verification was not pasted into the DIFF hunks. REVISE if "
+        "VERIFICATION shows pytest exit non-zero or pytest TIMEOUT. Do not "
+        "ACCEPT solely because docs-sync is OK (or skipped). REVISE only for a "
+        "concrete Done-when failure with evidence."
     )
 
 

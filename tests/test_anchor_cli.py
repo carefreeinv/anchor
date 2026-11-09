@@ -908,7 +908,9 @@ def test_critic_instruct_last_slice_forbids_chunk_false_revise():
     last = critic_instruct(3, 3, last=True)
     assert "WHOLE plan" in last
     assert "Do not REVISE because" in last
-    assert "ACCEPT" in last
+    assert "pytest exit non-zero" in last
+    assert "Do not ACCEPT solely because docs-sync" in last
+    assert "docs-sync OK (or skipped) and earlier slices" not in last
 
 
 def test_critic_docs_sync_skipped_without_script(tmp_path):
@@ -919,7 +921,36 @@ def test_critic_docs_sync_skipped_without_script(tmp_path):
     block = critic_verification_block(tmp_path, {}, "")
     assert "VERIFICATION" not in block
     assert "check_docs_sync.py" in block
-    assert "pytest is not auto-run" in block
+    assert "pytest skipped (no tests/ in range)" in block
+    assert "pytest is not auto-run" not in block
+
+
+def test_critic_pytest_touched_skips_without_tests(tmp_path):
+    from anchor_ops import critic_pytest_paths, critic_pytest_touched
+
+    assert critic_pytest_paths({}) == []
+    assert critic_pytest_paths({"changed": ["scripts/anchor_ops.py"]}) == []
+    note = critic_pytest_touched(tmp_path, {"changed": ["scripts/foo.py"]})
+    assert "skipped" in note
+    assert "no tests/" in note
+
+
+def test_critic_pytest_touched_attaches_failure(tmp_path):
+    from anchor_ops import critic_pytest_touched, critic_verification_block
+
+    tests = tmp_path / "tests"
+    tests.mkdir()
+    (tests / "test_boom.py").write_text(
+        "def test_boom():\n    assert False\n", encoding="utf-8",
+    )
+    pkg = {"changed": ["tests/test_boom.py", "scripts/anchor_ops.py"]}
+    note = critic_pytest_touched(tmp_path, pkg)
+    assert "pytest exit" in note
+    assert "exit 0" not in note.split("\n", 1)[0]
+    assert "FAILED" in note or "assert False" in note
+    block = critic_verification_block(tmp_path, pkg, "")
+    assert "pytest exit" in block
+    assert "check_docs_sync.py" in block
 
 
 def test_review_critic_prompt_includes_verification(project, critic_fleet):

@@ -8,6 +8,11 @@ Newest first.
 
 ### Changed
 
+- **CLI critic runs pytest on touched tests.** `critic_verification_block`
+  executes `pytest` on `tests/` paths in the review range (60s cap) and
+  attaches the exit code. Last-slice instruct REVISEs on non-zero or TIMEOUT
+  and no longer ACCEPTs on docs-sync alone.
+
 - **`.env` from the primary git checkout.** `load_dotenv` still prefers cwd then
   this tree; a linked worktree with no copied `.env` also loads the main
   checkout's gitignored `.env` (`git rev-parse --git-common-dir`).
