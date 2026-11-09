@@ -15,6 +15,11 @@ Newest first.
 
 ### Changed
 
+- **`work_once --ensure-worktree` reuses a leftover `var/worktrees/` checkout**
+  that already has `feature/<slug>`. It no longer exits 2 with a generic git
+  checkout error after a successful claim. If the branch is checked out
+  outside `var/worktrees/`, the claim returns to the ready lane.
+
 - **Bare `anchor review` with an empty queue.** If integration is ahead of
   mainline, the command exits 2 and tells you to run `anchor review --promote`
   instead of listing nothing. `--list` still lists an empty queue (exit 1).

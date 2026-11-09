@@ -602,6 +602,24 @@ def test_crude_value_handles_comments_quotes_and_urls():
     assert work_once._crude_value("name: box") == "box"
 
 
+def test_ensure_worktree_failure_returns_plan_to_ready(tmp_path, monkeypatch):
+    root = _root(tmp_path)
+    _plan(root / ".plans" / "bugs" / "a.md", preferred="mid")
+    from worktree_for_agent import WorktreeError
+
+    def boom(*_a, **_k):
+        raise WorktreeError("already checked out at /tmp/other")
+
+    monkeypatch.setattr("worktree_for_agent.ensure_worktree", boom)
+    code = work_once.main([
+        "--root", str(root), "--once", "--no-run", "--ensure-worktree",
+        "--tier", "mid", "--agent-id", "w", "--slug", "a",
+    ])
+    assert code == 2
+    assert (root / ".plans" / "bugs" / "a.md").is_file()
+    assert not (root / ".plans" / "in-progress" / "a.md").is_file()
+
+
 def test_run_with_ensure_worktree_forwards_worktree_to_orchestrate(tmp_path, monkeypatch):
     root = _root(tmp_path)
     _plan(root / ".plans" / "features" / "a.md", preferred="mid")

@@ -307,6 +307,20 @@ def _worktree_registered(project: Path, path: Path) -> bool:
     return False
 
 
+def _worktree_path_for_branch(project: Path, branch: str) -> Path | None:
+    """Path of the worktree that currently has ``branch`` checked out, if any."""
+    want = branch.strip()
+    if not want:
+        return None
+    for e in list_git_worktrees(project):
+        if e.get("branch") == want and e.get("path"):
+            try:
+                return Path(e["path"]).resolve()
+            except OSError:
+                continue
+    return None
+
+
 def feature_branch_name(slug: str) -> str:
     s = re.sub(r"[^a-zA-Z0-9._/-]+", "-", slug.strip())
     s = s.strip("/-") or "work"
@@ -339,9 +353,32 @@ def ensure_worktree(
     # Ensure var/ exists and is ignored even if project was never re-scaffolded
     worktrees_root(project).mkdir(parents=True, exist_ok=True)
     _ensure_var_gitignored(project)
+    records = load_registry(project)
+    if slug:
+        feat_early = feature_branch_name(slug)
+        holder = _worktree_path_for_branch(project, feat_early)
+        if holder is not None:
+            wt_root = worktrees_root(project).resolve()
+            try:
+                holder.relative_to(wt_root)
+            except ValueError:
+                raise WorktreeError(
+                    f"feature branch {feat_early!r} is already checked out at "
+                    f"{holder} (not under {wt_root}); free that checkout or "
+                    f"continue there"
+                ) from None
+            rec = WorktreeRecord(
+                agent_id=agent_id,
+                path=str(holder),
+                branch=feat_early,
+                integration=integration,
+                project=str(project),
+            )
+            records[agent_id] = rec
+            save_registry(project, records)
+            return rec
     path = worktree_path_for(project, agent_id)
     base_branch = agent_base_branch(agent_id)
-    records = load_registry(project)
 
     # Create agent base branch from integration if missing
     if not _ref_exists(project, base_branch):

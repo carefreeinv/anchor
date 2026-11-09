@@ -110,16 +110,12 @@ def test_ensure_worktree_preexisting_unclaimed_branch_still_works(tmp_path: Path
     assert Path(rec.path).is_dir()
 
 
-def test_ensure_worktree_refuses_to_reset_branch_checked_out_elsewhere(tmp_path: Path):
-    """The bug this guards against: `feat` has a real commit and is checked out
-    in another worktree. A second `ensure_worktree` call for the same slug must
-    refuse -- not silently `git checkout -B` it back to `integration`, which
-    would discard the commit. See .plans/bugs/worktree-for-agent-branch-reset."""
+def test_ensure_worktree_reuses_var_worktree_holding_feature_branch(tmp_path: Path):
+    """Same slug already checked out under var/worktrees/: reuse that path.
+    Must not `git checkout -B` (would discard commits) or add a second tree."""
     root = _init_repo(tmp_path)
     rec_a = ensure_worktree(root, "agent-a", slug="shared-slug")
     worktree_a = Path(rec_a.path)
-    # A real, unmerged commit only on the feature branch -- this is what a
-    # buggy reset would discard.
     (worktree_a / "work.txt").write_text("real work\n", encoding="utf-8")
     _git(worktree_a, "add", "work.txt")
     _git(worktree_a, "commit", "-m", "real work on the feature branch")
@@ -128,15 +124,18 @@ def test_ensure_worktree_refuses_to_reset_branch_checked_out_elsewhere(tmp_path:
         cwd=str(root), capture_output=True, text=True, check=True,
     ).stdout.strip()
 
-    with pytest.raises(WorktreeError, match="already checked out"):
-        ensure_worktree(root, "agent-b", slug="shared-slug")
+    rec_b = ensure_worktree(root, "agent-b", slug="shared-slug")
+    assert Path(rec_b.path).resolve() == worktree_a.resolve()
+    assert rec_b.branch == "feature/shared-slug"
 
     tip_after = subprocess.run(
         ["git", "rev-parse", "feature/shared-slug"],
         cwd=str(root), capture_output=True, text=True, check=True,
     ).stdout.strip()
-    assert tip_after == tip_before, "the branch's commit must survive the refused attempt"
-    assert (worktree_a / "work.txt").is_file(), "worktree A's checkout must be untouched"
+    assert tip_after == tip_before
+    assert (worktree_a / "work.txt").is_file()
+    agent_b_path = root / "var" / "worktrees" / "agent-b"
+    assert not agent_b_path.exists()
 
 
 def test_no_trunk_raises(tmp_path: Path):

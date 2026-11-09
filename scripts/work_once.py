@@ -852,6 +852,22 @@ def _one_claim(root: Path, plans_root: Path, worker, args) -> tuple[int, int]:
                 extra = ["--worktree", str(rec.path), *extra]
         except WorktreeError as exc:
             print(f"[work_once] worktree ensure failed: {exc}", file=sys.stderr)
+            try:
+                rel = str(
+                    Path(plan_path).resolve().relative_to(plans_root.resolve())
+                ).replace("\\", "/")
+                dest = return_to_ready(
+                    plans_root, rel, agent_id=args.agent_id
+                )
+                print(
+                    f"[work_once] released claim after ensure failure → {dest}",
+                    file=sys.stderr,
+                )
+            except Exception as rel_exc:  # noqa: BLE001
+                print(
+                    f"[work_once] could not release claim: {rel_exc}",
+                    file=sys.stderr,
+                )
             return 2, 0
         except Exception as exc:  # noqa: BLE001
             print(f"[work_once] worktree ensure failed: {exc}", file=sys.stderr)
