@@ -38,6 +38,7 @@ from __future__ import annotations
 
 import os
 import re
+import subprocess
 import sys
 import time
 from dataclasses import dataclass, field
@@ -104,17 +105,53 @@ THINK_RE = re.compile(r"<think>.*?</think>\s*", re.DOTALL)
 API_KEY_ENV = ("ANCHOR_API_KEY", "NVIDIA_API_KEY", "NGC_API_KEY")
 
 
+def primary_checkout_env(start: Path) -> Path | None:
+    """``.env`` next to the primary git worktree for *start*.
+
+    Linked worktrees do not copy gitignored files. ``git rev-parse
+    --git-common-dir`` is the shared ``.git``; its parent is the checkout
+    that usually holds ``NVIDIA_API_KEY``.
+    """
+    try:
+        r = subprocess.run(
+            ["git", "-C", str(start), "rev-parse", "--git-common-dir"],
+            capture_output=True, text=True, timeout=5, check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    if r.returncode != 0:
+        return None
+    raw = r.stdout.strip()
+    if not raw:
+        return None
+    common = Path(raw)
+    if not common.is_absolute():
+        common = (Path(start) / common).resolve()
+    else:
+        common = common.resolve()
+    if common.name != ".git":
+        return None
+    env = common.parent / ".env"
+    return env if env.is_file() else None
+
+
 def load_dotenv(path: Path | None = None) -> Path | None:
     """Load ``KEY=VALUE`` from a gitignored ``.env`` into ``os.environ``.
 
     Already-exported variables win (setdefault). Returns the first path that
-    existed, or None. Never prints values.
+    existed, or None. Never prints values. Default search: cwd, then
+    ``REPO_ROOT``, then the primary git checkout (so a linked worktree still
+    sees the main tree's ``.env``).
     """
     candidates: list[Path] = []
     if path is not None:
         candidates.append(Path(path))
     else:
         candidates.extend((Path.cwd() / ".env", REPO_ROOT / ".env"))
+        for start in (Path.cwd(), REPO_ROOT):
+            extra = primary_checkout_env(start)
+            if extra is not None:
+                candidates.append(extra)
     loaded: Path | None = None
     seen: set[Path] = set()
     for raw_path in candidates:

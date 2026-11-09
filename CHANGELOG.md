@@ -8,6 +8,10 @@ Newest first.
 
 ### Changed
 
+- **`.env` from the primary git checkout.** `load_dotenv` still prefers cwd then
+  this tree; a linked worktree with no copied `.env` also loads the main
+  checkout's gitignored `.env` (`git rev-parse --git-common-dir`).
+
 - **Skills prefer CLI after one successful probe.** `/work`, `/review`, and
   `/draft` dispatch list/claim/finish/promote/critic to `anchor` / `work_once`
   when the binary answered this session. Last-known-good wins over redoing

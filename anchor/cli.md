@@ -44,7 +44,8 @@ overlays that both define the same alias also fail. `anchor models nick`
 writes only the overlay, never the shared registry. `--effort` on the CLI
 still wins over a nickname default. Machine is a label, not a locality
 flag. `anchor` loads a gitignored repo-root `.env`
-(setdefault) before verbs run; Authorization is the first set of
+(cwd, then this tree, then the primary git checkout when cwd is a linked
+worktree; setdefault) before verbs run; Authorization is the first set of
 `ANCHOR_API_KEY`, `NVIDIA_API_KEY`, `NGC_API_KEY`. Named-slug execute (and the `--run` alias) hands the claimed
 plan to `orchestrate.py` with the same `--endpoint`/`--registry` used to claim
 (omit them to use the default fleet file) and forwards `--worktree` to the

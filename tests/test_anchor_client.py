@@ -232,6 +232,41 @@ def test_load_dotenv_setdefault_does_not_override(tmp_path, monkeypatch):
     assert os.environ["ALREADY"] == "exported"
 
 
+def test_load_dotenv_reads_primary_checkout_from_worktree(tmp_path, monkeypatch):
+    import subprocess
+
+    import anchor_client
+
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    subprocess.run(["git", "init"], cwd=repo, check=True, capture_output=True)
+    subprocess.run(
+        ["git", "config", "user.email", "t@example.com"], cwd=repo, check=True,
+        capture_output=True,
+    )
+    subprocess.run(
+        ["git", "config", "user.name", "t"], cwd=repo, check=True, capture_output=True,
+    )
+    (repo / "README").write_text("hi\n", encoding="utf-8")
+    subprocess.run(["git", "add", "README"], cwd=repo, check=True, capture_output=True)
+    subprocess.run(
+        ["git", "commit", "-m", "init"], cwd=repo, check=True, capture_output=True,
+    )
+    (repo / ".env").write_text("NVIDIA_API_KEY=from-primary\n", encoding="utf-8")
+    wt = tmp_path / "wt"
+    subprocess.run(
+        ["git", "worktree", "add", "-b", "feat", str(wt)],
+        cwd=repo, check=True, capture_output=True,
+    )
+    assert not (wt / ".env").exists()
+    monkeypatch.chdir(wt)
+    monkeypatch.setattr(anchor_client, "REPO_ROOT", wt)
+    monkeypatch.delenv("NVIDIA_API_KEY", raising=False)
+    loaded = anchor_client.load_dotenv()
+    assert loaded == (repo / ".env").resolve()
+    assert os.environ["NVIDIA_API_KEY"] == "from-primary"
+
+
 @patch("anchor_client.time.sleep")
 @patch("anchor_client.requests.post")
 def test_chat_retries_on_connection_error_then_succeeds(mock_post, mock_sleep):
