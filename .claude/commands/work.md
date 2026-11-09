@@ -206,7 +206,7 @@ session on `small`/`mid` Preferred, probe for a **lesser configured executor**:
 
 ```text
 anchor work --list --endpoint <name>
-python scripts/work_once.py --once --run --ensure-worktree --endpoint <name> --registry scripts/endpoints.yaml
+python scripts/work_once.py --once --ensure-worktree --endpoint <name> --registry scripts/endpoints.yaml
 ```
 
 (or “open a session on \<model\>”). Leave the plan unclaimed for that worker.
@@ -322,7 +322,7 @@ use tiers + names only — profile tags guide self-assessment.
 
    ```text
    skip: features/<slug> — underqualified (Preferred: reasoner; you: Sonnet 5/mid)
-   → python scripts/work_once.py --once --run --ensure-worktree --endpoint h100-nemotron --registry scripts/endpoints.yaml
+   → python scripts/work_once.py --once --ensure-worktree --endpoint h100-nemotron --registry scripts/endpoints.yaml
    → /work --no-fit-check <slug> to run it here anyway
    ```
 

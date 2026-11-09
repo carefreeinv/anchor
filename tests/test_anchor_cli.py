@@ -850,6 +850,28 @@ def test_delegation_reports_missing_doctrine(project, stub_fleet, monkeypatch):
     assert any("doctrine" in n for n in doc["notes"])
 
 
+def test_review_interactive_critic_without_delegate_flag(project, critic_fleet):
+    write(project, "review-needed", "r1")
+    code, doc = cli(
+        ["review", "r1", "--root", str(project), "--json",
+         "--registry", str(critic_fleet)],
+        interactive=True, answers=["skip"],
+    )
+    assert code == 0
+    assert doc["result"]["critic"]["verdict"] == "REVISE"
+
+
+def test_review_no_delegate_skips_critic_chat(project, critic_fleet):
+    write(project, "review-needed", "r1")
+    code, doc = cli(
+        ["review", "r1", "--root", str(project), "--json", "--no-delegate",
+         "--registry", str(critic_fleet)],
+        interactive=True, answers=["skip"],
+    )
+    assert code == 0
+    assert "critic" not in (doc.get("result") or {})
+
+
 def test_review_delegate_critic_thinks_off(project, critic_fleet):
     write(project, "review-needed", "r1")
     _StubEndpoint.last_kw = None

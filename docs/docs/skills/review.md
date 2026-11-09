@@ -19,7 +19,8 @@ whose **Promote** merges `dev` into `main`.
 
 This is **not** free-form “code review any PR.” Ad-hoc diffs belong to the
 platform’s code-review tools. `/review` owns **`review-needed/`** sign-off and
-the empty-queue **dev → main** gate.
+the empty-queue **dev → main** gate. CLI: `anchor review <slug>` runs the critic
+interactively (`--no-delegate` skips; headless still pending).
 
 ## Why use it
 

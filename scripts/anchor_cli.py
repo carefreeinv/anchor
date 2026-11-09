@@ -254,10 +254,15 @@ def _common(p: argparse.ArgumentParser) -> None:
                    help="never prompt; JSON output; stop with exit 3 where an answer is needed")
 
 
-def _delegation(p: argparse.ArgumentParser, role: str) -> None:
+def _delegation(p: argparse.ArgumentParser, role: str, *, opt_out: bool = False) -> None:
+    extra = "; alias of the default critic" if opt_out else ""
     p.add_argument("--delegate", nargs="?", const="auto", metavar="ENDPOINT",
                    help=f"interactive only: send the judgment step to ENDPOINT from the "
-                        f"registry (bare flag: first endpoint for the '{role}' role)")
+                        f"registry (bare flag: first endpoint for the '{role}' role)"
+                        f"{extra}")
+    if opt_out:
+        p.add_argument("--no-delegate", action="store_true",
+                       help="skip the critic chat (package + operator decision only)")
     p.add_argument("--registry", help="endpoints.yaml (default: scripts/endpoints.yaml)")
 
 
@@ -289,9 +294,8 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--registry", help="endpoints.yaml for --endpoint")
     p.add_argument("--no-fit-check", action="store_true", help="ignore Preferred models")
     p.add_argument("--run", action="store_true",
-                   help="interactive only: hand the claimed plan to orchestrate.py "
-                        "(uses the same --endpoint/--registry as claim); exit 0 "
-                        "parks in review-needed/")
+                   help="alias: named slug already executes; interactive only "
+                        "hands the claimed plan to orchestrate.py")
     p.add_argument("--no-finish", action="store_true",
                    help="with --run, leave the plan in in-progress/ even when "
                         "orchestrate exits 0")
@@ -304,7 +308,7 @@ def build_parser() -> argparse.ArgumentParser:
     _common(p)
     p.add_argument("slug", nargs="?", help="review this plan (asks for the decision)")
     p.add_argument("--list", action="store_true", help="list review-needed plans")
-    _delegation(p, "critic")
+    _delegation(p, "critic", opt_out=True)
 
     p = sub.add_parser("draft", help="list drafts; scaffold or promote one")
     _common(p)
@@ -337,7 +341,8 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--endpoint", help="registry endpoint for --list/--once")
     p.add_argument("--model", help="model name for --list/--once")
     p.add_argument("--registry", help="endpoints.yaml for --endpoint")
-    p.add_argument("--run", action="store_true", help="with --once, pass --run to work_once")
+    p.add_argument("--run", action="store_true",
+                   help="with --once, execute (omit to pass --no-run to work_once)")
     p.add_argument("--load-watcher", action="store_true",
                    help="also emit the inference_load --watch unit")
     p.add_argument(
@@ -434,8 +439,11 @@ def _dispatch(args: argparse.Namespace, answers: Prompter, ctx: Ctx) -> Result:
     if verb == "review":
         if args.list or not args.slug:
             return run("review.list", ReviewListParams(root=args.root), answers, ctx)
+        no_delegate = bool(getattr(args, "no_delegate", False))
+        delegate = None if no_delegate else (args.delegate or "auto")
         return run("review.review", ReviewParams(
-            root=args.root, slug=args.slug, delegate=args.delegate, registry=args.registry,
+            root=args.root, slug=args.slug, delegate=delegate,
+            registry=args.registry, no_delegate=no_delegate,
         ), answers, ctx)
     if verb == "fleet-watch":
         root = args.project or args.root

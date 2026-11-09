@@ -204,6 +204,8 @@ def work_once_cmd(
         cmd.append("--local-worker")
     if worker.run:
         cmd.append("--run")
+    else:
+        cmd.append("--no-run")
     if worker.watch:
         cmd.append("--watch")
         hb = parse_interval_to_seconds(worker.interval)
@@ -715,7 +717,10 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--endpoint", help="endpoint name for --list/--once/--triage")
     ap.add_argument("--model", help="model name for --list/--once/--triage")
     ap.add_argument("--registry", help="endpoints.yaml path")
-    ap.add_argument("--run", action="store_true", help="with --once, pass --run to work_once")
+    ap.add_argument(
+        "--run", action="store_true",
+        help="with --once, execute (omit to pass --no-run to work_once)",
+    )
     ap.add_argument(
         "--worker",
         action="append",

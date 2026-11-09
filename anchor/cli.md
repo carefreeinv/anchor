@@ -3,24 +3,25 @@
 `anchor plans | work | review | draft | fleet-watch | models` runs the `.plans/` workflow from a
 terminal, with no chat harness. It is a small, deterministic program: every
 decision it makes comes from a fixed set of outcomes with a rule you can name,
-and it runs no model on any default path. Anything that needs judgment is either
-**delegated** (only when you ask, and only interactively) or **handed back** as
-a named pending step.
+and it runs no model on list/heartbeat/finish/return. Interactive `anchor review`
+runs the critic by default (`--no-delegate` skips it). `work_once.py --once`
+executes unless `--no-run`. Anything else that needs judgment is either
+**delegated** (interactively) or **handed back** as a named pending step.
 
 **Operator loop** (cwd is a project with `.plans/`; `anchor --help` is still the scaffolder):
 
 ```bash
 anchor plans                         # every lane
 anchor work --list --tier mid        # ready + fit; add --endpoint <nick> after `anchor models nick`
-anchor work --run --endpoint <nick>  # TTY: claim + orchestrate.py (headless --run is ignored)
-anchor work --finish <slug>          # in-progress → review-needed/ (or let --run exit 0 park it)
+anchor work <slug> --endpoint <nick> # TTY: claim + orchestrate.py (`--run` is an alias)
+anchor work --finish <slug>          # in-progress → review-needed/ (or let execute exit 0 park it)
 anchor review --list
-anchor review <slug>                 # TTY Approve / Needs Work
+anchor review <slug>                 # TTY critic + Approve / Needs Work (`--no-delegate` skips critic)
 anchor models list
 anchor fleet-watch --status
 ```
 
-`--run` is **interactive only**. Exit 0 parks in `review-needed/` unless `--no-finish`. Headless `work_once.py --once --run --ensure-worktree --endpoint …` is the unattended execute path. `--root` if cwd has no `.plans/`.
+Named-slug `anchor work` execute is **interactive only**. Exit 0 parks in `review-needed/` unless `--no-finish`. Headless unattended execute is `python scripts/work_once.py --once --ensure-worktree --endpoint …` (`--run` is a no-op alias; `--no-run` claims only). `--root` if cwd has no `.plans/`.
 
 Implementation: verb logic lives in `scripts/anchor_ops.py` (a typed operations
 registry). `scripts/anchor_cli.py` is the terminal adapter — parser, prompts,
@@ -43,7 +44,7 @@ writes only the overlay, never the shared registry. `--effort` on the CLI
 still wins over a nickname default. Machine is a label, not a locality
 flag. `anchor` loads a gitignored repo-root `.env`
 (setdefault) before verbs run; Authorization is the first set of
-`ANCHOR_API_KEY`, `NVIDIA_API_KEY`, `NGC_API_KEY`. `--run` hands the claimed
+`ANCHOR_API_KEY`, `NVIDIA_API_KEY`, `NGC_API_KEY`. Named-slug execute (and the `--run` alias) hands the claimed
 plan to `orchestrate.py` with the same `--endpoint`/`--registry` used to claim
 (omit them to use the default fleet file) and forwards `--worktree` to the
 feature worktree (`var/worktrees/<agent-id>/`, never main/master/dev/develop).
@@ -51,7 +52,7 @@ That default `Fleet.pick` probes LAN rows
 before chat and falls back to NVIDIA Build when the probe is live (see
 `platforms/nvidia-build/BUILD.md`). `orchestrate.py` applies unified diffs or whole-file fences
 from the executor reply into `--worktree` before scope/verify. `work_once.py
---run --ensure-worktree` forwards `--worktree`; extra `-- --worktree <dir>`
+--once --ensure-worktree` forwards `--worktree`; extra `-- --worktree <dir>`
 still works. Footer-only replies do not write files.
 
 ## The rule for the split
@@ -91,11 +92,11 @@ that answer, so the CLI has none that tries.
 | `--list`: ready plans with your fit and deps | deterministic | `plan_select.inventory` |
 | claim (bare pick or named slug) | deterministic | `work_once.pick_claim_one`: the same pick, skip and lease rules as `work_once.py` |
 | `--heartbeat`, `--finish` (→ `review-needed/`), `--return` | deterministic | `plan_lease`; only the lease holder may move its plan |
-| carry out the plan's Steps | **model** | returned as pending `execute`; `--run` (interactive only) hands the plan to `orchestrate.py` with the same `--endpoint`/`--registry` used to claim, plus `--worktree` |
+| carry out the plan's Steps | **model** | named slug (or `--run` alias) hands the plan to `orchestrate.py` interactively; headless named-slug still pending `execute` |
 
-`anchor work` has no merge. Interactive `--run` that exits 0 (and
-`work_once --run` exit 0) moves the plan to `review-needed/` the same way
-`--finish` does. `--no-finish` on `work_once` or `anchor work --run` leaves the lease. Exit 2
+`anchor work` has no merge. Interactive execute that exits 0 (and
+`work_once --once` exit 0) moves the plan to `review-needed/` the same way
+`--finish` does. `--no-finish` leaves the lease. Exit 2
 never finishes. Landing work is `anchor review`'s job (or `/work`'s
 culmination question inside a harness).
 
@@ -105,7 +106,7 @@ culmination question inside a harness).
 |------|------|-----|
 | list `review-needed/` with hold notes | deterministic | directory read + `pending_merges.is_held` |
 | the review package: branch, target, head, changed files, fast-forward? | deterministic | git, via `merge_feature` helpers |
-| AI critic pass | **model** | pending `critic`; `--delegate` sends it to an endpoint |
+| AI critic pass | **model** | interactive `anchor review <slug>` runs it (`--delegate` alias; `--no-delegate` skips; headless still pending) |
 | **Approve / Needs Work / Skip / Defer** | **operator** | the `/review` sign-off; never inferred |
 | Approve after a critic verdict of REVISE, ESCALATE or unreadable | **operator** | a second, explicit "approve despite critic concerns?" yes; anything else leaves the plan in `review-needed/` |
 | Needs Work: which ready lane, and the notes | **operator** | notes must be real; an empty answer counts as no answer |

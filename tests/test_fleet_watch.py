@@ -250,6 +250,11 @@ def test_worker_spec_local_flag_reaches_work_once(tmp_path):
     assert w.local is True
     cmd = fw.work_once_cmd(Path(fw.SCRIPTS_DIR), project, w, python="/usr/bin/python3")
     assert "--local-worker" in cmd
+    assert "--no-run" in cmd
+    runner = fw.parse_worker("tier=mid,agent=m1,run=1")
+    run_cmd = fw.work_once_cmd(Path(fw.SCRIPTS_DIR), project, runner, python="/usr/bin/python3")
+    assert "--run" in run_cmd
+    assert "--no-run" not in run_cmd
     plain = fw.parse_worker("tier=small,agent=swarm-2")
     assert "--local-worker" not in fw.work_once_cmd(
         Path(fw.SCRIPTS_DIR), project, plain, python="/usr/bin/python3"

@@ -46,7 +46,7 @@ def test_list_exit_zero_and_shows_fit(tmp_path, capsys):
 
 def test_once_empty_backlog_exits_1(tmp_path, capsys):
     root = _root(tmp_path)
-    code = work_once.main(["--root", str(root), "--once", "--tier", "mid", "--agent-id", "t"])
+    code = work_once.main(["--root", str(root), "--once", "--no-run", "--tier", "mid", "--agent-id", "t"])
     assert code == 1
 
 
@@ -54,7 +54,7 @@ def test_once_no_fit_exits_1(tmp_path):
     root = _root(tmp_path)
     _plan(root / ".plans" / "features" / "hard.md", preferred="frontier")
     code = work_once.main(
-        ["--root", str(root), "--once", "--tier", "small", "--agent-id", "tiny"]
+        ["--root", str(root), "--once", "--no-run", "--tier", "small", "--agent-id", "tiny"]
     )
     assert code == 1
 
@@ -180,7 +180,7 @@ def test_bare_loop_never_picks_human_assigned(tmp_path):
     root = _root(tmp_path)
     _plan(root / ".plans" / "features" / "hers.md", preferred="mid", assignee="alice")
     code = work_once.main(
-        ["--root", str(root), "--once", "--tier", "mid", "--agent-id", "w1"]
+        ["--root", str(root), "--once", "--no-run", "--tier", "mid", "--agent-id", "w1"]
     )
     assert code == 1
     assert (root / ".plans" / "features" / "hers.md").is_file()
@@ -191,14 +191,14 @@ def test_named_human_assigned_refused_then_forced(tmp_path, capsys):
     _plan(root / ".plans" / "features" / "hers.md", preferred="mid", assignee="alice")
     # Named claim of a human plan is refused by default (exit 1, file stays put).
     code = work_once.main(
-        ["--root", str(root), "--slug", "hers", "--tier", "mid", "--agent-id", "w1"]
+        ["--root", str(root), "--slug", "hers", "--no-run", "--tier", "mid", "--agent-id", "w1"]
     )
     assert code == 1
     assert "assigned to alice" in capsys.readouterr().err
     assert (root / ".plans" / "features" / "hers.md").is_file()
     # --allow-assigned forces it (operator override).
     code = work_once.main(
-        ["--root", str(root), "--slug", "hers", "--tier", "mid",
+        ["--root", str(root), "--slug", "hers", "--no-run", "--tier", "mid",
          "--agent-id", "w1", "--allow-assigned"]
     )
     assert code == 0
@@ -209,7 +209,7 @@ def test_once_moves_to_in_progress_and_blocks_others(tmp_path, capsys):
     root = _root(tmp_path)
     _plan(root / ".plans" / "features" / "a.md", preferred="mid")
     code = work_once.main(
-        ["--root", str(root), "--once", "--tier", "mid", "--agent-id", "w1"]
+        ["--root", str(root), "--once", "--no-run", "--tier", "mid", "--agent-id", "w1"]
     )
     assert code == 0
     out = capsys.readouterr().out.strip()
@@ -218,7 +218,7 @@ def test_once_moves_to_in_progress_and_blocks_others(tmp_path, capsys):
     assert not (root / ".plans" / "features" / "a.md").exists()
     # second worker cannot claim the moved plan
     code2 = work_once.main(
-        ["--root", str(root), "--once", "--tier", "mid", "--agent-id", "w2"]
+        ["--root", str(root), "--once", "--no-run", "--tier", "mid", "--agent-id", "w2"]
     )
     assert code2 == 1
 
@@ -228,13 +228,13 @@ def test_bare_pick_never_resumes_takes_next_ready(tmp_path, capsys):
     _plan(root / ".plans" / "features" / "a.md", preferred="mid")
     _plan(root / ".plans" / "features" / "b.md", preferred="mid")
     work_once.main(
-        ["--root", str(root), "--once", "--tier", "mid", "--agent-id", "w1"]
+        ["--root", str(root), "--once", "--no-run", "--tier", "mid", "--agent-id", "w1"]
     )
     capsys.readouterr()  # clear first claim (a.md → in-progress)
     # A second bare pick for the same agent does NOT resume in-progress/a.md;
     # it claims the next ready plan (b.md). Resume is an explicit --path claim.
     code = work_once.main(
-        ["--root", str(root), "--once", "--tier", "mid", "--agent-id", "w1"]
+        ["--root", str(root), "--once", "--no-run", "--tier", "mid", "--agent-id", "w1"]
     )
     assert code == 0
     out = capsys.readouterr().out.strip()
@@ -248,7 +248,7 @@ def test_heartbeat_extends_lease(tmp_path, capsys):
     root = _root(tmp_path)
     _plan(root / ".plans" / "features" / "a.md", preferred="mid")
     work_once.main(
-        ["--root", str(root), "--once", "--tier", "mid", "--agent-id", "w1"]
+        ["--root", str(root), "--once", "--no-run", "--tier", "mid", "--agent-id", "w1"]
     )
     capsys.readouterr()
     plans = root / ".plans"
@@ -267,7 +267,7 @@ def test_recover_only_takes_over_expired_lease(tmp_path):
     root = _root(tmp_path)
     _plan(root / ".plans" / "features" / "a.md", preferred="mid")
     work_once.main(
-        ["--root", str(root), "--once", "--tier", "mid", "--agent-id", "w1"]
+        ["--root", str(root), "--once", "--no-run", "--tier", "mid", "--agent-id", "w1"]
     )
     plans = root / ".plans"
     # Active foreign lease → recover refused.
@@ -326,7 +326,7 @@ def test_no_fit_check_picks_mismatch(tmp_path, capsys):
         [
             "--root",
             str(root),
-            "--once",
+            "--once", "--no-run",
             "--tier",
             "small",
             "--no-fit-check",
@@ -437,7 +437,7 @@ def test_local_worker_does_not_claim_when_level_is_off(tmp_path, capsys):
     _plan(root / ".plans" / "features" / "a.md", preferred="small")
     _set_level(root, "off")
     code = work_once.main([
-        "--root", str(root), "--once", "--endpoint", "box",
+        "--root", str(root), "--once", "--no-run", "--endpoint", "box",
         "--registry", str(_registry(tmp_path)), "--agent-id", "w",
     ])
     assert code == 1
@@ -452,7 +452,7 @@ def test_local_worker_claims_when_level_is_full(tmp_path):
     _plan(root / ".plans" / "features" / "a.md", preferred="small")
     _set_level(root, "high")
     code = work_once.main([
-        "--root", str(root), "--once", "--endpoint", "box",
+        "--root", str(root), "--once", "--no-run", "--endpoint", "box",
         "--registry", str(_registry(tmp_path)), "--agent-id", "w",
     ])
     assert code == 0
@@ -465,7 +465,7 @@ def test_level_low_bars_a_mid_tier_local_worker(tmp_path, capsys):
     _set_level(root, "low")
     reg = _registry(tmp_path)
     code = work_once.main([
-        "--root", str(root), "--once", "--endpoint", "box", "--tier", "mid",
+        "--root", str(root), "--once", "--no-run", "--endpoint", "box", "--tier", "mid",
         "--registry", str(reg), "--agent-id", "w",
     ])
     assert code == 1
@@ -478,7 +478,7 @@ def test_cloud_endpoint_is_never_capped_by_site_load(tmp_path):
     _set_level(root, "off")
     reg = _registry(tmp_path, base_url="https://api.example.com/v1")
     code = work_once.main([
-        "--root", str(root), "--once", "--endpoint", "box",
+        "--root", str(root), "--once", "--no-run", "--endpoint", "box",
         "--registry", str(reg), "--agent-id", "w",
     ])
     assert code == 0
@@ -491,7 +491,7 @@ def test_explicit_local_false_opts_a_private_endpoint_out(tmp_path):
     _set_level(root, "off")
     reg = _registry(tmp_path, base_url="http://10.0.1.10:8000/v1", local="    local: false\n")
     code = work_once.main([
-        "--root", str(root), "--once", "--endpoint", "box",
+        "--root", str(root), "--once", "--no-run", "--endpoint", "box",
         "--registry", str(reg), "--agent-id", "w",
     ])
     assert code == 0
@@ -502,7 +502,7 @@ def test_ignore_load_overrides_the_cap(tmp_path):
     _plan(root / ".plans" / "features" / "a.md", preferred="small")
     _set_level(root, "off")
     code = work_once.main([
-        "--root", str(root), "--once", "--endpoint", "box", "--ignore-load",
+        "--root", str(root), "--once", "--no-run", "--endpoint", "box", "--ignore-load",
         "--registry", str(_registry(tmp_path)), "--agent-id", "w",
     ])
     assert code == 0
@@ -513,7 +513,7 @@ def test_local_worker_flag_gates_without_an_endpoint(tmp_path, capsys):
     _plan(root / ".plans" / "features" / "a.md", preferred="small")
     _set_level(root, "off")
     code = work_once.main([
-        "--root", str(root), "--once", "--tier", "small", "--local-worker",
+        "--root", str(root), "--once", "--no-run", "--tier", "small", "--local-worker",
         "--agent-id", "w",
     ])
     assert code == 1
@@ -525,7 +525,7 @@ def test_tier_worker_without_local_flag_is_not_gated(tmp_path):
     _plan(root / ".plans" / "features" / "a.md", preferred="small")
     _set_level(root, "off")
     code = work_once.main([
-        "--root", str(root), "--once", "--tier", "small", "--agent-id", "w",
+        "--root", str(root), "--once", "--no-run", "--tier", "small", "--agent-id", "w",
     ])
     assert code == 0
 
@@ -534,7 +534,7 @@ def test_unconfigured_site_leaves_local_workers_alone(tmp_path):
     root = _root(tmp_path)
     _plan(root / ".plans" / "features" / "a.md", preferred="small")
     code = work_once.main([
-        "--root", str(root), "--once", "--endpoint", "box",
+        "--root", str(root), "--once", "--no-run", "--endpoint", "box",
         "--registry", str(_registry(tmp_path)), "--agent-id", "w",
     ])
     assert code == 0
@@ -553,7 +553,7 @@ def test_stale_policy_holds_local_work_by_default(tmp_path, capsys):
         il.LoadPolicy(level="high", ttl_s=30, received_at=time.time() - 600),
     )
     code = work_once.main([
-        "--root", str(root), "--once", "--endpoint", "box",
+        "--root", str(root), "--once", "--no-run", "--endpoint", "box",
         "--registry", str(_registry(tmp_path)), "--agent-id", "w",
     ])
     assert code == 1
@@ -722,6 +722,42 @@ def test_run_exit_0_no_finish_flag(tmp_path, monkeypatch):
     monkeypatch.setattr(work_once, "run_orchestrate", lambda *a, **k: 0)
     code = work_once.main([
         "--root", str(root), "--once", "--slug", "a", "--run", "--no-finish",
+        "--tier", "mid", "--agent-id", "t", "--no-fit-check",
+    ])
+    assert code == 0
+    assert (root / ".plans" / "in-progress" / "a.md").is_file()
+
+
+def test_once_without_run_flag_still_orchestrates(tmp_path, monkeypatch):
+    root = _root(tmp_path)
+    (root / ".plans" / "review-needed").mkdir()
+    _plan(root / ".plans" / "features" / "a.md", preferred="mid")
+    called: list[int] = []
+
+    def fake_run(plan_path, extra):
+        called.append(1)
+        return 0
+
+    monkeypatch.setattr(work_once, "run_orchestrate", fake_run)
+    code = work_once.main([
+        "--root", str(root), "--once", "--slug", "a",
+        "--tier", "mid", "--agent-id", "t", "--no-fit-check",
+    ])
+    assert code == 0
+    assert called == [1]
+    assert (root / ".plans" / "review-needed" / "a.md").is_file()
+
+
+def test_no_run_skips_orchestrate(tmp_path, monkeypatch):
+    root = _root(tmp_path)
+    _plan(root / ".plans" / "features" / "a.md", preferred="mid")
+
+    def boom(*a, **k):
+        raise AssertionError("orchestrate must not run with --no-run")
+
+    monkeypatch.setattr(work_once, "run_orchestrate", boom)
+    code = work_once.main([
+        "--root", str(root), "--once", "--no-run", "--slug", "a",
         "--tier", "mid", "--agent-id", "t", "--no-fit-check",
     ])
     assert code == 0

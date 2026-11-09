@@ -226,41 +226,41 @@ def test_golden_review_headless_needs_operator(project):
 
 def test_golden_review_skip(project):
     write(project, "review-needed", "r1")
-    code, doc = cli(["review", "r1", "--root", str(project), "--json"],
+    code, doc = cli(["review", "r1", "--root", str(project), "--json", "--no-delegate"],
                     interactive=True, answers=["skip"])
     assert_golden("review_skip", code, doc, project)
 
 
 def test_golden_review_needs_work_empty_notes(project):
     write(project, "review-needed", "r1")
-    code, doc = cli(["review", "r1", "--root", str(project), "--json"],
+    code, doc = cli(["review", "r1", "--root", str(project), "--json", "--no-delegate"],
                     interactive=True, answers=["needs-work", "bugs", ""])
     assert_golden("review_needs_work_empty_notes", code, doc, project)
 
 
 def test_golden_review_needs_work(project):
     write(project, "review-needed", "r1")
-    code, doc = cli(["review", "r1", "--root", str(project), "--json"],
+    code, doc = cli(["review", "r1", "--root", str(project), "--json", "--no-delegate"],
                     interactive=True, answers=["needs-work", "bugs", "Done when #1 fails"])
     assert_golden("review_needs_work", code, doc, project)
 
 
 def test_golden_review_defer(project):
     write(project, "review-needed", "r1")
-    code, doc = cli(["review", "r1", "--root", str(project), "--json"],
+    code, doc = cli(["review", "r1", "--root", str(project), "--json", "--no-delegate"],
                     interactive=True, answers=["defer", "waiting on staging"])
     assert_golden("review_defer", code, doc, project)
 
 
 def test_golden_review_approve_without_branch(project):
     write(project, "review-needed", "r1")
-    code, doc = cli(["review", "r1", "--root", str(project), "--json"],
+    code, doc = cli(["review", "r1", "--root", str(project), "--json", "--no-delegate"],
                     interactive=True, answers=["approve"])
     assert_golden("review_approve_without_branch", code, doc, project)
 
 
 def test_golden_review_approve_fast_forward(repo_project):
-    code, doc = cli(["review", "r1", "--root", str(repo_project), "--json"],
+    code, doc = cli(["review", "r1", "--root", str(repo_project), "--json", "--no-delegate"],
                     interactive=True, answers=["approve"])
     assert_golden("review_approve_fast_forward", code, doc, repo_project)
 
@@ -269,7 +269,7 @@ def test_golden_review_approve_not_fast_forward(repo_project):
     (repo_project / "other.txt").write_text("y\n", encoding="utf-8")
     _git(repo_project, "add", "other.txt")
     _git(repo_project, "commit", "-m", "dev moved on")
-    code, doc = cli(["review", "r1", "--root", str(repo_project), "--json"],
+    code, doc = cli(["review", "r1", "--root", str(repo_project), "--json", "--no-delegate"],
                     interactive=True, answers=["approve"])
     assert_golden("review_approve_not_fast_forward", code, doc, repo_project)
 

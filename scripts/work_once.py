@@ -598,10 +598,16 @@ def main(argv: list[str] | None = None) -> int:
         default=True,
         help="print claimed plan path(s) to stdout (default)",
     )
-    ap.add_argument(
+    run_g = ap.add_mutually_exclusive_group()
+    run_g.add_argument(
         "--run",
         action="store_true",
-        help="invoke orchestrate.py --plan-file on each claimed plan; exit 0 parks in review-needed/",
+        help="alias of the default: invoke orchestrate.py after claim; exit 0 parks in review-needed/",
+    )
+    run_g.add_argument(
+        "--no-run",
+        action="store_true",
+        help="claim only; do not invoke orchestrate.py",
     )
     ap.add_argument(
         "--no-finish",
@@ -846,7 +852,7 @@ def _one_claim(root: Path, plans_root: Path, worker, args) -> tuple[int, int]:
         except Exception as exc:  # noqa: BLE001
             print(f"[work_once] worktree ensure failed: {exc}", file=sys.stderr)
             return 2, 0
-    if args.run:
+    if not args.no_run:
         extra = orchestrate_identity_args(args) + extra
         code = run_orchestrate(plan_path, extra)
         if code != 0:

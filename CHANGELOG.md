@@ -6,6 +6,14 @@ Newest first.
 
 ## [Unreleased]
 
+### Changed
+
+- **Default execute and default critic.** `work_once.py --once` invokes
+  `orchestrate.py` unless `--no-run`. Interactive `anchor review <slug>` runs
+  the critic unless `--no-delegate`. `--run` and `--delegate` remain aliases.
+  `fleet-watch --once` without `--run` passes `--no-run`. Headless review still
+  does not start a model.
+
 ### Fixed
 
 - **`anchor review --delegate` critic budget.** Critic chat uses thinking-off

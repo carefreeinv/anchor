@@ -273,6 +273,7 @@ class ReviewParams:
     slug: str
     delegate: str | None = None
     registry: str | None = None
+    no_delegate: bool = False
 
 
 @dataclass(frozen=True)
@@ -790,7 +791,10 @@ def op_review(params: ReviewParams, answers: Answers, ctx: Ctx) -> Result:
     pkg = _review_package(root, ref.slug)
     res.data.update(plan=ref.rel, title=_title(ref), **pkg)
 
-    if params.delegate:
+    if params.no_delegate:
+        res.need("critic", NEEDS_MODEL,
+                 "AI critic pass over the plan's Done when and the branch diff")
+    elif ctx.mode.interactive:
         _critic(params, ctx, ref, pkg, root, res)
     else:
         res.need("critic", NEEDS_MODEL,
