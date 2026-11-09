@@ -6,6 +6,13 @@ Newest first.
 
 ## [Unreleased]
 
+### Fixed
+
+- **`anchor review --delegate` critic budget.** Critic chat uses thinking-off
+  and a short critic system prompt (not full mythos-core). Diffs are split on
+  `diff --git` boundaries (~8k chars) so NVIDIA Lightning can emit a
+  `## Verdict` instead of HTTP 200 / `finish_reason=length` / empty content.
+
 ### Added
 
 - **Executor Touches file paste.** `orchestrate.py` `execute_task` appends a

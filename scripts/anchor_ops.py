@@ -11,6 +11,7 @@ pass an ``Answers`` that never answers and omit ``ctx.delegate``.
 from __future__ import annotations
 
 import os
+import re
 import subprocess
 import sys
 from collections.abc import Callable
@@ -838,6 +839,42 @@ def _decide(res: Result, answers: Answers, root: Path, plans: Path, ref, pkg) ->
     return res
 
 
+CRITIC_DIFF_CHUNK = 8000
+
+
+def diff_chunks(diff: str, limit: int = CRITIC_DIFF_CHUNK) -> list[str]:
+    """Split a unified diff into bounded pieces, preferring file boundaries.
+
+    A 60k dump plus mythos-core overflows Lightning's completion budget
+    (empty body, finish_reason=length). File-sized chunks keep each critic
+    call inside a 30B window; a single oversized file is hard-sliced.
+    """
+    if not diff:
+        return [""]
+    if len(diff) <= limit:
+        return [diff]
+    parts = re.split(r"(?m)(?=^diff --git )", diff if diff.endswith("\n") else diff + "\n")
+    parts = [p for p in parts if p.strip()]
+    chunks: list[str] = []
+    buf = ""
+    for part in parts:
+        if buf and len(buf) + len(part) > limit:
+            chunks.append(buf)
+            buf = part
+        else:
+            buf += part
+    if buf:
+        chunks.append(buf)
+    out: list[str] = []
+    for chunk in chunks:
+        if len(chunk) <= limit:
+            out.append(chunk)
+            continue
+        for i in range(0, len(chunk), limit):
+            out.append(chunk[i : i + limit])
+    return out or [""]
+
+
 def _critic(params: ReviewParams, ctx: Ctx, ref, pkg, root: Path, res: Result) -> None:
     import subprocess
 
@@ -848,26 +885,65 @@ def _critic(params: ReviewParams, ctx: Ctx, ref, pkg, root: Path, res: Result) -
             ["git", "-C", str(root), "diff", f"{pkg['target']}...{pkg['head']}"],
             capture_output=True, text=True, check=False,
         )
-        diff = p.stdout[:60000]
+        diff = p.stdout
     try:
         import anchor_client
 
         template = anchor_client.load_prompt("anchor/templates/review.md")
     except (ImportError, OSError):
         template = ""
-    user = (
-        "You are the critic. Review only; do not fix. Judge whether the Done when "
-        f"items hold.\n\nTEMPLATE:\n{template}\n\nPLAN:\n{text or ''}\n\nDIFF:\n{diff}"
-    )
+    plan_body = (text or "")[:8000]
+    chunks = diff_chunks(diff)
+    pieces: list[str] = []
+    name = params.delegate or "auto"
     try:
-        name, out = _try_delegate(ctx, endpoint=params.delegate or "auto", role="critic",
-                                  registry=params.registry, user=user)
+        for i, chunk in enumerate(chunks, 1):
+            last = i == len(chunks)
+            prior = ""
+            if pieces:
+                prior = (
+                    "\n\nFINDINGS FROM EARLIER DIFF CHUNKS (do not repeat):\n"
+                    + "\n---\n".join(pieces[-3:])
+                )
+            instruct = (
+                "You are the critic. Review only; do not fix. Judge whether the "
+                "Done when items hold."
+            )
+            if not last:
+                instruct += (
+                    f" This is diff chunk {i}/{len(chunks)}. List findings only; "
+                    "do not emit a final Verdict yet."
+                )
+            else:
+                instruct += (
+                    f" This is the last diff chunk ({i}/{len(chunks)}). "
+                    "Emit the full review template and a ## Verdict."
+                )
+            user = (
+                f"{instruct}\n\nTEMPLATE:\n{template}\n\nPLAN:\n{plan_body}"
+                f"{prior}\n\nDIFF:\n{chunk}"
+            )
+            name, out = _try_delegate(
+                ctx, endpoint=params.delegate or "auto", role="critic",
+                registry=params.registry, user=user,
+            )
+            pieces.append(out)
     except NotDelegated as exc:
         res.notes.append(f"critic not delegated: {exc}")
         res.need("critic", NEEDS_MODEL,
                  "AI critic pass over the plan's Done when and the branch diff")
         return
-    res.data["critic"] = {"endpoint": name, "verdict": critic_verdict(out), "text": out}
+    out = pieces[-1] if pieces else ""
+    if len(pieces) > 1:
+        out = "\n\n".join(
+            [f"## Chunk {i}\n{p}" for i, p in enumerate(pieces, 1)]
+        )
+    res.data["critic"] = {
+        "endpoint": name,
+        "verdict": critic_verdict(pieces[-1] if pieces else ""),
+        "text": out,
+        "chunks": len(pieces),
+    }
     if ctx.display is not None:
         ctx.display(f"--- critic ({name}) ---\n{out}\n---")
 

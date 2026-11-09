@@ -217,14 +217,27 @@ def delegate(
             ep = fleet.lookup(endpoint)
         except LookupError:
             raise NotDelegated(f"no endpoint named {endpoint!r} in {reg}")
-    try:
-        system = anchor_client.load_prompt(MYTHOS_CORE)
-    except OSError as exc:
-        raise NotDelegated(f"doctrine {MYTHOS_CORE} not found: {exc}") from exc
+    # Critic must emit a Verdict in the completion budget. Mythos-core +
+    # thinking-on burns NVIDIA Lightning's max_tokens on hidden reasoning
+    # (HTTP 200, finish_reason=length, empty content). Planner drafts still
+    # load doctrine and think.
+    thinking = role != "critic"
+    if role == "critic":
+        system = (
+            "You are a code critic. Do not implement. Follow the review "
+            "template in the user message. End with ## Verdict and exactly "
+            "one of ACCEPT, REVISE, or ESCALATE."
+        )
+    else:
+        try:
+            system = anchor_client.load_prompt(MYTHOS_CORE)
+        except OSError as exc:
+            raise NotDelegated(f"doctrine {MYTHOS_CORE} not found: {exc}") from exc
     try:
         text = ep.chat(
             [{"role": "system", "content": system}, {"role": "user", "content": user}],
-            thinking=True,
+            thinking=thinking,
+            max_tokens=8192,
         )
     except Exception as exc:
         raise NotDelegated(f"{ep.name}: {exc}") from exc

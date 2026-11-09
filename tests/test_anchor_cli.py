@@ -563,13 +563,19 @@ def test_draft_promote(project):
 
 class _StubEndpoint:
     name = "stub"
+    last_kw: dict | None = None
+    last_system: str | None = None
 
     def __init__(self, reply: str) -> None:
         self.reply = reply
         self.calls = 0
 
-    def chat(self, messages, **_kw) -> str:
+    def chat(self, messages, **kw) -> str:
         self.calls += 1
+        self.last_kw = kw
+        _StubEndpoint.last_kw = kw
+        sys_txt = next((m["content"] for m in messages if m["role"] == "system"), "")
+        _StubEndpoint.last_system = sys_txt
         return self.reply
 
 
@@ -842,6 +848,35 @@ def test_delegation_reports_missing_doctrine(project, stub_fleet, monkeypatch):
                      "--registry", str(reg)], interactive=True)
     assert code == 0 and ep.calls == 0
     assert any("doctrine" in n for n in doc["notes"])
+
+
+def test_review_delegate_critic_thinks_off(project, critic_fleet):
+    write(project, "review-needed", "r1")
+    _StubEndpoint.last_kw = None
+    code, doc = cli(
+        ["review", "r1", "--root", str(project), "--json", "--delegate",
+         "--registry", str(critic_fleet)],
+        interactive=True, answers=["skip"],
+    )
+    assert code == 0
+    assert _StubEndpoint.last_kw is not None
+    assert _StubEndpoint.last_kw.get("thinking") is False
+    assert _StubEndpoint.last_kw.get("max_tokens") == 8192
+    assert "code critic" in (_StubEndpoint.last_system or "").lower()
+    assert "mythos" not in (_StubEndpoint.last_system or "").lower()
+    assert doc["result"]["critic"]["verdict"] == "REVISE"
+
+
+def test_diff_chunks_split_on_file_boundaries():
+    from anchor_ops import diff_chunks
+
+    a = "diff --git a/a.py b/a.py\n" + ("A" * 100) + "\n"
+    b = "diff --git a/b.py b/b.py\n" + ("B" * 100) + "\n"
+    chunks = diff_chunks(a + b, limit=150)
+    assert len(chunks) == 2
+    assert chunks[0].startswith("diff --git a/a.py")
+    assert chunks[1].startswith("diff --git a/b.py")
+    assert diff_chunks("short") == ["short"]
 
 
 def test_delegate_critic_banner_on_stderr_before_first_prompt(project, critic_fleet, capsys):
