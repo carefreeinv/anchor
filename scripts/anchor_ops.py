@@ -19,6 +19,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Protocol, TextIO
 
+import plan_finish_gate
 import plan_lease
 import plan_store
 
@@ -576,6 +577,19 @@ def op_work_heartbeat(params: WorkSlugParams, _answers: Answers, ctx: Ctx) -> Re
 def op_work_finish(params: WorkSlugParams, _answers: Answers, ctx: Ctx) -> Result:
     plans = plans_root(params.root)
     rel = _one(plans, "in-progress", params.slug).rel
+    lease = plan_lease.active_lease(plans, rel)
+    if lease is None or lease.agent_id != ctx.agent_id:
+        who = f"held by {lease.agent_id!r}" if lease else "has no active lease"
+        raise plan_lease.ClaimError(
+            f"{rel} {who}; only its lease holder may finish it"
+        )
+    plan_path = plans / rel
+    evidence = plan_finish_gate.check_finish(params.root, plan_path)
+    if not evidence.ok:
+        raise plan_lease.ClaimError(
+            f"empty-finish refused: {evidence.reason} "
+            "(stay in-progress; operator exception in ## Handoff to override)"
+        )
     dest = plan_lease.finish_to_review(plans, rel, ctx.agent_id)
     ref = plan_store.ref_for_path(plans, dest)
     res = Result("work", "finish")

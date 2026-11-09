@@ -3,7 +3,7 @@ sidebar_position: 5
 sidebar_label: Generic Chat
 ---
 
-<!-- synced-from: platforms/chat/CHAT.md @ a4c2ad3876cf896769993afd2b9d26327db77de6 -->
+<!-- synced-from: platforms/chat/CHAT.md @ d801af8846e510375bf768e9a27ba54cd24999c2 -->
 
 # Generic Chat
 
@@ -51,4 +51,4 @@ the model does the judgment. **Project-agnostic** (no Docusaurus required). Thre
 gates — (1) this project’s tests/CI, (2) changelog, (3) blog under `docs/blog/`
 if warranted. **`/commit-prep` is prep only.** After green gates, follow
 [**`/work`**](/skills/work) for feature-branch commit (dictate `git add` /
-commit / optional push). **Two finish workflows:** human-assisted — dictate `in-progress/` → `review-needed/` and never `gh pr create`; autonomous — after critic **ACCEPT**, dictate `completed/` on `feature/<slug>`, push, and `gh pr create --base dev` (never on REVISE, never a merge). Chat has no tools, so the human runs every command: you may relay `/work`'s culmination question and dictate the scoped-merge check, but never a merge to `main`.
+commit / optional push). **Two finish workflows:** human-assisted — dictate `in-progress/` → `review-needed/` only when real plan-related work is evidenced (empty claims stay in `in-progress/`) and never `gh pr create`; autonomous — after critic **ACCEPT**, dictate `completed/` on `feature/<slug>`, push, and `gh pr create --base dev` (never on REVISE, never a merge). Chat has no tools, so the human runs every command: you may relay `/work`'s culmination question and dictate the scoped-merge check, but never a merge to `main`.

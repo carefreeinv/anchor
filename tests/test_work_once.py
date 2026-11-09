@@ -692,6 +692,10 @@ def test_run_exit_0_finishes_to_review_needed(tmp_path, monkeypatch):
     (root / ".plans" / "review-needed").mkdir()
     _plan(root / ".plans" / "features" / "a.md", preferred="mid")
     monkeypatch.setattr(work_once, "run_orchestrate", lambda *a, **k: 0)
+
+    from plan_finish_gate import FinishGate
+
+    monkeypatch.setattr(work_once, "check_finish", lambda *a, **k: FinishGate(True, "test"))
     code = work_once.main([
         "--root", str(root), "--once", "--slug", "a", "--run",
         "--tier", "mid", "--agent-id", "t", "--no-fit-check",
@@ -699,6 +703,24 @@ def test_run_exit_0_finishes_to_review_needed(tmp_path, monkeypatch):
     assert code == 0
     assert (root / ".plans" / "review-needed" / "a.md").is_file()
     assert not (root / ".plans" / "in-progress" / "a.md").is_file()
+
+
+def test_run_exit_0_empty_work_stays_in_progress(tmp_path, monkeypatch):
+    root = _root(tmp_path)
+    (root / ".plans" / "review-needed").mkdir()
+    _plan(root / ".plans" / "features" / "a.md", preferred="mid")
+    monkeypatch.setattr(work_once, "run_orchestrate", lambda *a, **k: 0)
+    from plan_finish_gate import FinishGate
+    monkeypatch.setattr(
+        work_once, "check_finish", lambda *a, **k: FinishGate(False, "plan-only"),
+    )
+    code = work_once.main([
+        "--root", str(root), "--once", "--slug", "a", "--run",
+        "--tier", "mid", "--agent-id", "t", "--no-fit-check",
+    ])
+    assert code == 0
+    assert (root / ".plans" / "in-progress" / "a.md").is_file()
+    assert not (root / ".plans" / "review-needed" / "a.md").is_file()
 
 
 def test_run_exit_2_does_not_finish(tmp_path, monkeypatch):
@@ -739,6 +761,8 @@ def test_once_without_run_flag_still_orchestrates(tmp_path, monkeypatch):
         return 0
 
     monkeypatch.setattr(work_once, "run_orchestrate", fake_run)
+    from plan_finish_gate import FinishGate
+    monkeypatch.setattr(work_once, "check_finish", lambda *a, **k: FinishGate(True, "test"))
     code = work_once.main([
         "--root", str(root), "--once", "--slug", "a",
         "--tier", "mid", "--agent-id", "t", "--no-fit-check",

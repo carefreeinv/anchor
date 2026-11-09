@@ -29,6 +29,12 @@ Newest first.
 
 ### Added
 
+- **Empty-finish gate.** `scripts/plan_finish_gate.py` refuses
+  `in-progress/` → `review-needed/` when the only commits since the
+  integration merge-base are under `.plans/**` or miss the plan Touches.
+  `work_once` auto-finish and `anchor work --finish` stay put on fail.
+  Operator exception: `## Handoff` line or `ANCHOR_EMPTY_FINISH=1`.
+
 - **Executor Touches file paste.** `orchestrate.py` `execute_task` appends a
   read-only `FILES` block with the current worktree text of paths named in the
   Step Touches cell (or a `Touches:` line), capped per file and dropped

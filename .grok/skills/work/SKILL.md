@@ -69,7 +69,9 @@ Agents may relocate plan files **only** as:
 
 ```text
 bugs|features/     →  in-progress/     (start work + lease)
-in-progress/       →  review-needed/   (human-assisted: Done when holds)
+in-progress/       →  review-needed/   (human-assisted: Done when holds AND
+                                        real plan-related work; empty claims
+                                        stay in-progress/)
 in-progress/       →  completed/       (1) operator answers "merge to dev now" at
                                         culmination AND scoped-merge gate passes
                                         — see §6. Never self-certified merge.
@@ -429,7 +431,20 @@ the queue moving. Small models do not grab architecture plans to "try hard."
 
 ### 6. Complete or pause
 
-**Done when** all checklist items hold and verifications pass:
+**Done when** all checklist items hold and verifications pass. **Never**
+`git mv` to `review-needed/` (or culmination `completed/`) on belief alone.
+
+**Evidence before finish (required):**
+
+- Check Progress Step bullets only when that step's **Verify by** actually passed.
+- At least one commit on `feature/<slug>` after claim whose paths intersect the
+  plan Touches / Done-when artifacts. **Plan-only diffs (`.plans/**`) do not
+  count.** `/commit-prep` alone does not count if it produced no product commit.
+- On failure: stay in `in-progress/` with a Progress note, or return/park —
+  **do not** move. Optional check:
+  `python scripts/plan_finish_gate.py --root . --slug <slug>` (exit 0 pass).
+- Operator exception: explicit instruction that the plan is done with no further
+  code/docs change; record it in `## Handoff`.
 
 1. If the plan has a `## Progress` checklist, check off `Done when holds`
    (and confirm every Step bullet is checked).
@@ -598,7 +613,7 @@ autonomous PR after critic ACCEPT 2026-10-28
 #### Answers 1 and 3
 
 `git mv` the plan from `in-progress/` to `.plans/review-needed/` (create if needed)
-and drop its lease — *agent asserts Done when*, not a final archive. **Then commit
+and drop its lease — only after the evidence gate passes, not a final archive. **Then commit
 that move** via the light path — the `/commit-prep` exemption for plans-only commits
 (see the platform brief): state what moved and why, then `git add .plans/` and
 `git commit -m "…" -- .plans/`; no CHANGELOG, no blog, no test run. The pathspec matters —

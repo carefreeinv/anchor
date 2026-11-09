@@ -39,6 +39,7 @@ py-modules = [
     "nvidia_build_probe",
     "pending_merges",
     "plan_board",
+    "plan_finish_gate",
     "plan_lease",
     "plan_parse",
     "plan_select",

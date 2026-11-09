@@ -63,7 +63,9 @@ Agents may relocate plan files **only** as:
 
 ```text
 bugs|features/     →  in-progress/     (start work + lease)
-in-progress/       →  review-needed/   (human-assisted: Done when holds)
+in-progress/       →  review-needed/   (human-assisted: Done when holds AND
+                                        real plan-related work; empty claims
+                                        stay in-progress/)
 in-progress/       →  completed/       (1) operator answers "merge to dev now" at
                                         culmination AND scoped-merge gate passes
                                         — see §6. Never self-certified merge.
@@ -431,7 +433,13 @@ the queue moving. Small models do not grab architecture plans to "try hard."
 
 ### 6. Complete or pause
 
-**Done when** all checklist items hold and verifications pass:
+**Done when** all checklist items hold and verifications pass. **Never**
+move to `review-needed/` on belief alone.
+
+**Evidence before finish (required):** Progress bullets only when Verify by
+passed; at least one non-`.plans` commit intersecting Touches (or a recorded
+operator exception); otherwise stay in `in-progress/` or return/park. Optional:
+`python scripts/plan_finish_gate.py --root . --slug <slug>`.
 
 1. If the plan has a `## Progress` checklist, check off `Done when holds`
    (and confirm every Step bullet is checked).

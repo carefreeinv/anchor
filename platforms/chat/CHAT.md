@@ -94,8 +94,9 @@ No shell here, so you cannot list files or `git mv` yourself. When the user type
    ```bash
    git mv .plans/features/<slug>.md .plans/in-progress/
    ```
-   **Finish (human-assisted):** when Done when holds, move to review-needed
-   (not completed):
+   **Finish (human-assisted):** when Done when holds **and** real plan-related
+   work is evidenced (a non-`.plans` commit intersecting Touches; checkbox
+   theater does not count), move to review-needed (not completed):
    ```bash
    git mv .plans/in-progress/<slug>.md .plans/review-needed/
    ```

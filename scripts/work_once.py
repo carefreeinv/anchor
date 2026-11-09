@@ -17,8 +17,11 @@ so it does not exist here. On ``--run`` exit 0 this worker parks the claim in
 Nonzero orchestrate leaves the lease on ``in-progress/``. Do not add a flag
 that stands in for a merge answer — an unattended merge is exactly what the
 gate is designed to prevent. Do not open a PR or archive to ``completed/``
-from ``--run`` (now an alias of the default). The autonomous critic ACCEPT →
-completed-on-branch + PR loop is a separate unattended path, not this flag.
+from ``--run`` (now an alias of the default). Auto-finish also requires
+``plan_finish_gate`` evidence (a non-``.plans`` commit intersecting the
+plan Touches, or a recorded operator exception); empty claims stay in
+``in-progress/``. The autonomous critic ACCEPT → completed-on-branch + PR
+loop is a separate unattended path, not this flag.
 
 Usage:
   python work_once.py --list
@@ -47,6 +50,7 @@ from pathlib import Path
 
 import plan_store
 from inference_load import check_local_work, endpoint_is_local, load_config
+from plan_finish_gate import check_finish
 from plan_lease import (
     DEFAULT_TTL_SECONDS,
     ClaimError,
@@ -865,6 +869,14 @@ def _one_claim(root: Path, plans_root: Path, worker, args) -> tuple[int, int]:
         if not args.no_finish:
             try:
                 rel = str(plan_path.resolve().relative_to(plans_root.resolve()))
+                evidence = check_finish(root, plan_path)
+                if not evidence.ok:
+                    print(
+                        f"[work_once] auto-finish refused: {evidence.reason} "
+                        "(stay in-progress; empty claims do not enter review-needed/)",
+                        file=sys.stderr,
+                    )
+                    return 0, 1
                 dest = finish_to_review(plans_root, rel, args.agent_id)
                 print(
                     f"[work_once] orchestrate exit 0 → {dest.relative_to(plans_root)}",

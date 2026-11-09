@@ -83,6 +83,14 @@ Agents must **never**:
 - **Move `review-needed/` → `completed/`** except under a human-confirmed
   **`/review` Approve** — that is the entire point of the lane
 - **Touch another agent’s `in-progress/` plan** (ignore it)
+- **Move `in-progress/` → `review-needed/` (or culmination `completed/`) without
+  real plan-related work** — at least one commit after claim whose paths
+  intersect the plan Touches / Done-when artifacts (``.plans/**`` checkbox
+  theater and `/commit-prep` with no product commit do not count). Honest
+  incomplete work stays in `in-progress/` (or returns/parks). Operator
+  exception: a one-line `## Handoff` citing an explicit instruction to close
+  with no further code/docs change. Run `python scripts/plan_finish_gate.py
+  --root . --slug <slug>` when available.
 
 If a draft is named for execution: refuse; offer edit-only; tell the human to
 move it into `bugs/` or `features/` when ready.
@@ -145,7 +153,8 @@ Execute:  /work → follow Steps; verify each step
 Park:     agent → ambiguous/ (half-baked) or blocked/ (cannot fix)
 Release:  agent → bugs|features/ (give up claim; still ready for others)
 Finish:   two workflows. Human-assisted → git mv in-progress/ → review-needed/
-          (Done when holds). Human runs **`/review`**: AI critic + survey —
+          (Done when holds **and** real plan-related work is evidenced — not
+          an empty claim). Human runs **`/review`**: AI critic + survey —
           Approve → completed/; Needs Work → bugs|features/ (inferred);
           Skip stays in review-needed/. OR the operator answers /work's
           culmination question with "merge to dev now": scoped gate runs,
