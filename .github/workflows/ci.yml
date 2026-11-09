@@ -30,6 +30,9 @@ jobs:
       - name: Test
         run: pytest -q
 
+      - name: Harness budget
+        run: python3 scripts/check_harness_budget.py
+
       - name: Verify the package installs and the console script works
         run: |
           python -m venv /tmp/anchor-install-check

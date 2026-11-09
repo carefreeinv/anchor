@@ -63,6 +63,23 @@ symlink, parent walk, sibling `../anchor`, or ask once). Both prefer
 Scaffolded with `--platform claude` and/or `grok`. After an older scaffold,
 `anchor --upgrade` (or project `/anchor`) can add the new skill files.
 
+## Harness budgets
+
+The `anchor` CLI is a lightweight app: **zero generated tokens** on list/help/
+finish (delegation is opt-in), **typed decisions** (`anchor/cli-decisions.md`),
+and frozen ceilings in `anchor/harness-budget.toml`. Reproduce and enforce
+with `python3 scripts/check_harness_budget.py` (also a CI step). Raising a
+ceiling needs a reason in that file. Numbers match the committed budget file.
+
+| Budget | Ceiling |
+|--------|---------|
+| declared install deps | 0 |
+| banned modules on `import anchor` | 0 |
+| generated tokens (default path) | 0 |
+| sys.modules added on `import anchor` | 80 |
+| `anchor --help` wall | 2.0 s |
+| `anchor work --list` wall | 5.0 s |
+
 ## Related
 
 - [CLI — check, diff, upgrade](/tooling/cli#check-diff-and-upgrade)

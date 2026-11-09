@@ -8,6 +8,12 @@ Newest first.
 
 ### Added
 
+- **Harness budget ratchet.** `anchor/harness-budget.toml` freezes install
+  deps (0), banned modules on `import anchor` (0), generated tokens on the
+  default path (0), import-module count, and `--help` / `work --list` walls.
+  `python3 scripts/check_harness_budget.py` reproduces each number and fails
+  CI with the budget name. Typed decisions: `anchor/cli-decisions.md`.
+
 - **Registry `quirks.timeout`.** `Endpoint.chat` uses it as the HTTP timeout
   when the caller omits `timeout=` (default remains 600s). NVIDIA Build
   overlay does not set a higher default. Aider against Build should use

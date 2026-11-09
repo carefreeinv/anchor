@@ -1,0 +1,37 @@
+# Anchor Harness budgets. Ratchets: CI fails if a measurement exceeds a
+# ceiling. Raising a ceiling needs a recorded reason here (reviewable in the
+# diff). Numbers below were measured 2026-11-09 on Python 3.10 / WSL2 from
+# `python3 scripts/check_harness_budget.py`. Reproduce with that command.
+
+[ceilings]
+# pyproject.toml [project] install_requires / dependencies — the console script
+# ships with none. Fleet YAML/HTTP stay optional (scripts/requirements.txt).
+declared_install_deps = 0
+# `import anchor` must not pull inference/ML or the fleet HTTP stack.
+banned_modules_on_import_anchor = 0
+# Default list/help/finish paths must not call a chat completion.
+generated_tokens_default_path = 0
+# New sys.modules after `import anchor` (stdlib + first-party). Generous for CI.
+sys_modules_added_on_import_anchor = 80
+# Wall-clock; CI runners vary. Prefer the count budgets above.
+help_wall_s = 2.0
+work_list_wall_s = 5.0
+
+[baselines]
+declared_install_deps = 0
+banned_modules_on_import_anchor = 0
+generated_tokens_default_path = 0
+sys_modules_added_on_import_anchor = 59
+help_wall_s = 0.08
+work_list_wall_s = 0.26
+
+[reproduce]
+declared_install_deps = "parse pyproject.toml [project] for dependencies ="
+banned_modules_on_import_anchor = "python3 -c 'import sys; sys.path.insert(0,\"scripts\"); import anchor' then intersect sys.modules with the banned list"
+generated_tokens_default_path = "static: default argv for plans/work --list/review --list/draft --list never calls Endpoint.chat"
+sys_modules_added_on_import_anchor = "len(sys.modules after import anchor) - len(before)"
+help_wall_s = "python3 scripts/anchor.py --help"
+work_list_wall_s = "python3 scripts/anchor.py work --list"
+
+[reasons]
+# Empty unless a ceiling was raised after freeze.
