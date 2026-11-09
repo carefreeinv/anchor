@@ -1056,6 +1056,25 @@ def critic_pytest_touched(
     return f"pytest exit {p.returncode} ({listed})\n{body}"
 
 
+# NVIDIA Build prepended onto a non-empty LAN `found` list (the false-ACCEPT
+# fleet-order defect). Append-only `if not found: found.append(fb)` is fine.
+_PREPEND_BUILD_RE = re.compile(
+    r"found\s*=\s*\[\s*(?:fb|fallback)\s*,\s*\*\s*found\s*\]"
+    r"|found\s*=\s*\[\s*(?:fb|fallback)\s*\]\s*\+\s*found"
+)
+
+
+def critic_pick_order_note(diff: str) -> str | None:
+    """Flag invented executor order: Build prepended while LAN `found` is kept."""
+    if not diff or not _PREPEND_BUILD_RE.search(diff):
+        return None
+    return (
+        "PICK-ORDER: DIFF prepends NVIDIA Build onto a non-empty `found` list "
+        "(`found = [fb, *found]`). Fleet.pick uses Build only when the LAN "
+        "executor list is empty (append). This is a Done-when failure — REVISE."
+    )
+
+
 def critic_verification_block(root: Path, pkg: dict[str, Any], diff: str) -> str:
     """Evidence the review template asks for — missing logs were a false REVISE."""
     parts: list[str] = []
@@ -1067,13 +1086,24 @@ def critic_verification_block(root: Path, pkg: dict[str, Any], diff: str) -> str
         )
     parts.append(critic_docs_sync(Path(root)))
     parts.append(critic_pytest_touched(Path(root), pkg))
+    pick = critic_pick_order_note(diff)
+    if pick:
+        parts.append(pick)
     return "\n\n".join(parts)
+
+
+CRITIC_PICK_ORDER = (
+    "Pick-order: Fleet.executor_candidates must match Fleet.pick — NVIDIA Build "
+    "only when the LAN executor list is empty (append, never prepend). "
+    "`found = [fb, *found]` with a non-empty LAN list is a defect; note it in "
+    "this slice (last slice: REVISE)."
+)
 
 
 def critic_instruct(index: int, total: int, *, last: bool) -> str:
     base = (
         "You are the critic. Review only; do not fix. Judge whether the "
-        "Done when items hold."
+        "Done when items hold. " + CRITIC_PICK_ORDER
     )
     if not last:
         return (
@@ -1092,7 +1122,8 @@ def critic_instruct(index: int, total: int, *, last: bool) -> str:
         "VERIFICATION shows pytest exit non-zero. A pytest TIMEOUT is "
         "evidence, not a Done-when failure — do not REVISE solely for "
         "TIMEOUT. Do not ACCEPT solely because docs-sync is OK (or skipped). "
-        "REVISE only for a concrete Done-when failure with evidence."
+        "REVISE for a PICK-ORDER note in VERIFICATION. REVISE only for a "
+        "concrete Done-when failure with evidence."
     )
 
 

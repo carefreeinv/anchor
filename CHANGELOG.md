@@ -24,6 +24,11 @@ Newest first.
   mainline, the command exits 2 and tells you to run `anchor review --promote`
   instead of listing nothing. `--list` still lists an empty queue (exit 1).
 
+- **CLI critic pick-order rule.** Every critic slice (not only the last) tells
+  the model that `Fleet.executor_candidates` must match `Fleet.pick`: NVIDIA
+  Build only when the LAN executor list is empty. A `found = [fb, *found]`
+  hunk is flagged in VERIFICATION as a Done-when failure (REVISE).
+
 - **CLI critic runs ops transport tests when ``anchor_ops.py`` changes.**
   `critic_pytest_paths` also schedules `tests/test_anchor_ops_transport.py`
   so a new `@_op` cannot ACCEPT without the never-answers adapter sweep.

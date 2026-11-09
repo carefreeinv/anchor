@@ -942,6 +942,7 @@ def test_critic_instruct_last_slice_forbids_chunk_false_revise():
 
     mid = critic_instruct(1, 3, last=False)
     assert "do not emit a Verdict" in mid.lower() or "Do not emit a Verdict" in mid
+    assert "Pick-order" in mid
     last = critic_instruct(3, 3, last=True)
     assert "WHOLE plan" in last
     assert "Do not REVISE because" in last
@@ -950,6 +951,47 @@ def test_critic_instruct_last_slice_forbids_chunk_false_revise():
     assert "do not REVISE solely for TIMEOUT" in last
     assert "Do not ACCEPT solely because docs-sync" in last
     assert "docs-sync OK (or skipped) and earlier slices" not in last
+    assert "PICK-ORDER" in last
+    assert "Pick-order" in last
+
+
+PREPEND_BUILD_HUNK = '''
+diff --git a/scripts/anchor_client.py b/scripts/anchor_client.py
+--- a/scripts/anchor_client.py
++++ b/scripts/anchor_client.py
+@@ -620,6 +620,8 @@
+                 found.append(ep)
++        fb, _ = self._nvidia_build_fallback()
++        found = [fb, *found]
+         return found
+'''
+
+APPEND_BUILD_HUNK = '''
+diff --git a/scripts/anchor_client.py b/scripts/anchor_client.py
+--- a/scripts/anchor_client.py
++++ b/scripts/anchor_client.py
+@@ -620,6 +620,8 @@
+                 found.append(ep)
++        if not found:
++            found.append(fb)
+         return found
+'''
+
+
+def test_critic_pick_order_note_flags_prepend_not_append():
+    from anchor_ops import critic_pick_order_note, critic_verification_block
+
+    bad = critic_pick_order_note(PREPEND_BUILD_HUNK)
+    assert bad is not None and "REVISE" in bad
+    assert critic_pick_order_note(APPEND_BUILD_HUNK) is None
+    block = critic_verification_block(
+        __import__("pathlib").Path("/tmp"), {}, PREPEND_BUILD_HUNK,
+    )
+    assert "PICK-ORDER" in block
+    clean = critic_verification_block(
+        __import__("pathlib").Path("/tmp"), {}, APPEND_BUILD_HUNK,
+    )
+    assert "PICK-ORDER" not in clean
 
 
 def test_critic_docs_sync_skipped_without_script(tmp_path):
