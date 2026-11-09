@@ -16,6 +16,11 @@ Newest first.
 
 ### Fixed
 
+- **CLI critic UNKNOWN on duplicated `## Verdict`.** `critic_verdict`
+  skips empty `## Verdict` headings and uses the last non-empty section, so
+  Lightning's `## Verdict` / `## Verdict ACCEPT` pair is ACCEPT. An empty
+  section still stays UNKNOWN when the only ACCEPT is prior-round prose.
+
 - **CLI critic first-pass false REVISE.** `anchor review` attaches a
   VERIFICATION block (`git diff --stat` plus `check_docs_sync.py` when that
   script exists) to every critic slice, and the last slice is told to verdict

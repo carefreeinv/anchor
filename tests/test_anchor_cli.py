@@ -790,6 +790,11 @@ def test_review_approve_with_remote_only_branch_does_not_archive(repo_project, t
         ("Prior round verdict: ACCEPT was premature.\n## Verdict\n", "UNKNOWN"),
         ("Prior round verdict: ACCEPT was premature.\n## Verdict\nLooks fine.\n\n"
          "## Notes for next task\nACCEPT this later", "UNKNOWN"),
+        # Lightning: empty heading then same-line / following word
+        ("## Verdict\n## Verdict ACCEPT", "ACCEPT"),
+        ("## Verdict ACCEPT", "ACCEPT"),
+        ("## Verdict: REVISE", "REVISE"),
+        ("## Verdict\n## Verdict\nREVISE", "REVISE"),
     ],
 )
 def test_critic_verdict(text, verdict):

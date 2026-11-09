@@ -731,13 +731,14 @@ def _remote_branches(root: Path, branch: str) -> list[str]:
 def critic_verdict(text: str) -> str:
     """ACCEPT | REVISE | ESCALATE from a critic reply.
 
-    A ``## Verdict`` section is the current verdict. Option lists
-    (``ACCEPT | REVISE | ESCALATE``) and ``~~strike~~`` are ignored; of what
-    remains, the most cautious word wins (ESCALATE > REVISE > ACCEPT). A
-    heading with nothing left is ``UNKNOWN`` — a prior-round
-    ``verdict: ACCEPT`` outside the section is not the current verdict.
-    Without a heading, labeled ``Verdict:`` lines (then any remaining word)
-    are used the same way.
+    ``## Verdict`` headings are the current verdict. Empty headings are
+    skipped so a duplicated ``## Verdict`` / ``## Verdict ACCEPT`` pair
+    (Lightning) is ACCEPT. Option lists and ``~~strike~~`` are ignored; of
+    what remains in the **last non-empty** verdict section, the most
+    cautious word wins (ESCALATE > REVISE > ACCEPT). If every verdict
+    heading is empty, UNKNOWN — a prior-round ``verdict: ACCEPT`` outside
+    those sections is not used. Without a heading, labeled ``Verdict:``
+    lines (then any remaining word) are used the same way.
     """
     import re
 
@@ -756,26 +757,36 @@ def critic_verdict(text: str) -> str:
             return "UNKNOWN"
         return max(words, key=lambda w: rank[w])
 
-    section = re.search(
-        r"^##[^\n]*\bverdict\b.*?(?=^##\s|\Z)", cleaned,
-        re.IGNORECASE | re.MULTILINE | re.DOTALL,
-    )
-    if section:
-        return _pick({
+    def _words(blob: str) -> set[str]:
+        return {
             w.upper()
-            for w in re.findall(r"\b(ACCEPT|REVISE|ESCALATE)\b",
-                                section.group(0), re.IGNORECASE)
-        })
+            for w in re.findall(r"\b(ACCEPT|REVISE|ESCALATE)\b", blob, re.IGNORECASE)
+        }
+
+    heading_re = re.compile(
+        r"^##[^\n]*\bverdict\b[^\n]*",
+        re.IGNORECASE | re.MULTILINE,
+    )
+    last_nonempty: set[str] | None = None
+    had_heading = False
+    matches = list(heading_re.finditer(cleaned))
+    for i, m in enumerate(matches):
+        had_heading = True
+        end = matches[i + 1].start() if i + 1 < len(matches) else len(cleaned)
+        nxt_h = re.search(r"^##\s", cleaned[m.end():end], re.MULTILINE)
+        stop = m.end() + nxt_h.start() if nxt_h else end
+        words = _words(cleaned[m.start():stop])
+        if words:
+            last_nonempty = words
+    if had_heading:
+        return _pick(last_nonempty or set())
     labeled = {
         m.group(1).upper()
         for m in re.finditer(r"verdict\W{0,12}(ACCEPT|REVISE|ESCALATE)", cleaned, re.IGNORECASE)
     }
     if labeled:
         return _pick(labeled)
-    return _pick({
-        w.upper()
-        for w in re.findall(r"\b(ACCEPT|REVISE|ESCALATE)\b", cleaned, re.IGNORECASE)
-    })
+    return _pick(_words(cleaned))
 
 
 @_op("review.list", mutates=False, requires=None)
