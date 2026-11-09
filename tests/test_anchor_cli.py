@@ -978,12 +978,38 @@ diff --git a/scripts/anchor_client.py b/scripts/anchor_client.py
 '''
 
 
+# Packaging-only diff: quotes the prepend pattern in ops + tests, no product hunk.
+PACKAGING_QUOTE_HUNK = '''
+diff --git a/scripts/anchor_ops.py b/scripts/anchor_ops.py
+--- a/scripts/anchor_ops.py
++++ b/scripts/anchor_ops.py
+@@ -1,3 +1,6 @@
++_PREPEND_BUILD_RE = re.compile(
++    r"found\\s*=\\s*\\[\\s*(?:fb|fallback)\\s*,\\s*\\*\\s*found\\s*\\]"
++)
++    "`found = [fb, *found]` with a non-empty LAN list is a defect"
+diff --git a/tests/test_anchor_cli.py b/tests/test_anchor_cli.py
+--- a/tests/test_anchor_cli.py
++++ b/tests/test_anchor_cli.py
+@@ -1,2 +1,5 @@
++PREPEND_BUILD_HUNK = """
+++        found = [fb, *found]
++"""
+diff --git a/CHANGELOG.md b/CHANGELOG.md
+--- a/CHANGELOG.md
++++ b/CHANGELOG.md
+@@ -1,2 +1,3 @@
++- A `found = [fb, *found]` hunk is flagged in VERIFICATION.
+'''
+
+
 def test_critic_pick_order_note_flags_prepend_not_append():
     from anchor_ops import critic_pick_order_note, critic_verification_block
 
     bad = critic_pick_order_note(PREPEND_BUILD_HUNK)
     assert bad is not None and "REVISE" in bad
     assert critic_pick_order_note(APPEND_BUILD_HUNK) is None
+    assert critic_pick_order_note(PACKAGING_QUOTE_HUNK) is None
     block = critic_verification_block(
         __import__("pathlib").Path("/tmp"), {}, PREPEND_BUILD_HUNK,
     )
@@ -992,6 +1018,10 @@ def test_critic_pick_order_note_flags_prepend_not_append():
         __import__("pathlib").Path("/tmp"), {}, APPEND_BUILD_HUNK,
     )
     assert "PICK-ORDER" not in clean
+    quoted = critic_verification_block(
+        __import__("pathlib").Path("/tmp"), {}, PACKAGING_QUOTE_HUNK,
+    )
+    assert "PICK-ORDER" not in quoted
 
 
 def test_critic_docs_sync_skipped_without_script(tmp_path):

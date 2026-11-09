@@ -1064,9 +1064,47 @@ _PREPEND_BUILD_RE = re.compile(
 )
 
 
+_PICK_ORDER_SKIP_FILES = frozenset({
+    "scripts/anchor_ops.py",
+    "anchor_ops.py",
+})
+
+
+def _added_product_py_lines(diff: str):
+    """Yield ``+`` body lines from non-test ``.py`` product files in a unified diff.
+
+    Skips ``+++`` headers, ``tests/``, and the critic packaging module (its
+    regex / prompt strings quote the prepend pattern without introducing it).
+    """
+    path = ""
+    for line in diff.splitlines():
+        if line.startswith("diff --git "):
+            m = re.search(r" b/(.+)$", line)
+            path = m.group(1) if m else ""
+            continue
+        if line.startswith("+++ "):
+            rest = line[4:].strip()
+            if rest.startswith("b/"):
+                path = rest[2:]
+            continue
+        if not line.startswith("+") or line.startswith("+++"):
+            continue
+        norm = path.lstrip("./")
+        if not norm.endswith(".py"):
+            continue
+        if norm.startswith("tests/") or "/tests/" in norm:
+            continue
+        base = norm.rsplit("/", 1)[-1]
+        if norm in _PICK_ORDER_SKIP_FILES or base in _PICK_ORDER_SKIP_FILES:
+            continue
+        yield line[1:]
+
+
 def critic_pick_order_note(diff: str) -> str | None:
     """Flag invented executor order: Build prepended while LAN `found` is kept."""
-    if not diff or not _PREPEND_BUILD_RE.search(diff):
+    if not diff:
+        return None
+    if not any(_PREPEND_BUILD_RE.search(ln) for ln in _added_product_py_lines(diff)):
         return None
     return (
         "PICK-ORDER: DIFF prepends NVIDIA Build onto a non-empty `found` list "
