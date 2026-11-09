@@ -25,7 +25,7 @@ You are one worker in a verified pipeline, not the whole pipeline. Speed is wort
 
 12. **Usage limits are a scheduling problem, not a failure.** On a session/weekly cap or quota (429, `insufficient_quota`, "limit reached", a forced tier downgrade), checkpoint state, then **reroute** to the next model in priority order *that clears the task's fitness floor*, else **wait** for a near reset, else **stop and report**. Never finish work on a silently downgraded tier, and never narrow scope or weaken tests to beat a cap. See `.anchor/capacity-routing.md`.
 
-13. **Prefer `anchor` / `work_once` for deterministic plan ops** when `anchor` is on PATH (or `./bin/anchor`): `anchor work --list|--finish|--return`, `anchor models list|nick`, `anchor fleet-watch`. Unattended execute is `python scripts/work_once.py --once --run --ensure-worktree --endpoint …`. Slash `/work` `/review` `/draft` stay operator-facing; do not re-implement lane moves in chat when the CLI can. Missing `anchor` → `python scripts/…` then in-session, mention `/install-anchor`.
+13. **Prefer `anchor` / `work_once` for deterministic plan ops** when `anchor` is on PATH (or `./bin/anchor`) or `scripts/work_once.py` exists: `anchor work --list|--finish|--return`, `anchor models list|nick`, `anchor fleet-watch`, `anchor plans`. Unattended execute is `python scripts/work_once.py --once --run --ensure-worktree --endpoint …` (headless `anchor work --run` does not start a model). Slash `/work` `/review` `/draft` stay operator-facing; do not re-implement lane moves in chat when the CLI can. Missing `anchor` → `python scripts/…` then in-session, mention `/install-anchor`.
 14. **Surface the best-fit skill.** Before acting, judge whether a skill or command **available in this session** (`.grok/skills/`, harness skill roster) would do the request faster or more correctly than working by hand. If one clearly fits, prepend a **single line** naming it and offering to use it, then proceed the same turn — a suggestion, not a gate (never make the user run it first and come back). Suggest only skills actually loaded (never invent one); at most once per capability per session; only when you can name the concrete win. Surfaces cutting-edge features the user may not know exist — never a per-prompt nag.
 
 ## Grok-specific tuning
@@ -187,7 +187,7 @@ reasoner` preference, no refuse gate. Default write lane `.plans/drafts/`;
 
 Configure durable plan pollers: `/fleet-watch` (this project) or
 `/fleet-watch other-app`. Watchers run a work-style claim/execute loop in the
-background. Skill: `.grok/skills/fleet-watch/SKILL.md`. Prefer the skill over raw CLI.
+background. Skill: `.grok/skills/fleet-watch/SKILL.md`. Prefer `anchor fleet-watch` when the CLI is on PATH; `/fleet-watch` remains the operator slash entry.
 
 ## /install-anchor
 

@@ -8,6 +8,10 @@ Newest first.
 
 ### Changed
 
+- **GROK standing rules match Claude on CLI ops.** Rule 13 names `anchor
+  plans` and the `scripts/work_once.py` exists-fallback. `/fleet-watch`
+  prefers `anchor fleet-watch` when the CLI is on PATH.
+
 - **Default execute and default critic.** `work_once.py --once` invokes
   `orchestrate.py` unless `--no-run`. Interactive `anchor review <slug>` runs
   the critic unless `--no-delegate`. `--run` and `--delegate` remain aliases.
