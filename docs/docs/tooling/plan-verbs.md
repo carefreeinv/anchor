@@ -3,7 +3,7 @@ sidebar_position: 1.5
 sidebar_label: Plan workflow verbs
 ---
 
-<!-- synced-from: anchor/cli.md @ ff1f843e441edfb15fb349682d00b7de678c662d -->
+<!-- synced-from: anchor/cli.md @ 46adc503e3072ceda5c3c89311efeee7c85bed7d -->
 
 # The plan-workflow CLI: what `anchor` does itself, and what it hands back
 
@@ -113,7 +113,7 @@ never finishes. Landing work is `anchor review`'s job
 |------|------|-----|
 | list `review-needed/` with hold notes | deterministic | directory read + `pending_merges.is_held` |
 | the review package: branch, target, head, changed files, fast-forward? | deterministic | git, via `merge_feature` helpers |
-| AI critic pass | **model** | interactive `anchor review <slug>` runs it (`--delegate` alias; `--no-delegate` skips; headless still pending) |
+| AI critic pass | **model** | interactive `anchor review <slug>` runs it (`--delegate` alias; `--no-delegate` skips; headless still pending). The package includes `git diff --stat` and `check_docs_sync.py` so the critic does not REVISE for missing logs |
 | **Approve / Needs Work / Skip / Defer** | **operator** | the `/review` sign-off; never inferred |
 | Approve after a critic verdict of REVISE, ESCALATE or unreadable | **operator** | a second, explicit "approve despite critic concerns?" yes; anything else leaves the plan in `review-needed/` |
 | Needs Work: which ready lane, and the notes | **operator** | notes must be real; an empty answer counts as no answer |

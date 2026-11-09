@@ -844,6 +844,8 @@ def _decide(res: Result, answers: Answers, root: Path, plans: Path, ref, pkg) ->
 
 
 CRITIC_DIFF_CHUNK = 8000
+CRITIC_VERIFY_CAP = 2000
+CRITIC_PRIOR_CAP = 2500
 
 
 def diff_chunks(diff: str, limit: int = CRITIC_DIFF_CHUNK) -> list[str]:
@@ -879,9 +881,91 @@ def diff_chunks(diff: str, limit: int = CRITIC_DIFF_CHUNK) -> list[str]:
     return out or [""]
 
 
-def _critic(params: ReviewParams, ctx: Ctx, ref, pkg, root: Path, res: Result) -> None:
-    import subprocess
+def critic_changed_stat(root: Path, target: str, head: str) -> str:
+    p = subprocess.run(
+        ["git", "-C", str(root), "diff", "--stat", f"{target}...{head}"],
+        capture_output=True, text=True, check=False,
+    )
+    return (p.stdout or p.stderr or "").strip() or "(empty)"
 
+
+def critic_docs_sync(root: Path, timeout: float = 30.0) -> str:
+    script = Path(root) / "scripts" / "check_docs_sync.py"
+    if not script.is_file():
+        return "check_docs_sync.py: not present in this project (skipped)"
+    try:
+        p = subprocess.run(
+            [sys.executable, str(script)],
+            cwd=str(root), capture_output=True, text=True,
+            timeout=timeout, check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        return f"check_docs_sync.py: {exc}"
+    body = ((p.stdout or "") + (p.stderr or "")).strip()
+    if len(body) > CRITIC_VERIFY_CAP:
+        body = body[:CRITIC_VERIFY_CAP] + "\n…"
+    return f"check_docs_sync.py exit {p.returncode}\n{body}"
+
+
+def critic_verification_block(root: Path, pkg: dict[str, Any], diff: str) -> str:
+    """Evidence the review template asks for — missing logs were a false REVISE."""
+    parts: list[str] = []
+    head, target = pkg.get("head"), pkg.get("target")
+    if head and target:
+        parts.append(
+            "CHANGED FILES (full range, not this chunk):\n"
+            + critic_changed_stat(Path(root), str(target), str(head))
+        )
+    parts.append(critic_docs_sync(Path(root)))
+    parts.append(
+        "pytest is not auto-run in this package. Do not REVISE solely because a "
+        "pytest log is missing unless Done when requires it and this block or "
+        "the DIFF shows a failure."
+    )
+    return "\n\n".join(parts)
+
+
+def critic_instruct(index: int, total: int, *, last: bool) -> str:
+    base = (
+        "You are the critic. Review only; do not fix. Judge whether the "
+        "Done when items hold."
+    )
+    if not last:
+        return (
+            f"{base} This is diff chunk {index}/{total}. List defects in THIS "
+            "slice only. Write 'no defects in this slice' if none. Do not emit "
+            "a Verdict. Do not mark Done when as failed because other files are "
+            "in later slices."
+        )
+    return (
+        f"{base} This is the last diff chunk ({index}/{total}). Emit the full "
+        "review template and one ## Verdict for the WHOLE plan, using PLAN + "
+        "VERIFICATION + CHANGED FILES + earlier slice notes + this DIFF. "
+        "Do not REVISE because: this slice is tests or docs only; a Changed "
+        "File is absent from this DIFF; an earlier slice said Partial/Pending; "
+        "or verification was not pasted into the DIFF hunks. REVISE only for a "
+        "concrete Done-when failure with evidence. If VERIFICATION shows "
+        "docs-sync OK (or skipped) and earlier slices named no blocking defect, "
+        "ACCEPT."
+    )
+
+
+def build_critic_user(
+    *,
+    instruct: str,
+    template: str,
+    plan_body: str,
+    verification: str,
+    prior: str,
+    chunk: str,
+) -> str:
+    return (
+        f"{instruct}\n\nTEMPLATE:\n{template}\n\nPLAN:\n{plan_body}\n\n"
+        f"VERIFICATION:\n{verification}\n{prior}\n\nDIFF:\n{chunk}"
+    )
+
+
+def _critic(params: ReviewParams, ctx: Ctx, ref, pkg, root: Path, res: Result) -> None:
     text, _err = plan_store.read_text(ref)
     diff = ""
     if pkg.get("head") and pkg.get("target"):
@@ -897,6 +981,7 @@ def _critic(params: ReviewParams, ctx: Ctx, ref, pkg, root: Path, res: Result) -
     except (ImportError, OSError):
         template = ""
     plan_body = (text or "")[:8000]
+    verification = critic_verification_block(root, pkg, diff)
     chunks = diff_chunks(diff)
     pieces: list[str] = []
     name = params.delegate or "auto"
@@ -905,27 +990,20 @@ def _critic(params: ReviewParams, ctx: Ctx, ref, pkg, root: Path, res: Result) -
             last = i == len(chunks)
             prior = ""
             if pieces:
+                joined = "\n---\n".join(pieces[-3:])
+                if len(joined) > CRITIC_PRIOR_CAP:
+                    joined = joined[:CRITIC_PRIOR_CAP] + "\n…"
                 prior = (
-                    "\n\nFINDINGS FROM EARLIER DIFF CHUNKS (do not repeat):\n"
-                    + "\n---\n".join(pieces[-3:])
+                    "\n\nEARLIER SLICE NOTES (not a verdict; defects in those "
+                    "slices only):\n" + joined
                 )
-            instruct = (
-                "You are the critic. Review only; do not fix. Judge whether the "
-                "Done when items hold."
-            )
-            if not last:
-                instruct += (
-                    f" This is diff chunk {i}/{len(chunks)}. List findings only; "
-                    "do not emit a final Verdict yet."
-                )
-            else:
-                instruct += (
-                    f" This is the last diff chunk ({i}/{len(chunks)}). "
-                    "Emit the full review template and a ## Verdict."
-                )
-            user = (
-                f"{instruct}\n\nTEMPLATE:\n{template}\n\nPLAN:\n{plan_body}"
-                f"{prior}\n\nDIFF:\n{chunk}"
+            user = build_critic_user(
+                instruct=critic_instruct(i, len(chunks), last=last),
+                template=template,
+                plan_body=plan_body,
+                verification=verification,
+                prior=prior,
+                chunk=chunk,
             )
             name, out = _try_delegate(
                 ctx, endpoint=params.delegate or "auto", role="critic",

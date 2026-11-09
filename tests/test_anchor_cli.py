@@ -565,17 +565,23 @@ class _StubEndpoint:
     name = "stub"
     last_kw: dict | None = None
     last_system: str | None = None
+    last_user: str | None = None
+    users: list[str] = []
 
     def __init__(self, reply: str) -> None:
         self.reply = reply
         self.calls = 0
+        self.users = []
 
     def chat(self, messages, **kw) -> str:
         self.calls += 1
         self.last_kw = kw
         _StubEndpoint.last_kw = kw
         sys_txt = next((m["content"] for m in messages if m["role"] == "system"), "")
+        user_txt = next((m["content"] for m in messages if m["role"] == "user"), "")
         _StubEndpoint.last_system = sys_txt
+        _StubEndpoint.last_user = user_txt
+        self.users.append(user_txt)
         return self.reply
 
 
@@ -887,6 +893,42 @@ def test_review_delegate_critic_thinks_off(project, critic_fleet):
     assert "code critic" in (_StubEndpoint.last_system or "").lower()
     assert "mythos" not in (_StubEndpoint.last_system or "").lower()
     assert doc["result"]["critic"]["verdict"] == "REVISE"
+
+
+def test_critic_instruct_last_slice_forbids_chunk_false_revise():
+    from anchor_ops import critic_instruct
+
+    mid = critic_instruct(1, 3, last=False)
+    assert "do not emit a Verdict" in mid.lower() or "Do not emit a Verdict" in mid
+    last = critic_instruct(3, 3, last=True)
+    assert "WHOLE plan" in last
+    assert "Do not REVISE because" in last
+    assert "ACCEPT" in last
+
+
+def test_critic_docs_sync_skipped_without_script(tmp_path):
+    from anchor_ops import critic_docs_sync, critic_verification_block
+
+    note = critic_docs_sync(tmp_path)
+    assert "skipped" in note
+    block = critic_verification_block(tmp_path, {}, "")
+    assert "VERIFICATION" not in block
+    assert "check_docs_sync.py" in block
+    assert "pytest is not auto-run" in block
+
+
+def test_review_critic_prompt_includes_verification(project, critic_fleet):
+    write(project, "review-needed", "r1")
+    code, doc = cli(
+        ["review", "r1", "--root", str(project), "--json", "--delegate",
+         "--registry", str(critic_fleet)],
+        interactive=True, answers=["skip"],
+    )
+    assert code == 0
+    user = _StubEndpoint.last_user or ""
+    assert "VERIFICATION:" in user
+    assert "check_docs_sync.py" in user
+    assert "Do not REVISE because" in user or "WHOLE plan" in user
 
 
 def test_diff_chunks_split_on_file_boundaries():

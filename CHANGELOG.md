@@ -16,6 +16,12 @@ Newest first.
 
 ### Fixed
 
+- **CLI critic first-pass false REVISE.** `anchor review` attaches a
+  VERIFICATION block (`git diff --stat` plus `check_docs_sync.py` when that
+  script exists) to every critic slice, and the last slice is told to verdict
+  the whole plan. Lightning was REVISEing when logs were missing from the
+  prompt or when the last 8k chunk was tests/docs only.
+
 - **`anchor review --delegate` critic budget.** Critic chat uses thinking-off
   and a short critic system prompt (not full mythos-core). Diffs are split on
   `diff --git` boundaries (~8k chars) so NVIDIA Lightning can emit a
