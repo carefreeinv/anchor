@@ -886,7 +886,8 @@ def execute_task(task: str, plan: str, fleet: Fleet, verify_cmd: str | None,
                 if before_fp is not None and after_chat_fp == before_fp:
                     print(f"[apply] {ep.name}: {exc}", file=sys.stderr)
                     history.append(
-                        f"NOOP: {exc}; include a unified diff for files you change"
+                        f"NOOP: {exc}; include a unified diff or a whole-file fence "
+                        f"for files you change"
                     )
                     continue
             except ApplyError as exc:
@@ -900,8 +901,8 @@ def execute_task(task: str, plan: str, fleet: Fleet, verify_cmd: str | None,
             print(f"[noop] {ep.name}: worktree unchanged after chat", file=sys.stderr)
             history.append(
                 "NOOP: worktree is byte-identical to before this attempt; "
-                "edit files in the worktree or fail — a passing verify on an "
-                "unchanged tree is not success"
+                "include a unified diff or a whole-file fence, or fail — a "
+                "passing verify on an unchanged tree is not success"
             )
             continue
 

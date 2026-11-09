@@ -27,6 +27,10 @@ Newest first.
 
 ### Fixed
 
+- **NOOP retry names whole-file fences.** After `NoApplyableHunks` or an
+  unchanged worktree, the executor history line asks for a unified diff or a
+  whole-file fence.
+
 - **CLI critic UNKNOWN on duplicated `## Verdict`.** `critic_verdict`
   skips empty `## Verdict` headings and uses the last non-empty section, so
   Lightning's `## Verdict` / `## Verdict ACCEPT` pair is ACCEPT. An empty

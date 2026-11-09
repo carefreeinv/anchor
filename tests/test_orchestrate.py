@@ -1548,3 +1548,13 @@ def test_main_failover_all_noop_exits_2(git_repo, monkeypatch):
     assert first.calls == 2
     assert second.calls == 2
     assert critic.calls == 0
+
+
+def test_noop_retry_mentions_fence_and_unified_diff():
+    import inspect
+
+    import orchestrate
+
+    src = inspect.getsource(orchestrate.execute_task)
+    assert "unified diff" in src
+    assert "whole-file fence" in src
