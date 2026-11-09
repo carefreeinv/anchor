@@ -36,6 +36,7 @@ def _params(name: str, root: Path):
         "work.return": ops.WorkSlugParams(root=r, slug="missing"),
         "review.list": ops.ReviewListParams(root=r),
         "review.review": ops.ReviewParams(root=r, slug="r1"),
+        "review.promote": ops.ReviewPromoteParams(root=r),
         "draft.list": ops.DraftListParams(root=r),
         "draft.create": ops.DraftCreateParams(root=r, slug="fresh"),
         "draft.promote": ops.DraftPromoteParams(root=r, slug="d1"),
