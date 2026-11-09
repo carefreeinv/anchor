@@ -201,8 +201,8 @@ Interactive `/work` stays one-plan-per-invocation (not a daemon). For always-on 
 
 ```bash
 python scripts/work_once.py --list --tier mid --agent-id worker-1
-python scripts/work_once.py --once --tier mid --agent-id worker-1   # moves → in-progress/
-python scripts/work_once.py --once --endpoint h100-executor --run
+python scripts/work_once.py --once --no-run --tier mid --agent-id worker-1   # claim only → in-progress/
+python scripts/work_once.py --once --ensure-worktree --endpoint h100-executor
 ```
 
 Shared rules with `/work`: ready lanes only (never bare-pick in-progress), bugs before features, Value order, Preferred models fit, refuse `drafts/`/`completed/`, never promote, **ignore foreign in-progress** (owned via a required lease; no silent reclaim). Selection logic: `scripts/plan_select.py` + `plan_lease.py`. Small models: `plan_select.py --next [--claim]`.

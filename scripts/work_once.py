@@ -17,15 +17,15 @@ so it does not exist here. On ``--run`` exit 0 this worker parks the claim in
 Nonzero orchestrate leaves the lease on ``in-progress/``. Do not add a flag
 that stands in for a merge answer — an unattended merge is exactly what the
 gate is designed to prevent. Do not open a PR or archive to ``completed/``
-from ``--run``. The autonomous critic ACCEPT → completed-on-branch + PR loop
-is a separate unattended path, not this flag.
+from ``--run`` (now an alias of the default). The autonomous critic ACCEPT →
+completed-on-branch + PR loop is a separate unattended path, not this flag.
 
 Usage:
   python work_once.py --list
-  python work_once.py --once --tier mid --agent-id worker-1
-  python work_once.py --once --endpoint h100-executor --registry endpoints.yaml
-  python work_once.py --max-plans 3 --tier small --print-only
-  python work_once.py --slug fix-login --no-fit-check --run
+  python work_once.py --once --no-run --tier mid --agent-id worker-1
+  python work_once.py --once --ensure-worktree --endpoint h100-executor --registry endpoints.yaml
+  python work_once.py --max-plans 3 --tier small --print-only --no-run
+  python work_once.py --slug fix-login --no-fit-check
 
 A worker bound to a **local** endpoint also honors the site inference-load policy
 (``inference_load.py``): when the published level bars this worker's tier, the run
