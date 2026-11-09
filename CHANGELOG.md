@@ -8,6 +8,13 @@ Newest first.
 
 ### Added
 
+- **Executor Touches file paste.** `orchestrate.py` `execute_task` appends a
+  read-only `FILES` block with the current worktree text of paths named in the
+  Step Touches cell (or a `Touches:` line), capped per file and dropped
+  largest-first when the prompt would exceed `max_context`. Secrets (`.env`,
+  keys) and `.plans/**` are omitted. Chat-only executors can emit a unified
+  diff or whole-file fence against that text.
+
 - **`anchor models`.** `list` prints registry name, aliases, machine, model,
   effort, and tier. `nick ALIAS --endpoint NAME [--machine …] [--effort …]`
   writes only a machine-local overlay (`~/.config/anchor/endpoints.local.yaml`

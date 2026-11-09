@@ -27,6 +27,9 @@ EDIT_FORMAT = (
     "```\n"
     "or: File: path/to/file.py  then a ```python fence with the full body.\n"
     "New files use --- /dev/null or a fence for a path that does not exist. "
+    "If a FILES block is present, those bodies are the current on-disk text — "
+    "emit a unified diff or whole-file fence against them; do not ask to cat "
+    "or examine the files. "
     "Still end with ## Result / ## How to verify / ## Deferred / concerns."
 )
 

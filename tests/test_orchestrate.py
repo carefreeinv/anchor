@@ -1,5 +1,9 @@
 import pytest
-from orchestrate import split_tasks, task_touches_denied_plans
+from orchestrate import (
+    parse_task_touches,
+    split_tasks,
+    task_touches_denied_plans,
+)
 
 
 def test_split_tasks_from_steps_table():
@@ -30,6 +34,25 @@ def test_split_tasks_unrecognized_format_raises_with_preview():
     with pytest.raises(ValueError, match="No tasks found") as exc_info:
         split_tasks(plan)
     assert "refactor things" in str(exc_info.value)
+
+
+def test_parse_task_touches_table_row():
+    assert parse_task_touches(
+        "Parse backtick/bare paths | `anchor/cli.md` | unit | mid"
+    ) == ["anchor/cli.md"]
+    assert parse_task_touches(
+        "Update notes | tests, CHANGELOG.md | pytest | mid"
+    ) == ["tests", "CHANGELOG.md"]
+    assert parse_task_touches(
+        "Keep dotted path | scripts/foo.py | stamp | mid"
+    ) == ["scripts/foo.py"]
+
+
+def test_parse_task_touches_header_line():
+    assert parse_task_touches("Touches: `api.py`, scripts/foo.py") == [
+        "api.py",
+        "scripts/foo.py",
+    ]
 
 
 def test_task_touches_denied_plans_hygiene_path():
@@ -99,9 +122,11 @@ class FakeEndpoint:
         self.name = "fake-ep"
         self.calls = 0
         self.quirks = quirks or {}
+        self.last_messages = None
 
     def chat(self, messages, **kwargs):
         self.calls += 1
+        self.last_messages = messages
         return self.replies.pop(0)
 
 
@@ -1298,3 +1323,74 @@ def test_execute_task_applies_fenced_file_then_verify(git_repo):
     assert result["status"] == "ok"
     assert (git_repo / "README").read_text(encoding="utf-8") == "applied from fence\n"
     assert Path(marker).exists()
+
+
+def test_execute_task_injects_touches_file_body(tmp_path):
+    from orchestrate import FILES_INJECT_HEADER, execute_task
+
+    (tmp_path / "README").write_text("hi\n", encoding="utf-8")
+    fleet = FakeFleet([GOOD_OUTPUT, GOOD_OUTPUT])
+    execute_task(
+        "say hello | README | none | mid",
+        "plan",
+        fleet,
+        verify_cmd=None,
+        hold_on_fail=False,
+        worktree=tmp_path,
+    )
+    user = fleet.ep.last_messages[1]["content"]
+    assert FILES_INJECT_HEADER in user
+    assert "--- README ---" in user
+    assert "hi\n" in user
+
+
+def test_execute_task_omits_secret_and_plans_touches(tmp_path):
+    from orchestrate import execute_task
+
+    (tmp_path / ".env").write_text("SECRET=1\n", encoding="utf-8")
+    (tmp_path / ".plans").mkdir()
+    (tmp_path / ".plans" / "foo.md").write_text("nope\n", encoding="utf-8")
+    (tmp_path / "README").write_text("ok\n", encoding="utf-8")
+    fleet = FakeFleet([GOOD_OUTPUT, GOOD_OUTPUT])
+    execute_task(
+        "edit | README, .env, .plans/foo.md | none | mid",
+        "plan",
+        fleet,
+        verify_cmd=None,
+        hold_on_fail=False,
+        worktree=tmp_path,
+    )
+    user = fleet.ep.last_messages[1]["content"]
+    assert "--- README ---" in user
+    assert "ok\n" in user
+    assert "SECRET=1" not in user
+    assert "nope" not in user
+    assert "[omitted: .env (secret)]" in user
+    assert "[omitted: .plans/foo.md (plans-deny)]" in user
+
+
+def test_execute_task_drops_over_budget_touches_files(tmp_path, monkeypatch):
+    from orchestrate import FILES_INJECT_HEADER, execute_task
+
+    monkeypatch.setattr("orchestrate.load_prompt", lambda *a, **k: "sys")
+    (tmp_path / "README").write_text("hi\n", encoding="utf-8")
+    (tmp_path / "BIG.txt").write_text("B" * 20_000, encoding="utf-8")
+    fleet = FakeFleet(
+        [GOOD_OUTPUT, GOOD_OUTPUT],
+        quirks={"max_context": 2500},
+    )
+    result = execute_task(
+        "edit | README, BIG.txt | none | mid",
+        "plan",
+        fleet,
+        verify_cmd=None,
+        hold_on_fail=False,
+        worktree=tmp_path,
+    )
+    assert result["status"] != "failed-budget"
+    user = fleet.ep.last_messages[1]["content"]
+    assert FILES_INJECT_HEADER in user
+    assert "--- README ---" in user
+    assert "hi\n" in user
+    assert "B" * 1000 not in user
+    assert "[omitted: BIG.txt (over budget)]" in user

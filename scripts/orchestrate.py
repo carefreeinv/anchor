@@ -432,6 +432,209 @@ def task_touches_denied_plans(task: str) -> bool:
     return _PLANS_DENIED_RE.search(task) is not None
 
 
+FILES_INJECT_HEADER = (
+    "FILES (read-only, emit a patch against these):"
+)
+PER_FILE_INJECT_CHARS = 24_000
+_TOUCHES_HEADER_RE = re.compile(r"(?im)^\s*touches:\s*(.+)$")
+_PATH_TOKEN_RE = re.compile(r"^\.?[\w./+-]+(?:\.[\w.+-]+)*$")
+_INJECT_DENY_BASENAMES = frozenset({
+    ".env",
+    "id_rsa",
+    "id_dsa",
+    "id_ecdsa",
+    "id_ed25519",
+    "credentials.json",
+    "credentials.yaml",
+    "secrets.yaml",
+    "secrets.json",
+})
+_INJECT_DENY_SUFFIXES = (".pem", ".key", ".p12", ".pfx", ".kdbx")
+
+
+def parse_task_touches(task: str) -> list[str]:
+    """Paths named in this task's Touches cell or a ``Touches:`` line.
+
+    Table rows from ``split_tasks`` look like
+    ``Add the endpoint | api.py | pytest -q | executor`` (Touches is column 2).
+    Comma and whitespace split the cell; backtick paths are kept intact so
+    ``scripts/foo.py`` is one path. Duplicate paths keep first-seen order.
+    """
+    return _dedupe_paths(_paths_from_touches_segment(_touches_segment(task)))
+
+
+def _touches_segment(task: str) -> str:
+    m = _TOUCHES_HEADER_RE.search(task)
+    if m:
+        return m.group(1).strip()
+    if "|" not in task:
+        return ""
+    parts = [p.strip() for p in task.split("|")]
+    if len(parts) >= 2:
+        return parts[1]
+    return ""
+
+
+def _paths_from_touches_segment(segment: str) -> list[str]:
+    if not segment:
+        return []
+    paths: list[str] = []
+    for bt in re.findall(r"`([^`]+)`", segment):
+        token = bt.strip()
+        if token:
+            paths.append(token)
+    rest = re.sub(r"`[^`]+`", " ", segment)
+    for tok in re.split(r"[\s,]+", rest):
+        tok = tok.strip().strip("`")
+        if tok and _looks_like_path(tok):
+            paths.append(tok)
+    return paths
+
+
+def _looks_like_path(tok: str) -> bool:
+    if tok in {"-", "—", "*", "none", "n/a"}:
+        return False
+    return bool(_PATH_TOKEN_RE.match(tok))
+
+
+def _norm_rel(path: str) -> str:
+    posix = path.replace("\\", "/")
+    while posix.startswith("./"):
+        posix = posix[2:]
+    return posix
+
+
+def _dedupe_paths(paths: list[str]) -> list[str]:
+    seen: set[str] = set()
+    out: list[str] = []
+    for p in paths:
+        key = _norm_rel(p)
+        if not key or key in seen:
+            continue
+        seen.add(key)
+        out.append(key)
+    return out
+
+
+def _inject_skip_reason(rel: str) -> str | None:
+    posix = _norm_rel(rel)
+    if posix == ".plans" or posix.startswith(".plans/"):
+        return "plans-deny"
+    base = Path(posix).name
+    if base in _INJECT_DENY_BASENAMES or (
+        base.startswith(".env.") and base != ".env.example"
+    ):
+        return "secret"
+    if base.endswith(_INJECT_DENY_SUFFIXES):
+        return "secret"
+    return None
+
+
+def read_touches_files(
+    tree: Path, paths: list[str], *, per_file_chars: int = PER_FILE_INJECT_CHARS,
+) -> tuple[list[tuple[str, str]], list[str]]:
+    """Load existing Touches files under ``tree``.
+
+    Returns (bodies, omitted) where bodies is ``(rel, text)`` and omitted
+    entries are human-readable skip lines (missing, dir, secret, plans, binary).
+    """
+    bodies: list[tuple[str, str]] = []
+    omitted: list[str] = []
+    root = Path(tree)
+    for raw in paths:
+        rel = _norm_rel(raw)
+        reason = _inject_skip_reason(rel)
+        if reason:
+            omitted.append(f"{rel} ({reason})")
+            continue
+        dest = (root / rel).resolve()
+        try:
+            dest.relative_to(root.resolve())
+        except ValueError:
+            omitted.append(f"{rel} (path-escape)")
+            continue
+        if not dest.exists():
+            omitted.append(f"{rel} (missing)")
+            continue
+        if dest.is_dir():
+            omitted.append(f"{rel} (directory)")
+            continue
+        try:
+            text = dest.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError):
+            omitted.append(f"{rel} (unreadable)")
+            continue
+        if "\0" in text:
+            omitted.append(f"{rel} (binary)")
+            continue
+        if len(text) > per_file_chars:
+            cut = per_file_chars
+            text = text[:cut] + f"\n... [truncated {len(text) - cut} chars]\n"
+        bodies.append((rel, text))
+    return bodies, omitted
+
+
+def format_files_block(
+    bodies: list[tuple[str, str]], omitted: list[str],
+) -> str:
+    if not bodies and not omitted:
+        return ""
+    chunks = [FILES_INJECT_HEADER + "\n"]
+    for rel, text in bodies:
+        body = text if text.endswith("\n") else text + "\n"
+        chunks.append(f"--- {rel} ---\n{body}")
+    for item in omitted:
+        chunks.append(f"[omitted: {item}]\n")
+    return "".join(chunks)
+
+
+def fit_files_block_to_budget(
+    *,
+    system: str,
+    base_prompt: str,
+    bodies: list[tuple[str, str]],
+    omitted: list[str],
+    ep: Endpoint,
+) -> str:
+    """Shrink the FILES block until ``check_budget`` passes.
+
+    Drops the largest remaining file first. If the task + EDIT_FORMAT alone
+    still fit, dispatch with every file listed as omitted rather than
+    ``failed-budget``. Returns the block to append (possibly empty).
+    """
+    remaining = list(bodies)
+    extra_omit = list(omitted)
+
+    def block_for(files: list[tuple[str, str]], omit: list[str]) -> str:
+        return format_files_block(files, omit)
+
+    def prompt_fits(prompt: str) -> bool:
+        pressure = budget_pressure(system + prompt, ep)
+        directive = (
+            handoff_directive(pressure)
+            if pressure is not None and pressure >= HANDOFF_THRESHOLD
+            else ""
+        )
+        ok, _ = check_budget(system + prompt + directive, ep)
+        return ok
+
+    if prompt_fits(base_prompt):
+        # Base fits: never refuse the task because Touches files are large.
+        while remaining:
+            block = block_for(remaining, extra_omit)
+            if prompt_fits(base_prompt + "\n\n" + block):
+                return "\n\n" + block
+            largest_i = max(range(len(remaining)), key=lambda i: len(remaining[i][1]))
+            rel, _ = remaining.pop(largest_i)
+            extra_omit.append(f"{rel} (over budget)")
+        block = block_for([], extra_omit)
+        return ("\n\n" + block) if block else ""
+
+    # Base already over ceiling — caller will failed-budget as today.
+    block = block_for(remaining, extra_omit)
+    return ("\n\n" + block) if block else ""
+
+
 def _ledger_outcome(
     *,
     task: str,
@@ -563,6 +766,15 @@ def execute_task(task: str, plan: str, fleet: Fleet, verify_cmd: str | None,
             prompt += f"\n\nPREVIOUS ATTEMPT FAILED. Verbatim failure output:\n{history[-1]}"
         if escalation_suffix:
             prompt += escalation_suffix
+        if tree is not None:
+            bodies, omitted = read_touches_files(Path(tree), parse_task_touches(task))
+            prompt += fit_files_block_to_budget(
+                system=system,
+                base_prompt=prompt,
+                bodies=bodies,
+                omitted=omitted,
+                ep=ep,
+            )
 
         # Budget gate: refuse dispatch rather than truncate when the prompt already
         # exceeds this endpoint's serving ceiling — a decomposition error, not
