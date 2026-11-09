@@ -1028,7 +1028,11 @@ def critic_pytest_paths(
 def critic_pytest_touched(
     root: Path, pkg: dict[str, Any], timeout: float = CRITIC_PYTEST_TIMEOUT,
 ) -> str:
-    """Scoped pytest on tests/ files in ``pkg['changed']``. Fail-closed on timeout."""
+    """Scoped pytest on tests/ files in ``pkg['changed']``.
+
+    Timeout is reported in VERIFICATION; it is not a Done-when REVISE
+    (last-slice instruct REVISEs on pytest exit non-zero only).
+    """
     paths = critic_pytest_paths(pkg, root)
     if not paths:
         return "pytest skipped (no tests/ in range)"
@@ -1041,8 +1045,8 @@ def critic_pytest_touched(
         )
     except subprocess.TimeoutExpired:
         return (
-            f"pytest TIMEOUT after {int(timeout)}s ({listed}) — treat as "
-            "failure, do not ACCEPT"
+            f"pytest TIMEOUT after {int(timeout)}s ({listed}) — evidence "
+            "only; do not REVISE solely for TIMEOUT"
         )
     except OSError as exc:
         return f"pytest: {exc}"
@@ -1085,9 +1089,10 @@ def critic_instruct(index: int, total: int, *, last: bool) -> str:
         "Do not REVISE because: this slice is tests or docs only; a Changed "
         "File is absent from this DIFF; an earlier slice said Partial/Pending; "
         "or verification was not pasted into the DIFF hunks. REVISE if "
-        "VERIFICATION shows pytest exit non-zero or pytest TIMEOUT. Do not "
-        "ACCEPT solely because docs-sync is OK (or skipped). REVISE only for a "
-        "concrete Done-when failure with evidence."
+        "VERIFICATION shows pytest exit non-zero. A pytest TIMEOUT is "
+        "evidence, not a Done-when failure — do not REVISE solely for "
+        "TIMEOUT. Do not ACCEPT solely because docs-sync is OK (or skipped). "
+        "REVISE only for a concrete Done-when failure with evidence."
     )
 
 

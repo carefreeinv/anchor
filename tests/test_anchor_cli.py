@@ -946,6 +946,8 @@ def test_critic_instruct_last_slice_forbids_chunk_false_revise():
     assert "WHOLE plan" in last
     assert "Do not REVISE because" in last
     assert "pytest exit non-zero" in last
+    assert "or pytest TIMEOUT" not in last
+    assert "do not REVISE solely for TIMEOUT" in last
     assert "Do not ACCEPT solely because docs-sync" in last
     assert "docs-sync OK (or skipped) and earlier slices" not in last
 
@@ -1012,6 +1014,29 @@ def test_critic_pytest_paths_adds_ops_transport_when_ops_changes(tmp_path):
     assert critic_pytest_paths(already, tmp_path) == [
         "tests/test_anchor_ops_transport.py",
     ]
+
+
+def test_critic_pytest_timeout_is_evidence_not_revise(tmp_path, monkeypatch):
+    import subprocess
+
+    from anchor_ops import critic_pytest_touched
+
+    tests = tmp_path / "tests"
+    tests.mkdir()
+    (tests / "test_slow.py").write_text(
+        "def test_ok():\n    assert True\n", encoding="utf-8",
+    )
+
+    def boom(*_a, **_k):
+        raise subprocess.TimeoutExpired(cmd="pytest", timeout=1)
+
+    monkeypatch.setattr("anchor_ops.subprocess.run", boom)
+    note = critic_pytest_touched(
+        tmp_path, {"changed": ["tests/test_slow.py"]}, timeout=1,
+    )
+    assert "TIMEOUT" in note
+    assert "do not ACCEPT" not in note
+    assert "treat as failure" not in note
 
 
 def test_review_critic_prompt_includes_verification(project, critic_fleet):

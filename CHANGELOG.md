@@ -28,10 +28,15 @@ Newest first.
   `critic_pytest_paths` also schedules `tests/test_anchor_ops_transport.py`
   so a new `@_op` cannot ACCEPT without the never-answers adapter sweep.
 
+- **CLI critic pytest TIMEOUT is evidence, not REVISE.** Last-slice instruct
+  REVISEs on pytest exit non-zero only. A 60s cap miss is still printed in
+  VERIFICATION so a human/Grok can Needs Work.
+
 - **CLI critic runs pytest on touched tests.** `critic_verification_block`
   executes `pytest` on `tests/` paths in the review range (60s cap) and
-  attaches the exit code. Last-slice instruct REVISEs on non-zero or TIMEOUT
-  and no longer ACCEPTs on docs-sync alone.
+  attaches the exit code. Last-slice instruct REVISEs on non-zero pytest
+  exit only. TIMEOUT is evidence in VERIFICATION, not a REVISE trigger.
+  Docs-sync alone is not enough to ACCEPT.
 
 - **`.env` from the primary git checkout.** `load_dotenv` still prefers cwd then
   this tree; a linked worktree with no copied `.env` also loads the main
