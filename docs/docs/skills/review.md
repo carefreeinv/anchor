@@ -20,7 +20,10 @@ whose **Promote** merges `dev` into `main`.
 This is **not** free-form “code review any PR.” Ad-hoc diffs belong to the
 platform’s code-review tools. `/review` owns **`review-needed/`** sign-off and
 the empty-queue **dev → main** gate. CLI: `anchor review <slug>` runs the critic
-interactively (`--no-delegate` skips; headless still pending).
+interactively on a **TTY** (`--no-delegate` skips; piped stdin skips the model;
+headless still pending). Probe once this session (`anchor review --help`);
+last-known-good CLI wins over re-implementing the critic in chat. Survey and
+merge stay in the skill.
 
 ## Why use it
 

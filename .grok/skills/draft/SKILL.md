@@ -18,6 +18,20 @@ Modes: **create/refine**, **list**, **load/discuss**, and **promote** (to the
 ready lane the plan implies: `bugs/` or `features/`) when the user explicitly
 requests promote.
 
+## CLI this session
+
+Probe **once**: `command -v anchor` (or `./bin/anchor`) **and** `anchor draft --help`.
+Success → list/promote/scaffold are **owned by the CLI** for the rest of the session.
+Do not re-probe every turn. First failure → `ls .plans/drafts` / in-session write;
+mention `/install-anchor`. Last-known-good this session wins over walking
+`.plans/drafts/` by hand.
+
+| Intent | argv |
+|--------|------|
+| List drafts | `anchor draft --list` |
+| Scaffold | `anchor draft --local --title '…' --goal '…' <slug>` then fill Goal/Steps/Done when |
+| Promote | `anchor draft --promote <slug>` (`--to bugs\|features` when the lane is known) |
+
 Do **not** implement product code in this skill. Do **not** run `/work` here.
 Promotion is allowed **only** via the promote subcommand below — never as a
 side effect of create/load, and never from `/work` or fleet pullers.

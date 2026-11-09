@@ -28,6 +28,27 @@ project root but `.anchor/scripts/<name>.py` is.
 which directory it lives in — never by `Lane:` or `Status:` fields inside the
 file. Ignore those fields if present; do not write them.
 
+## CLI this session
+
+Probe **once** this session: `command -v anchor` (or `./bin/anchor`) **and**
+`anchor work --help` or `anchor work --list --json`. Success → treat
+list/claim/finish/return as **owned by the CLI** for the rest of the session.
+Do not re-probe every turn. First failure → `python scripts/work_once.py` /
+`python scripts/…`, then in-session; mention `/install-anchor`. If this session
+already ran a verb successfully, that last-known-good wins over re-implementing
+it in chat. `failed-noop` / empty Lightning on an endpoint means execute is
+**not** configured for that endpoint.
+
+Named “do it in this chat” still executes here.
+
+| Intent | argv |
+|--------|------|
+| List ready | `anchor work --list --json` |
+| Claim + unattended execute | `python scripts/work_once.py --once --ensure-worktree --endpoint <name> [--slug <slug>]` |
+| Named TTY execute | `anchor work <slug>` (implies run; headless does not start a model) |
+| Claim only | `python scripts/work_once.py --once --no-run --slug <slug>` |
+| Finish / return | `anchor work --finish|--return <slug> --agent-id <id>` |
+
 ## Usage
 
 | Invocation | Behavior |

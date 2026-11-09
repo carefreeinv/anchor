@@ -23,6 +23,22 @@ file. Ignore those fields if present; do not write them.
 
 `$ARGUMENTS` is everything after `/work`. Parse flags and the optional target from it.
 
+## CLI this session
+
+Probe **once**: `command -v anchor` (or `./bin/anchor`) **and** `anchor work --help`
+or `anchor work --list --json`. Success → list/claim/finish/return are **owned by
+the CLI** for the rest of the session. Do not re-probe every turn. First failure
+→ `python scripts/work_once.py`, then in-session; mention `/install-anchor`.
+Last-known-good this session wins over re-implementing lane moves in chat.
+
+| Intent | argv |
+|--------|------|
+| List ready | `anchor work --list --json` |
+| Claim + unattended execute | `python scripts/work_once.py --once --ensure-worktree --endpoint <name> [--slug <slug>]` |
+| Named TTY execute | `anchor work <slug>` |
+| Claim only | `python scripts/work_once.py --once --no-run --slug <slug>` |
+| Finish / return | `anchor work --finish|--return <slug> --agent-id <id>` |
+
 ## Usage
 
 | Invocation | Behavior |

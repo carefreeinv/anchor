@@ -3,7 +3,7 @@ sidebar_position: 1.5
 sidebar_label: Plan workflow verbs
 ---
 
-<!-- synced-from: anchor/cli.md @ e5a5523d345d31a97e48385ccaa27ff37e6ca818 -->
+<!-- synced-from: anchor/cli.md @ e61153b223807e123eba7032b08d8adda88d7561 -->
 
 # The plan-workflow CLI: what `anchor` does itself, and what it hands back
 
@@ -28,7 +28,8 @@ anchor models list
 anchor fleet-watch --status
 ```
 
-Named-slug `anchor work` execute is **interactive only**. Exit 0 parks in `review-needed/` unless `--no-finish`. Headless unattended execute is `python scripts/work_once.py --once --ensure-worktree --endpoint …` (`--run` is a no-op alias; `--no-run` claims only). `--root` if cwd has no `.plans/`.
+Named-slug `anchor work` execute is **interactive only**. Exit 0 parks in `review-needed/` unless `--no-finish`. Headless unattended execute is `python scripts/work_once.py --once --ensure-worktree --endpoint …` (`--run` is a no-op alias; `--no-run` claims only). `--root` if cwd has no `.plans/`. Skills (`/work`, `/review`, `/draft`) prefer
+these verbs when `anchor` answered once this session.
 
 Implementation: verb logic lives in `scripts/anchor_ops.py` (a typed operations
 registry). `scripts/anchor_cli.py` is the terminal adapter — parser, prompts,

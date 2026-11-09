@@ -8,6 +8,11 @@ Newest first.
 
 ### Changed
 
+- **Skills prefer CLI after one successful probe.** `/work`, `/review`, and
+  `/draft` dispatch list/claim/finish/promote/critic to `anchor` / `work_once`
+  when the binary answered this session. Last-known-good wins over redoing
+  those ops in chat. Standing rules (Claude + Grok) match.
+
 - **Executor failover after a 0-ok pass.** `orchestrate.py` retries remaining
   healthy executor-role endpoints when the first pass lands 0 ok (NOOP/FORMAT).
   `--endpoint` is the first try and does not pin planner/critic.

@@ -25,6 +25,13 @@ platform’s code-review tools. This skill’s home is **`review-needed/`** plus
 the empty-queue promotion path. CLI: `anchor review <slug>` runs the critic
 interactively (`--no-delegate` skips; headless still pending).
 
+## CLI this session
+
+Probe **once**: `command -v anchor` **and** `anchor review --help`. Success →
+list/delegate owned by the CLI for the rest of the session. Critic only on a
+**TTY** (`anchor review <slug>`); never pipe stdin. `--no-delegate` skips.
+Human survey and merge stay in this command.
+
 `$ARGUMENTS` is everything after `/review`.
 
 ## Usage

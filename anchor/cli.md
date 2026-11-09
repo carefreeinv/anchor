@@ -21,7 +21,8 @@ anchor models list
 anchor fleet-watch --status
 ```
 
-Named-slug `anchor work` execute is **interactive only**. Exit 0 parks in `review-needed/` unless `--no-finish`. Headless unattended execute is `python scripts/work_once.py --once --ensure-worktree --endpoint …` (`--run` is a no-op alias; `--no-run` claims only). `--root` if cwd has no `.plans/`.
+Named-slug `anchor work` execute is **interactive only**. Exit 0 parks in `review-needed/` unless `--no-finish`. Headless unattended execute is `python scripts/work_once.py --once --ensure-worktree --endpoint …` (`--run` is a no-op alias; `--no-run` claims only). `--root` if cwd has no `.plans/`. Skills (`/work`, `/review`, `/draft`) prefer
+these verbs when `anchor` answered once this session.
 
 Implementation: verb logic lives in `scripts/anchor_ops.py` (a typed operations
 registry). `scripts/anchor_cli.py` is the terminal adapter — parser, prompts,

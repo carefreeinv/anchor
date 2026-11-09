@@ -13,6 +13,17 @@ subcommand. Do not run `/work` here.
 
 `$ARGUMENTS` is everything after `/draft`.
 
+## CLI this session
+
+Probe **once**: `command -v anchor` **and** `anchor draft --help`. Success →
+list/promote/scaffold owned by the CLI for the rest of the session.
+
+| Intent | argv |
+|--------|------|
+| List | `anchor draft --list` |
+| Scaffold | `anchor draft --local --title '…' --goal '…' <slug>` |
+| Promote | `anchor draft --promote <slug>` |
+
 ## Usage
 
 | Invocation | Behavior |

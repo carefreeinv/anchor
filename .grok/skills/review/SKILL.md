@@ -34,6 +34,21 @@ This skill **embeds** an AI critic pass; it is not a separate “code review any
 diff” product. For ad-hoc uncommitted/PR review outside these modes, use the
 platform’s code-review tools.
 
+## CLI this session
+
+Probe **once**: `command -v anchor` (or `./bin/anchor`) **and** `anchor review --help`.
+Success → list/delegate are **owned by the CLI** for the rest of the session.
+Do not re-probe every turn. First failure → in-session critic; mention `/install-anchor`.
+Last-known-good this session wins over re-implementing the critic prompt in chat.
+
+| Intent | argv |
+|--------|------|
+| List queue | `anchor review --list` |
+| Critic (advisory) | `anchor review <slug>` on a **TTY** (never `printf \| anchor review`; piped stdin is non-interactive and skips the model). `--no-delegate` skips. |
+| Skip critic | `anchor review --no-delegate <slug>` |
+
+Human survey (Approve / Needs Work / Skip) and merge stay in this skill.
+
 `$ARGUMENTS` is everything after `/review`.
 
 ## Usage

@@ -3,7 +3,7 @@ sidebar_position: 2
 sidebar_label: Grok Build
 ---
 
-<!-- synced-from: platforms/grok-build/GROK.md @ e3485ab53082cd413384eae38f3bfc297ef4539b -->
+<!-- synced-from: platforms/grok-build/GROK.md @ ad196c20929afc9ba0027ace454a54387820d68c -->
 
 # Grok Build
 
@@ -28,7 +28,7 @@ flowchart LR
   s -->|"two fails"| stop["Stop + escalate"]
 ```
 
-The hard rules (restate → plan → one-step-per-turn → verify-don't-claim → mark `(unverified)` → two-fail stop → scope → footer → **docs describe current state, not plans** → **`/commit-prep` before any commit outside `.plans/`, and before any merge commit** → **capacity limits are a scheduling problem**, not a failure: checkpoint, then reroute to the next model clearing the task's fitness floor, wait for a near reset, or stop and report — see [capacity routing](/capacity-routing) → **prefer `anchor` / `work_once` for deterministic plan ops** (`anchor work --list|--finish|--return`, `anchor models`, `anchor fleet-watch`, `anchor plans`; unattended execute is `work_once.py --once --run --ensure-worktree`; prefer `anchor fleet-watch` when on PATH) → **surface the best-fit skill**: before acting, offer an available `.grok/skills/` skill or command that fits the request in one line, then proceed — a suggestion, not a gate; only skills actually loaded, at most once per capability per session) plus three Grok-specific ones:
+The hard rules (restate → plan → one-step-per-turn → verify-don't-claim → mark `(unverified)` → two-fail stop → scope → footer → **docs describe current state, not plans** → **`/commit-prep` before any commit outside `.plans/`, and before any merge commit** → **capacity limits are a scheduling problem**, not a failure: checkpoint, then reroute to the next model clearing the task's fitness floor, wait for a near reset, or stop and report — see [capacity routing](/capacity-routing) → **prefer `anchor` / `work_once` for deterministic plan ops** (`anchor work --list|--finish|--return`, `anchor models`, `anchor fleet-watch`, `anchor plans`; unattended execute is `work_once.py --once --run --ensure-worktree`; probe once this session, last-known-good CLI wins over re-implementation; prefer `anchor fleet-watch` when on PATH) → **surface the best-fit skill**: before acting, offer an available `.grok/skills/` skill or command that fits the request in one line, then proceed — a suggestion, not a gate; only skills actually loaded, at most once per capability per session) plus three Grok-specific ones:
 
 - Force risk enumeration before the plan ("list 3 ways this could go wrong") — surfaces the reasoning Grok skips.
 - **One task spec per session.** Restart instead of accumulating context; instruction decay makes long Grok sessions untrustworthy.
