@@ -266,6 +266,12 @@ class ModelsNickParams:
 @dataclass(frozen=True)
 class ReviewListParams:
     root: str
+    suggest_promote: bool = False
+
+
+@dataclass(frozen=True)
+class ReviewPromoteParams:
+    root: str
 
 
 @dataclass(frozen=True)
@@ -789,6 +795,15 @@ def critic_verdict(text: str) -> str:
     return _pick(_words(cleaned))
 
 
+def _promote_hint(root: str) -> tuple[str, str, int] | None:
+    import pending_merges
+
+    try:
+        return pending_merges.promotion_ahead(root)
+    except pending_merges.GitError:
+        return None
+
+
 @_op("review.list", mutates=False, requires=None)
 def op_review_list(params: ReviewListParams, _answers: Answers, _ctx: Ctx) -> Result:
     import pending_merges
@@ -802,8 +817,55 @@ def op_review_list(params: ReviewListParams, _answers: Answers, _ctx: Ctx) -> Re
          "held": pending_merges.is_held(r.path)}
         for r in refs
     ]
-    if not refs:
+    if refs:
+        return res
+    promo = _promote_hint(params.root) if params.suggest_promote else None
+    if promo:
+        integ, main, n = promo
+        res.exit_code = EXIT_ERROR
+        res.error = (
+            f"nothing in review-needed/; {integ} is {n} commit(s) ahead of {main}. "
+            f"Run `anchor review --promote` to promote {integ} → {main}."
+        )
+        res.data["promote"] = {
+            "integration": integ, "mainline": main, "ahead": n,
+        }
+        return res
+    res.exit_code = EXIT_NOTHING
+    return res
+
+
+@_op("review.promote", mutates=False, requires=NEEDS_OPERATOR)
+def op_review_promote(params: ReviewPromoteParams, answers: Answers, _ctx: Ctx) -> Result:
+    """Empty-queue promotion: integration → mainline. Does not merge headless."""
+    res = Result("review", "promote")
+    promo = _promote_hint(params.root)
+    if not promo:
         res.exit_code = EXIT_NOTHING
+        res.error = (
+            "nothing to promote: integration is not ahead of mainline "
+            "(or this is not a git repo with both branches)"
+        )
+        return res
+    integ, main, n = promo
+    res.data["promote"] = {
+        "integration": integ, "mainline": main, "ahead": n,
+    }
+    choice = answers.choose(
+        "promote-decision",
+        f"Promote {integ} → {main} ({n} commit(s) ahead)?",
+        ("promote", "skip"),
+    )
+    res.data["decision"] = choice
+    if choice != "promote":
+        res.notes.append("not promoted; branches unchanged")
+        return res
+    res.need(
+        "promote-merge",
+        NEEDS_OPERATOR,
+        f"merge {integ} → {main} (fast-forward preferred); "
+        f"git checkout {main} && git merge --ff-only {integ}",
+    )
     return res
 
 

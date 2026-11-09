@@ -111,6 +111,29 @@ def ahead_count(root: Path, target: str, branch: str) -> int:
     return int(out.strip() or "0")
 
 
+def promotion_ahead(root: Path | str) -> tuple[str, str, int] | None:
+    """If integration is ahead of mainline, ``(integration, mainline, ahead)``.
+
+    Missing git, a lone mainline, or a caught-up integration → ``None``.
+    """
+    root = Path(root)
+    try:
+        branches = set(local_branches(root))
+    except GitError:
+        return None
+    integ = _first_existing(INTEGRATION_ORDER, branches)
+    main = _first_existing(MAINLINE_ORDER, branches)
+    if not integ or not main or integ == main:
+        return None
+    try:
+        n = ahead_count(root, main, integ)
+    except GitError:
+        return None
+    if n <= 0:
+        return None
+    return integ, main, n
+
+
 def last_commit_epoch(root: Path, branch: str) -> float:
     """Committer-date (epoch seconds) of *branch*'s tip commit."""
     return float(_git(root, "log", "-1", "--format=%ct", branch).strip())

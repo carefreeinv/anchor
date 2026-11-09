@@ -430,6 +430,43 @@ def test_review_list(project):
     assert code == 0 and [p["slug"] for p in doc["result"]["plans"]] == ["r1"]
 
 
+def test_review_empty_queue_suggests_promote_when_dev_ahead(git_repo):
+    root = git_repo
+    for lane in ("bugs", "features", "in-progress", "review-needed", "drafts",
+                 "completed", "ambiguous", "blocked"):
+        (root / ".plans" / lane).mkdir(parents=True)
+    subprocess.run(["git", "checkout", "-b", "dev"], cwd=root, check=True, capture_output=True)
+    (root / "extra.txt").write_text("ahead\n", encoding="utf-8")
+    subprocess.run(["git", "add", "extra.txt"], cwd=root, check=True, capture_output=True)
+    subprocess.run(["git", "commit", "-m", "dev ahead"], cwd=root, check=True, capture_output=True)
+
+    code, doc = cli(["review", "--root", str(root)])
+    assert code == 2
+    assert doc["error"]
+    assert "anchor review --promote" in doc["error"]
+    assert doc["result"]["promote"]["ahead"] >= 1
+    assert doc["result"]["plans"] == []
+
+    code, doc = cli(["review", "--list", "--root", str(root)])
+    assert code == 1
+    assert doc["error"] is None
+    assert doc["result"]["plans"] == []
+
+
+def test_review_promote_flag_needs_operator_when_ahead(git_repo):
+    root = git_repo
+    (root / ".plans" / "review-needed").mkdir(parents=True)
+    subprocess.run(["git", "checkout", "-b", "dev"], cwd=root, check=True, capture_output=True)
+    (root / "extra.txt").write_text("ahead\n", encoding="utf-8")
+    subprocess.run(["git", "add", "extra.txt"], cwd=root, check=True, capture_output=True)
+    subprocess.run(["git", "commit", "-m", "dev ahead"], cwd=root, check=True, capture_output=True)
+
+    code, doc = cli(["review", "--promote", "--root", str(root)])
+    assert code == 3
+    assert doc["action"] == "promote"
+    assert any(p["step"] == "promote-decision" for p in doc["pending"])
+
+
 def test_review_headless_stops_for_the_decision_with_the_package(project):
     write(project, "review-needed", "r1")
     code, doc = cli(["review", "r1", "--root", str(project)])

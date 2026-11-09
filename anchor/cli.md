@@ -17,6 +17,7 @@ anchor work <slug> --endpoint <nick> # TTY: claim + orchestrate.py (`--run` is a
 anchor work --finish <slug>          # in-progress → review-needed/ (or let execute exit 0 park it)
 anchor review --list
 anchor review <slug>                 # TTY critic + Approve / Needs Work (`--no-delegate` skips critic)
+anchor review --promote              # empty queue: integration → mainline (explicit)
 anchor models list
 anchor fleet-watch --status
 ```

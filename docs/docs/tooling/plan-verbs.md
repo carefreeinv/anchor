@@ -3,7 +3,7 @@ sidebar_position: 1.5
 sidebar_label: Plan workflow verbs
 ---
 
-<!-- synced-from: anchor/cli.md @ 31e1bcadeca3d409445cbdbee815a9b5cebc0104 -->
+<!-- synced-from: anchor/cli.md @ 931ed08949dffea610f3f55a23daa015a59007df -->
 
 # The plan-workflow CLI: what `anchor` does itself, and what it hands back
 
@@ -24,6 +24,7 @@ anchor work <slug> --endpoint <nick> # TTY: claim + orchestrate.py (`--run` is a
 anchor work --finish <slug>          # in-progress → review-needed/ (or let execute exit 0 park it)
 anchor review --list
 anchor review <slug>                 # TTY critic + Approve / Needs Work (`--no-delegate` skips critic)
+anchor review --promote              # empty queue: integration → mainline (explicit)
 anchor models list
 anchor fleet-watch --status
 ```
@@ -311,7 +312,7 @@ options:
 
 ```text
 usage: anchor review [-h] [--root ROOT] [--json] [--non-interactive] [--list]
-                     [--delegate [ENDPOINT]] [--no-delegate]
+                     [--promote] [--delegate [ENDPOINT]] [--no-delegate]
                      [--registry REGISTRY]
                      [slug]
 
@@ -325,6 +326,8 @@ options:
   --non-interactive     never prompt; JSON output; stop with exit 3 where an
                         answer is needed
   --list                list review-needed plans
+  --promote             promote integration → mainline when the review queue
+                        is empty
   --delegate [ENDPOINT]
                         interactive only: send the judgment step to ENDPOINT
                         from the registry (bare flag: first endpoint for the

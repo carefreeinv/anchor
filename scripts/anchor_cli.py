@@ -43,6 +43,7 @@ from anchor_ops import (
     Result,
     ReviewListParams,
     ReviewParams,
+    ReviewPromoteParams,
     WorkClaimParams,
     WorkListParams,
     WorkSlugParams,
@@ -308,6 +309,10 @@ def build_parser() -> argparse.ArgumentParser:
     _common(p)
     p.add_argument("slug", nargs="?", help="review this plan (asks for the decision)")
     p.add_argument("--list", action="store_true", help="list review-needed plans")
+    p.add_argument(
+        "--promote", action="store_true",
+        help="promote integration → mainline when the review queue is empty",
+    )
     _delegation(p, "critic", opt_out=True)
 
     p = sub.add_parser("draft", help="list drafts; scaffold or promote one")
@@ -377,6 +382,14 @@ def _cli_action(args: argparse.Namespace) -> str:
         if getattr(args, "return_ready", None):
             return "return"
         return "claim"
+    if verb == "review":
+        if getattr(args, "promote", False):
+            return "promote"
+        if getattr(args, "list", False):
+            return "list"
+        if not getattr(args, "slug", None):
+            return "list"
+        return "review"
     if getattr(args, "list", False):
         return "list"
     if verb == "models":
@@ -437,8 +450,18 @@ def _dispatch(args: argparse.Namespace, answers: Prompter, ctx: Ctx) -> Result:
             answers, ctx,
         )
     if verb == "review":
-        if args.list or not args.slug:
+        if args.promote:
+            return run(
+                "review.promote", ReviewPromoteParams(root=args.root), answers, ctx,
+            )
+        if args.list:
             return run("review.list", ReviewListParams(root=args.root), answers, ctx)
+        if not args.slug:
+            return run(
+                "review.list",
+                ReviewListParams(root=args.root, suggest_promote=True),
+                answers, ctx,
+            )
         no_delegate = bool(getattr(args, "no_delegate", False))
         delegate = None if no_delegate else (args.delegate or "auto")
         return run("review.review", ReviewParams(

@@ -8,6 +8,10 @@ Newest first.
 
 ### Changed
 
+- **Bare `anchor review` with an empty queue.** If integration is ahead of
+  mainline, the command exits 2 and tells you to run `anchor review --promote`
+  instead of listing nothing. `--list` still lists an empty queue (exit 1).
+
 - **CLI critic runs ops transport tests when ``anchor_ops.py`` changes.**
   `critic_pytest_paths` also schedules `tests/test_anchor_ops_transport.py`
   so a new `@_op` cannot ACCEPT without the never-answers adapter sweep.
