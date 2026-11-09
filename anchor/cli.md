@@ -50,7 +50,9 @@ plan to `orchestrate.py` with the same `--endpoint`/`--registry` used to claim
 feature worktree (`var/worktrees/<agent-id>/`, never main/master/dev/develop).
 That default `Fleet.pick` probes LAN rows
 before chat and falls back to NVIDIA Build when the probe is live (see
-`platforms/nvidia-build/BUILD.md`). `orchestrate.py` applies unified diffs or whole-file fences
+`platforms/nvidia-build/BUILD.md`). `orchestrate.py --endpoint` is the first
+executor try; remaining healthy executor-role endpoints are failover unless
+`--no-failover`. Planner/critic stay on the full fleet. `orchestrate.py` applies unified diffs or whole-file fences
 from the executor reply into `--worktree` before scope/verify. `work_once.py
 --once --ensure-worktree` forwards `--worktree`; extra `-- --worktree <dir>`
 still works. Footer-only replies do not write files.

@@ -3,7 +3,7 @@ sidebar_position: 1.5
 sidebar_label: Plan workflow verbs
 ---
 
-<!-- synced-from: anchor/cli.md @ 46adc503e3072ceda5c3c89311efeee7c85bed7d -->
+<!-- synced-from: anchor/cli.md @ 875de22e644ba9b84db6534d7741728b90efd909 -->
 
 # The plan-workflow CLI: what `anchor` does itself, and what it hands back
 
@@ -57,7 +57,9 @@ plan to `orchestrate.py` with the same `--endpoint`/`--registry` used to claim
 feature worktree (`var/worktrees/<agent-id>/`, never main/master/dev/develop).
 That default `Fleet.pick` probes LAN rows
 before chat and falls back to NVIDIA Build when the probe is live (see
-`platforms/nvidia-build/BUILD.md`). `orchestrate.py` applies unified diffs or whole-file fences
+`platforms/nvidia-build/BUILD.md`). `orchestrate.py --endpoint` is the first
+executor try; remaining healthy executor-role endpoints are failover unless
+`--no-failover`. Planner/critic stay on the full fleet. `orchestrate.py` applies unified diffs or whole-file fences
 from the executor reply into `--worktree` before scope/verify. `work_once.py
 --once --ensure-worktree` forwards `--worktree`; extra `-- --worktree <dir>`
 still works. Footer-only replies do not write files.

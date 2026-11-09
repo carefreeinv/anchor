@@ -79,6 +79,7 @@ from scope_gate import (
 MAX_ATTEMPTS = 2  # Anchor stop condition: two failures → escalate/hold, never a third.
 ROLE_VIOLATION_EXIT = 4
 FAILED_NOOP_EXIT = 2
+HARD_STOP_STATUSES = frozenset({"failed-scope", "failed-role"})
 
 BUDGET_CHARS_PER_TOKEN = 4  # matches prompt_tuner's conservative estimate
 
@@ -1057,6 +1058,65 @@ def execute_with_continuations(task: str, plan: str, fleet: Fleet, verify_cmd: s
     raise AssertionError("unreachable: loop returns on every path")  # pragma: no cover
 
 
+class PinExecutorFleet:
+    """``pick('executor')`` is pinned; planner/critic/tuner stay on *inner*."""
+
+    def __init__(self, inner: Fleet, executor: Endpoint):
+        self._inner = inner
+        self._executor = executor
+
+    def pick(self, role: str) -> Endpoint:
+        if role == "executor":
+            return self._executor
+        return self._inner.pick(role)
+
+    def __getattr__(self, name: str):
+        return getattr(self._inner, name)
+
+
+def executor_try_order(
+    fleet: Fleet, *, endpoint: str | None, no_failover: bool
+) -> list[Endpoint]:
+    """First executor, then remaining healthy executor-role candidates.
+
+    ``--endpoint`` is the first try, not a pin of every role. ``--no-failover``
+    keeps a single try. Fake fleets without ``executor_candidates`` stay
+    one-shot (``pick('executor')``).
+    """
+    order: list[Endpoint] = []
+    seen_names: set[str] = set()
+    seen_models: set[tuple[str, str]] = set()
+
+    def _add(ep: Endpoint) -> None:
+        key = (
+            (getattr(ep, "base_url", None) or "").rstrip("/"),
+            getattr(ep, "model", None) or "",
+        )
+        if ep.name in seen_names:
+            return
+        if key != ("", "") and key in seen_models:
+            return
+        order.append(ep)
+        seen_names.add(ep.name)
+        if key != ("", ""):
+            seen_models.add(key)
+
+    if endpoint:
+        _add(fleet.lookup(endpoint))
+    if no_failover:
+        return order or [fleet.pick("executor")]
+    extras = (
+        list(fleet.executor_candidates())
+        if hasattr(fleet, "executor_candidates")
+        else []
+    )
+    for ep in extras:
+        _add(ep)
+    if not order:
+        _add(fleet.pick("executor"))
+    return order
+
+
 def review(goal: str, plan: str, results: list[dict], fleet: Fleet) -> str:
     ep = fleet.pick("critic")
     print(f"[review] {ep.name}", file=sys.stderr)
@@ -1094,7 +1154,15 @@ def main() -> None:
     ap.add_argument(
         "--endpoint",
         default=None,
-        help="use only this named endpoint from the registry for planner/executor/critic",
+        help="first executor try (named registry row). Remaining healthy "
+             "executor-role endpoints are failover unless --no-failover. "
+             "Does not pin planner/critic.",
+    )
+    ap.add_argument(
+        "--no-failover",
+        action="store_true",
+        help="do not try the next executor after a 0-ok pass (keep --endpoint "
+             "as the only executor)",
     )
     ap.add_argument(
         "--metrics-ledger",
@@ -1137,13 +1205,13 @@ def main() -> None:
     fleet = Fleet(**fleet_kw)
     if args.endpoint:
         try:
-            pinned = fleet.lookup(args.endpoint)
+            fleet.lookup(args.endpoint)
         except LookupError:
             ap.error(f"no endpoint named {args.endpoint!r} in the registry")
-        fleet.endpoints = [pinned]
-        fleet._by_key = {pinned.name: pinned, **{a: pinned for a in pinned.aliases}}
-        tier = pinned.tier
-        fleet.roles = {role: [tier] for role in ("planner", "executor", "critic", "tuner")}
+        if args.no_failover:
+            pinned = fleet.lookup(args.endpoint)
+            fleet.endpoints = [pinned]
+            fleet._by_key = {pinned.name: pinned, **{a: pinned for a in pinned.aliases}}
     context = Path(args.context).read_text(encoding="utf-8") if args.context else ""
     root = Path(args.worktree)
     events: list[dict] = []
@@ -1205,35 +1273,67 @@ def main() -> None:
         except ValueError:
             spec_deny = ()  # spec lives outside the worktree — unreachable anyway
 
-    results = []
-    for t in tasks:
-        before = snapshot_changes(root)
-        # Hold the ledger row until the role verdict exists: a task can pass verify
-        # and still have written outside its role's allowed paths, and a row written
-        # at the verify step would score that run as an accurate claim.
-        outcome_sink: dict = {}
-        r = execute_with_continuations(
-            t, plan, fleet, args.verify, args.hold_on_fail, args.insist, scope,
-            metrics_ledger=metrics_ledger, task_slug=task_slug,
-            outcome_sink=outcome_sink, max_respawns=args.max_respawns, events=events,
-            transcript_root=transcript_root, worktree=root,
-        )
-        if r.get("status") == "human-report":
-            report_path = write_human_report(
-                root, task_id=task_id_for(t, slug=task_slug), task_slug=task_slug,
-                report=r["report"],
+    def run_executor_pass(exec_fleet: Fleet) -> list[dict]:
+        pass_results: list[dict] = []
+        for t in tasks:
+            before = snapshot_changes(root)
+            outcome_sink: dict = {}
+            r = execute_with_continuations(
+                t, plan, exec_fleet, args.verify, args.hold_on_fail, args.insist, scope,
+                metrics_ledger=metrics_ledger, task_slug=task_slug,
+                outcome_sink=outcome_sink, max_respawns=args.max_respawns, events=events,
+                transcript_root=transcript_root, worktree=root,
             )
-            r["report_path"] = str(report_path)
-            log_event(events, "human-report", path=str(report_path))
-        role_verdict = guard(EXECUTOR, before, spec_deny)
-        if role_verdict is not None and not role_verdict.ok:
-            r["status"] = "failed-role"
-            r["role_offending"] = list(role_verdict.offending)
-        _flush_outcome(
-            outcome_sink,
-            role_verdict=None if role_verdict is None else ("pass" if role_verdict.ok else "fail"),
+            if r.get("status") == "human-report":
+                report_path = write_human_report(
+                    root, task_id=task_id_for(t, slug=task_slug), task_slug=task_slug,
+                    report=r["report"],
+                )
+                r["report_path"] = str(report_path)
+                log_event(events, "human-report", path=str(report_path))
+            role_verdict = guard(EXECUTOR, before, spec_deny)
+            if role_verdict is not None and not role_verdict.ok:
+                r["status"] = "failed-role"
+                r["role_offending"] = list(role_verdict.offending)
+            _flush_outcome(
+                outcome_sink,
+                role_verdict=None if role_verdict is None else (
+                    "pass" if role_verdict.ok else "fail"
+                ),
+            )
+            pass_results.append(r)
+        return pass_results
+
+    try:
+        try_order = executor_try_order(
+            fleet, endpoint=args.endpoint, no_failover=args.no_failover,
         )
-        results.append(r)
+    except LookupError as exc:
+        ap.error(str(exc))
+    results: list[dict] = []
+    for i, ep in enumerate(try_order):
+        print(
+            f"[fleet] executor try {i + 1}/{len(try_order)}: {ep.name}",
+            file=sys.stderr,
+        )
+        log_event(events, "executor-try", endpoint=ep.name, index=i + 1)
+        results = run_executor_pass(PinExecutorFleet(fleet, ep))
+        ok_here = sum(r["status"] == "ok" for r in results)
+        if ok_here:
+            break
+        if any(r.get("status") in HARD_STOP_STATUSES for r in results):
+            print(
+                f"[fleet] failover stopped on {ep.name}: "
+                "failed-scope or failed-role",
+                file=sys.stderr,
+            )
+            break
+        if i + 1 < len(try_order):
+            print(
+                f"[fleet] 0 ok on {ep.name}; failing over to "
+                f"{try_order[i + 1].name}",
+                file=sys.stderr,
+            )
 
     ok = sum(r["status"] == "ok" for r in results)
     if ok == 0:

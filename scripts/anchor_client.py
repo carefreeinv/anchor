@@ -610,6 +610,28 @@ class Fleet:
             f"NVIDIA Build: {build_note})"
         )
 
+    def executor_candidates(self) -> list[Endpoint]:
+        """Healthy executor-role endpoints, unique by name, role-tier order."""
+        found: list[Endpoint] = []
+        seen: set[str] = set()
+        for tier in self.roles.get("executor", []):
+            for ep in self.by_tier(tier):
+                if ep.name in seen:
+                    continue
+                if not self._is_healthy(ep):
+                    continue
+                seen.add(ep.name)
+                found.append(ep)
+        if not self.prefer_local:
+            fb, _ = self._nvidia_build_fallback()
+            if fb is not None:
+                key = (fb.base_url.rstrip("/"), fb.model)
+                if fb.name not in seen and all(
+                    (e.base_url.rstrip("/"), e.model) != key for e in found
+                ):
+                    found = [fb, *found]
+        return found
+
     def _nvidia_build_fallback(self) -> tuple[Endpoint | None, str]:
         try:
             import nvidia_build_probe as nbp

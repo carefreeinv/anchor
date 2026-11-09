@@ -1394,3 +1394,134 @@ def test_execute_task_drops_over_budget_touches_files(tmp_path, monkeypatch):
     assert "hi\n" in user
     assert "B" * 1000 not in user
     assert "[omitted: BIG.txt (over budget)]" in user
+
+
+class NamedEndpoint:
+    def __init__(self, name, replies, *, model="m"):
+        self.name = name
+        self.replies = list(replies)
+        self.calls = 0
+        self.quirks = {}
+        self.base_url = f"http://{name}/v1"
+        self.model = model
+        self.tier = "executor"
+        self.aliases: list[str] = []
+
+    def chat(self, messages, **kwargs):
+        self.calls += 1
+        item = self.replies.pop(0)
+        if isinstance(item, tuple):
+            fn, text = item
+            if fn:
+                fn()
+            return text
+        return item
+
+
+class RosterFleet:
+    def __init__(self, *, planner, executors, critic):
+        self.planner = planner
+        self.executors = list(executors)
+        self.critic = critic
+
+    def pick(self, role):
+        if role == "planner":
+            return self.planner
+        if role == "critic":
+            return self.critic
+        return self.executors[0]
+
+    def lookup(self, name):
+        for ep in (self.planner, self.critic, *self.executors):
+            if ep.name == name:
+                return ep
+        raise LookupError(name)
+
+    def executor_candidates(self):
+        return list(self.executors)
+
+
+BAD_EXEC = "not a patch and no footer\n"
+
+
+def test_main_failover_second_executor_ok(git_repo, monkeypatch):
+    import json
+
+    import orchestrate
+
+    planner = NamedEndpoint("planner", [PLAN_TEXT], model="p")
+    first = NamedEndpoint("ep-a", [BAD_EXEC, BAD_EXEC], model="a")
+
+    def write_readme():
+        (git_repo / "README").write_text("from-b\n")
+
+    second = NamedEndpoint("ep-b", [(write_readme, GOOD_OUTPUT)], model="b")
+    critic = NamedEndpoint("critic", ["review: ok"], model="c")
+    fleet = RosterFleet(
+        planner=planner, executors=[first, second], critic=critic,
+    )
+    out = _run_main(monkeypatch, git_repo, fleet)
+    orchestrate.main()
+    run = json.loads(out.read_text())
+    assert sum(r["status"] == "ok" for r in run["results"]) >= 1
+    assert run["review"] == "review: ok"
+    assert first.calls == 2
+    assert second.calls == 1
+    assert critic.calls == 1
+    assert planner.calls == 1
+
+
+def test_main_no_failover_does_not_try_second(git_repo, monkeypatch):
+    import json
+
+    import orchestrate
+
+    planner = NamedEndpoint("planner", [PLAN_TEXT], model="p")
+    first = NamedEndpoint("ep-a", [BAD_EXEC, BAD_EXEC], model="a")
+    second = NamedEndpoint("ep-b", [GOOD_OUTPUT], model="b")
+    critic = NamedEndpoint("critic", ["review: ok"], model="c")
+    fleet = RosterFleet(
+        planner=planner, executors=[first, second], critic=critic,
+    )
+    out = _run_main(monkeypatch, git_repo, fleet, extra_args=("--no-failover",))
+    with pytest.raises(SystemExit) as exc:
+        orchestrate.main()
+    assert exc.value.code == orchestrate.FAILED_NOOP_EXIT
+    run = json.loads(out.read_text())
+    assert run["review"].startswith("critic skipped: 0/")
+    assert second.calls == 0
+    assert critic.calls == 0
+
+
+def test_main_failed_scope_does_not_failover(git_repo, monkeypatch):
+    import json
+
+    import orchestrate
+
+    spec = git_repo / "spec.md"
+    spec.write_text("## Files in scope\n- README\n", encoding="utf-8")
+
+    planner = NamedEndpoint("planner", [PLAN_TEXT], model="p")
+
+    def write_secret():
+        (git_repo / "secret.py").write_text("x = 1\n", encoding="utf-8")
+
+    first = NamedEndpoint("ep-a", [(write_secret, GOOD_OUTPUT)], model="a")
+    second = NamedEndpoint("ep-b", [GOOD_OUTPUT], model="b")
+    critic = NamedEndpoint("critic", ["review: ok"], model="c")
+    fleet = RosterFleet(
+        planner=planner, executors=[first, second], critic=critic,
+    )
+    out = _run_main(
+        monkeypatch, git_repo, fleet,
+        extra_args=("--scope-spec", str(spec)),
+    )
+    with pytest.raises(SystemExit) as exc:
+        orchestrate.main()
+    run = json.loads(out.read_text())
+    assert run["results"][0]["status"] == "failed-scope"
+    assert second.calls == 0
+    assert critic.calls == 0
+    assert exc.value.code in (
+        orchestrate.FAILED_NOOP_EXIT, orchestrate.ROLE_VIOLATION_EXIT,
+    )

@@ -8,6 +8,12 @@ Newest first.
 
 ### Changed
 
+- **Executor failover after a 0-ok pass.** `orchestrate.py` retries remaining
+  healthy executor-role endpoints when the first pass lands 0 ok (NOOP/FORMAT).
+  `--endpoint` is the first try and does not pin planner/critic.
+  `--no-failover` keeps a single executor. `failed-scope` / `failed-role`
+  stop failover. Exhausted roster still exits 2 and skips the critic.
+
 - **GROK standing rules match Claude on CLI ops.** Rule 13 names `anchor
   plans` and the `scripts/work_once.py` exists-fallback. `/fleet-watch`
   prefers `anchor fleet-watch` when the CLI is on PATH.
