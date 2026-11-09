@@ -8,6 +8,10 @@ Newest first.
 
 ### Changed
 
+- **CLI critic runs ops transport tests when ``anchor_ops.py`` changes.**
+  `critic_pytest_paths` also schedules `tests/test_anchor_ops_transport.py`
+  so a new `@_op` cannot ACCEPT without the never-answers adapter sweep.
+
 - **CLI critic runs pytest on touched tests.** `critic_verification_block`
   executes `pytest` on `tests/` paths in the review range (60s cap) and
   attaches the exit code. Last-slice instruct REVISEs on non-zero or TIMEOUT

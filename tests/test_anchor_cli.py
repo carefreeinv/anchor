@@ -930,6 +930,9 @@ def test_critic_pytest_touched_skips_without_tests(tmp_path):
 
     assert critic_pytest_paths({}) == []
     assert critic_pytest_paths({"changed": ["scripts/anchor_ops.py"]}) == []
+    assert critic_pytest_paths(
+        {"changed": ["scripts/anchor_ops.py"]}, tmp_path,
+    ) == []
     note = critic_pytest_touched(tmp_path, {"changed": ["scripts/foo.py"]})
     assert "skipped" in note
     assert "no tests/" in note
@@ -951,6 +954,27 @@ def test_critic_pytest_touched_attaches_failure(tmp_path):
     block = critic_verification_block(tmp_path, pkg, "")
     assert "pytest exit" in block
     assert "check_docs_sync.py" in block
+
+
+def test_critic_pytest_paths_adds_ops_transport_when_ops_changes(tmp_path):
+    from anchor_ops import critic_pytest_paths
+
+    tests = tmp_path / "tests"
+    tests.mkdir()
+    (tests / "test_anchor_ops_transport.py").write_text("# stub\n", encoding="utf-8")
+    pkg_ops = {"changed": ["scripts/anchor_ops.py"]}
+    paths = critic_pytest_paths(pkg_ops, tmp_path)
+    assert paths == ["tests/test_anchor_ops_transport.py"]
+    assert critic_pytest_paths({"changed": ["anchor/cli.md"]}, tmp_path) == []
+    already = {
+        "changed": [
+            "scripts/anchor_ops.py",
+            "tests/test_anchor_ops_transport.py",
+        ],
+    }
+    assert critic_pytest_paths(already, tmp_path) == [
+        "tests/test_anchor_ops_transport.py",
+    ]
 
 
 def test_review_critic_prompt_includes_verification(project, critic_fleet):

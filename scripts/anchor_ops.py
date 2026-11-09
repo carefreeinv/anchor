@@ -933,18 +933,33 @@ def critic_docs_sync(root: Path, timeout: float = 30.0) -> str:
     return f"check_docs_sync.py exit {p.returncode}\n{body}"
 
 
-def critic_pytest_paths(pkg: dict[str, Any]) -> list[str]:
-    """``tests/*.py`` paths from the review range (posix, no pycache)."""
+_OPS_TRANSPORT_TEST = "tests/test_anchor_ops_transport.py"
+
+
+def critic_pytest_paths(
+    pkg: dict[str, Any], root: Path | None = None,
+) -> list[str]:
+    """``tests/*.py`` paths from the review range (posix, no pycache).
+
+    A change to ``scripts/anchor_ops.py`` also schedules the ops transport
+    sweep when that test file exists on disk (new ``@_op`` names live there).
+    """
     out: list[str] = []
     seen: set[str] = set()
+    ops_touched = False
     for rel in pkg.get("changed") or []:
         n = str(rel).replace("\\", "/")
+        if n == "scripts/anchor_ops.py":
+            ops_touched = True
         if not n.startswith("tests/") or not n.endswith(".py"):
             continue
         if "/__pycache__/" in n or n in seen:
             continue
         seen.add(n)
         out.append(n)
+    if ops_touched and _OPS_TRANSPORT_TEST not in seen:
+        if root is not None and (Path(root) / _OPS_TRANSPORT_TEST).is_file():
+            out.append(_OPS_TRANSPORT_TEST)
     return out
 
 
@@ -952,7 +967,7 @@ def critic_pytest_touched(
     root: Path, pkg: dict[str, Any], timeout: float = CRITIC_PYTEST_TIMEOUT,
 ) -> str:
     """Scoped pytest on tests/ files in ``pkg['changed']``. Fail-closed on timeout."""
-    paths = critic_pytest_paths(pkg)
+    paths = critic_pytest_paths(pkg, root)
     if not paths:
         return "pytest skipped (no tests/ in range)"
     listed = ", ".join(paths)
