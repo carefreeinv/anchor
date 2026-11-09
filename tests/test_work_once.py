@@ -319,6 +319,25 @@ def test_refuse_draft_path(tmp_path):
     assert code == 2
 
 
+def test_run_refuses_underqualified_without_starting_orchestrate(tmp_path, monkeypatch, capsys):
+    root = _root(tmp_path)
+    _plan(root / ".plans" / "features" / "midwork.md", preferred="small, mid")
+
+    def _boom(*_a, **_k):
+        raise AssertionError("orchestrate must not start")
+
+    monkeypatch.setattr(work_once, "run_orchestrate", _boom)
+    code = work_once.main(
+        [
+            "--root", str(root), "--once", "--slug", "midwork",
+            "--tier", "small", "--agent-id", "tiny", "--run",
+        ]
+    )
+    assert code == 2
+    assert "underqualified" in capsys.readouterr().err
+    assert (root / ".plans" / "in-progress" / "midwork.md").is_file()
+
+
 def test_no_fit_check_picks_mismatch(tmp_path, capsys):
     root = _root(tmp_path)
     _plan(root / ".plans" / "features" / "hard.md", preferred="frontier")

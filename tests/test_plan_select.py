@@ -100,9 +100,14 @@ def test_missing_priority_defaults_p2(tmp_path):
 def test_fit_skip_overqualified_and_underqualified():
     assert classify_fit(Worker("fable", "frontier"), "small, mid") == Fit.OVERQUALIFIED
     assert classify_fit(Worker("haiku", "small"), "reasoner, frontier") == Fit.UNDERQUALIFIED
-    assert classify_fit(Worker("sonnet", "mid"), "mid, reasoner") == Fit.GOOD
+    assert classify_fit(Worker("sonnet", "mid"), "mid, reasoner") == Fit.UNDERQUALIFIED
+    assert classify_fit(Worker("opus", "reasoner"), "mid, reasoner") == Fit.GOOD
     assert classify_fit(Worker("Grok 4.5", "mid"), "Grok 4.5, Qwen3 32B") == Fit.GOOD
     assert classify_fit(Worker("unknown", "mid"), None) == Fit.UNKNOWN
+    assert classify_fit(Worker("haiku", "small"), "small, mid") == Fit.UNDERQUALIFIED
+    assert classify_fit(Worker("haiku", "small"), "small") == Fit.GOOD
+    assert classify_fit(Worker("sonnet", "mid"), "small, mid") == Fit.GOOD
+    assert classify_fit(Worker("tiny", "small"), None) == Fit.UNDERQUALIFIED
 
 
 def test_specialty_tags_are_ignored_for_power_fit():
@@ -139,14 +144,14 @@ def test_lesser_workers_are_not_gated_out_by_stronger_names():
         assert classify_fit(
             Worker("Qwen3 32B", tier), "Claude Sonnet 5, Grok 4.5"
         ) == Fit.UNKNOWN
-    # No Preferred line at all does not reserve the plan for a higher tier.
-    assert classify_fit(Worker("tiny", "small"), None) == Fit.UNKNOWN
+    # Unlabeled plans are a mid floor: tiny workers are underqualified.
+    assert classify_fit(Worker("tiny", "small"), None) == Fit.UNDERQUALIFIED
 
 
-def test_unlabeled_and_names_only_plans_are_claimable_by_small(tmp_path):
+def test_unlabeled_plans_are_not_claimable_by_small(tmp_path):
     plans = _tree(tmp_path)
     _plan(plans / "features" / "unlabeled.md", preferred=None)
-    assert select_one(plans, Worker("tiny", "small")) is not None
+    assert select_one(plans, Worker("tiny", "small")) is None
 
     names_only = _tree(tmp_path / "names")
     _plan(names_only / "features" / "named.md", preferred="Claude Sonnet 5, Grok 4.5")

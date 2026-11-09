@@ -857,6 +857,21 @@ def _one_claim(root: Path, plans_root: Path, worker, args) -> tuple[int, int]:
             print(f"[work_once] worktree ensure failed: {exc}", file=sys.stderr)
             return 2, 0
     if not args.no_run:
+        if not args.no_fit_check:
+            from plan_select import Fit, classify_fit, preferred_from_plan_text
+
+            pref = preferred_from_plan_text(
+                Path(plan_path).read_text(encoding="utf-8", errors="replace")
+            )
+            fit = classify_fit(worker, pref)
+            if fit is Fit.UNDERQUALIFIED:
+                print(
+                    f"[work_once] refuse --run: underqualified "
+                    f"(preferred={pref!r}; worker={worker.name}/{worker.tier}) "
+                    f"— use --no-fit-check to override",
+                    file=sys.stderr,
+                )
+                return 2, 1
         extra = orchestrate_identity_args(args) + extra
         code = run_orchestrate(plan_path, extra)
         if code != 0:

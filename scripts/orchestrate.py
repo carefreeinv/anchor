@@ -690,6 +690,35 @@ def _flush_outcome(sink: dict, *, role_verdict: str | None) -> None:
         sink.clear()
 
 
+def _fit_refuse_or_escalate(ep, plan: str, fleet):
+    """If *ep* is underqualified for the plan Preferred, hop up or refuse.
+
+    Returns ``(hop_endpoint_or_None, refuse_message_or_None)``.
+    """
+    from plan_select import Fit, Worker, classify_fit, preferred_from_plan_text
+
+    pref = preferred_from_plan_text(plan)
+    fit = classify_fit(Worker(ep.name, endpoint_fit_tier(ep)), pref)
+    if fit is not Fit.UNDERQUALIFIED:
+        return None, None
+    current = endpoint_fit_tier(ep)
+    try:
+        idx = FIT_TIER_LADDER.index(current)
+    except ValueError:
+        idx = 0
+    for higher in FIT_TIER_LADDER[idx + 1 :]:
+        alt = pick_escalation_endpoint(fleet, higher)
+        if alt is None:
+            continue
+        alt_fit = classify_fit(Worker(alt.name, endpoint_fit_tier(alt)), pref)
+        if alt_fit is not Fit.UNDERQUALIFIED:
+            return alt, None
+    return None, (
+        f"underqualified: {ep.name} ({current}) vs Preferred {pref!r} "
+        f"— no mid-or-higher endpoint; --insist to override"
+    )
+
+
 def execute_task(task: str, plan: str, fleet: Fleet, verify_cmd: str | None,
                  hold_on_fail: bool, insist: bool = False,
                  scope: ScopeConfig | None = None,
@@ -721,6 +750,24 @@ def execute_task(task: str, plan: str, fleet: Fleet, verify_cmd: str | None,
         ep = fleet.pick("executor")
         last_ep = ep
         escalation_suffix = ""
+
+        if not insist:
+            hop, refuse = _fit_refuse_or_escalate(ep, plan, fleet)
+            if refuse is not None:
+                print(f"[fit] refuse {refuse}", file=sys.stderr)
+                return {
+                    "task": task,
+                    "status": "refused-fit",
+                    "attempts": 0,
+                    "message": refuse,
+                }
+            if hop is not None:
+                print(
+                    f"[fit] escalate {ep.name} → {hop.name} ({endpoint_fit_tier(hop)})",
+                    file=sys.stderr,
+                )
+                ep = hop
+                last_ep = ep
 
         # Harness-enforced stop condition (mythos-core rule 6, mirrored harness-side):
         # a persistent ledger check, not an in-memory attempt count, so a resumed
@@ -1359,6 +1406,8 @@ def main() -> None:
     if violations:
         print(f"\n{len(violations)} role violation(s) — see {args.out}", file=sys.stderr)
         sys.exit(ROLE_VIOLATION_EXIT)
+    if any(r.get("status") == "refused-fit" for r in results):
+        sys.exit(2)
     if any(r.get("status") == "failed-noop" for r in results):
         sys.exit(FAILED_NOOP_EXIT)
     if results and ok == 0:

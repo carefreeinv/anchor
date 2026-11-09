@@ -27,6 +27,12 @@ Newest first.
 
 ### Fixed
 
+- **Tiny / swarm workers refuse mid-or-higher plans.** Highest listed
+  Preferred tier is the floor: `small, mid` is mid work. `classify_fit`,
+  `work_once` execute, and `orchestrate.py` refuse before chat (`--no-fit-check`
+  / `--insist` override). Unlabeled plans are a mid floor for `small` workers.
+  Preferred `small` alone stays swarm-eligible.
+
 - **NOOP retry names whole-file fences.** After `NoApplyableHunks` or an
   unchanged worktree, the executor history line asks for a unified diff or a
   whole-file fence.

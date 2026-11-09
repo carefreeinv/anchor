@@ -129,7 +129,8 @@ Examples:
 - `mid` — any solid executor; not worth frontier credits
 - `Claude Sonnet 5, Grok 4.5, Qwen3 32B` — named fleet picks
 - `reasoner, frontier` — needs a strong reasoner; small/mid should skip
-- `small, mid` — keep frontier/Opus off this work
+- `small, mid` — **mid floor**: swarm/4B is underqualified; mid workers are good; frontier stays off
+- `small` — tiny/swarm only (boilerplate, renames)
 
 Omit only when unsure; default assumption for executors is **mid**. Per-step **Route to** still applies inside the plan for mixed-difficulty steps.
 

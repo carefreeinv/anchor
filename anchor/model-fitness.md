@@ -113,8 +113,11 @@ downgrade, or re-route merely because:
 - **A stronger model exists.** True of nearly every task; not a fit verdict.
 - **A plan's `Preferred models` names a stronger product.** Only listed **tiers**
   (`small | mid | reasoner | frontier`) set the power floor — names are extra
-  good-fit hits, not a raised bar. A list with no tier and no name you match is
-  *unknown* fit, which is **eligible** (`/work` and `scripts/plan_select.py`).
+  good-fit hits, not a raised bar. The **highest** listed tier is the floor for
+  weaker workers (`small, mid` is mid work; swarm is underqualified). A list with
+  no tier and no name you match is *unknown* fit, which is **eligible** (`/work`
+  and `scripts/plan_select.py`). Unlabeled plans are a mid floor for `small`
+  workers.
 - **The task is unfamiliar or multi-file *within your profile*.** Unfamiliar is
   what a task spec and the repo are for. Multi-file coding work *is* a specialty
   mismatch for pure `general-chat` / no-tools sessions — not for a coding-agent mid.

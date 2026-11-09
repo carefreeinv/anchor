@@ -3,7 +3,7 @@ sidebar_position: 4
 sidebar_label: Model Fitness
 ---
 
-<!-- synced-from: anchor/model-fitness.md @ c810f6bd581752219ca4fb0784c73ee632815d62 -->
+<!-- synced-from: anchor/model-fitness.md @ d4695758ef95a11f2c0234d1e29d26ad238ce80e -->
 
 # Model fitness
 
@@ -50,7 +50,7 @@ flowchart TB
 
 The operator can insist (`orchestrate.py --insist` or “do it here”); the worker then proceeds in scope with `(unverified)`. Prefer project model-priority (`ANCHOR-CONVENTIONS.md`) for escalate/downgrade targets. Downgrade heuristics stay **conservative** — normal mid multi-file work is not “too easy.” Plans may list profile tags in **Preferred models** (e.g. `mid, coding-agent`); mechanical pickers still key on tiers + names only.
 
-**What does *not* trigger the fit check.** Do not escalate, downgrade, or re-route because a stronger model exists, because a plan's **Preferred models** names one (only listed *tiers* set the power floor; *unknown* fit is **eligible**), because the task is unfamiliar or multi-file *within your profile*, or because one step looks hard. Do not spam downgrade because a cheaper model exists for routine executor work. Over-shy refusal is a real failure mode too.
+**What does *not* trigger the fit check.** Do not escalate, downgrade, or re-route because a stronger model exists, because a plan's **Preferred models** names one (only listed *tiers* set the power floor — the **highest** listed tier is the floor for weaker workers; *unknown* fit is **eligible**; unlabeled plans are a mid floor for `small` workers), because the task is unfamiliar or multi-file *within your profile*, or because one step looks hard. Do not spam downgrade because a cheaper model exists for routine executor work. Over-shy refusal is a real failure mode too.
 
 `orchestrate.py` honors first-line `SUGGEST-ESCALATE`, `SUGGEST-DOWNGRADE`, **and** `SUGGEST-REROUTE` immediately (no retry burn). The token may be the entire first line or follow rule 13's six-line preflight; later prose quoting the tokens is ignored.
 

@@ -144,6 +144,29 @@ GOOD_OUTPUT = (
 )
 
 
+def test_execute_task_refuses_swarm_on_mid_preferred_plan():
+    from orchestrate import execute_task
+
+    fleet = FakeFleet([GOOD_OUTPUT])
+    fleet.ep.tier = "swarm"
+    plan = "- **Preferred models:** small, mid\n## Goal\nwrap the board JSON\n"
+    result = execute_task("wrap board JSON", plan, fleet, verify_cmd=None, hold_on_fail=False)
+    assert result["status"] == "refused-fit"
+    assert fleet.ep.calls == 0
+    assert "underqualified" in result["message"]
+
+
+def test_execute_task_insist_overrides_preferred_floor():
+    from orchestrate import execute_task
+
+    fleet = FakeFleet([GOOD_OUTPUT])
+    fleet.ep.tier = "swarm"
+    plan = "- **Preferred models:** mid\n"
+    result = execute_task("do it", plan, fleet, verify_cmd=None, hold_on_fail=False, insist=True)
+    assert result["status"] == "ok"
+    assert fleet.ep.calls == 1
+
+
 def test_execute_task_honors_suggest_escalate_without_burning_attempts():
     from orchestrate import execute_task
 

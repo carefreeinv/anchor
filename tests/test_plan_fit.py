@@ -38,7 +38,7 @@ def test_effort_band_follows_highest_listed_tier():
     assert plan_effort_tier("small") == "small"
     assert plan_effort_tier("mid, reasoner") == "reasoner"
     assert plan_effort_tier("small, mid") == "mid"
-    # Names-only and absent both fall back to mid (a ceiling hint, not a floor).
+    # Names-only and absent both fall back to mid (effort band).
     assert plan_effort_tier("Claude Sonnet 5") == "mid"
     assert plan_effort_tier(None) == "mid"
 

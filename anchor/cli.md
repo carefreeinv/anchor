@@ -52,7 +52,10 @@ That default `Fleet.pick` probes LAN rows
 before chat and falls back to NVIDIA Build when the probe is live (see
 `platforms/nvidia-build/BUILD.md`). `orchestrate.py --endpoint` is the first
 executor try; remaining healthy executor-role endpoints are failover unless
-`--no-failover`. Planner/critic stay on the full fleet. `orchestrate.py` applies unified diffs or whole-file fences
+`--no-failover`. Planner/critic stay on the full fleet. Highest listed Preferred
+**tier** is a floor: swarm/`small` workers (and execute / `orchestrate.py`) refuse
+mid-or-higher plans unless `--no-fit-check` / `--insist`. Preferred `small` alone
+is tiny-ok. `orchestrate.py` applies unified diffs or whole-file fences
 from the executor reply into `--worktree` before scope/verify. `work_once.py
 --once --ensure-worktree` forwards `--worktree`; extra `-- --worktree <dir>`
 still works. Footer-only replies do not write files.

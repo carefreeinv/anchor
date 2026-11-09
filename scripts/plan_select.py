@@ -497,11 +497,38 @@ def _parse_preferred_tokens(preferred: str | None) -> tuple[list[str], list[str]
     return tiers, names
 
 
+def preferred_from_plan_text(text: str | None) -> str | None:
+    """Preferred-models header body, or None if absent."""
+    if not text:
+        return None
+    return parse_preferred(text)
+
+
 def classify_fit(worker: Worker, preferred: str | None) -> Fit:
-    """Classify worker vs plan Preferred models (same rules as /work)."""
+    """Classify worker vs plan Preferred models (same rules as /work).
+
+    Highest listed *tier* is the floor for weaker workers: Preferred
+    ``small, mid`` is mid work — swarm/small is underqualified. Name-match
+    does not override an explicit higher tier. Unlabeled plans are a mid
+    floor for tiny workers only (mid+ stay ``unknown`` / eligible).
+    """
     tiers, names = _parse_preferred_tokens(preferred)
+    wr = FIT_RANK.get(worker.tier, FIT_RANK["mid"])
+
     if not tiers and not names:
+        if not (preferred or "").strip():
+            if wr < FIT_RANK["mid"]:
+                return Fit.UNDERQUALIFIED
+            return Fit.UNKNOWN
         return Fit.UNKNOWN
+
+    if tiers:
+        max_pref = max(FIT_RANK[t] for t in tiers)
+        if wr < max_pref:
+            return Fit.UNDERQUALIFIED
+        if wr > max_pref:
+            return Fit.OVERQUALIFIED
+        return Fit.GOOD
 
     wname = worker.name.lower().replace("_", " ").replace("-", " ")
     for n in names:
@@ -514,22 +541,6 @@ def classify_fit(worker: Worker, preferred: str | None) -> Fit:
             return Fit.GOOD
         if any(len(p) >= 4 and p in wname for p in n_parts):
             return Fit.GOOD
-
-    if tiers and worker.tier in tiers:
-        return Fit.GOOD
-
-    if tiers:
-        wr = FIT_RANK.get(worker.tier, FIT_RANK["mid"])
-        max_pref = max(FIT_RANK[t] for t in tiers)
-        min_pref = min(FIT_RANK[t] for t in tiers)
-        if wr > max_pref:
-            return Fit.OVERQUALIFIED
-        if wr < min_pref:
-            return Fit.UNDERQUALIFIED
-        if wr not in {FIT_RANK[t] for t in tiers}:
-            return Fit.UNKNOWN
-        return Fit.GOOD
-
     return Fit.UNKNOWN
 
 
@@ -695,7 +706,8 @@ def plan_effort_tier(preferred: str | None) -> str:
     """The tier that sets a plan's effort band: the **highest** tier it lists.
 
     No listed tier (names-only, or no field at all) → ``mid``, matching the
-    ``/work`` rule that an absent Preferred line is a ceiling hint of ``mid``.
+    ``/work`` rule that an absent Preferred line is a mid floor for tiny workers
+    and a ceiling hint of ``mid`` for everyone else.
     Note this is only about *cost*: it never gates who may claim the plan.
     """
     tiers, _ = _parse_preferred_tokens(preferred)
