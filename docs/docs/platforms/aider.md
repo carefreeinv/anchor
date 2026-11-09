@@ -89,7 +89,10 @@ The `map-tokens: 1024` and `timeout: 60` caps are GPU-host defaults. On a
 CPU-only Ollama host (`/api/ps` shows `size_vram: 0`) a cold first turn can
 exceed 60s and the repo map can stall it outright (measured 2026-09 on one
 WSL2 + Windows-Ollama host: ~72s with `map-tokens: 0`, no finish in 560s with
-`1024`), so set `map-tokens: 0` and a larger `timeout:` there.
+`1024`), so set `map-tokens: 0` and a larger `timeout:` there. Pointing Aider
+at NVIDIA Build (`integrate.api.nvidia.com`) should use `timeout: 900` and
+`stream: false` — thinking-on critic packages can exceed 60s even when the
+hosted GPU is healthy.
 
 **Turn thinking off with `think: false`, not `/no_think`.** On Ollama 0.34.0 and
 0.34.2 (measured 2026-09), the `/no_think` message suffix had no effect: a

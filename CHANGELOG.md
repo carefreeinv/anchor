@@ -6,6 +6,13 @@ Newest first.
 
 ## [Unreleased]
 
+### Added
+
+- **Registry `quirks.timeout`.** `Endpoint.chat` uses it as the HTTP timeout
+  when the caller omits `timeout=` (default remains 600s). NVIDIA Build
+  overlay does not set a higher default. Aider against Build should use
+  `timeout: 900`. Health `GET /models` stays 3s.
+
 ### Changed
 
 - **Bare `anchor review` with an empty queue.** If integration is ahead of

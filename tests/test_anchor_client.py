@@ -395,6 +395,92 @@ def test_load_prompt_reads_source_tree():
     assert "FIT CHECK" in text or "fit check" in text.lower() or "Mythos" in text or len(text) > 100
 
 
+def test_endpoint_chat_uses_quirks_timeout_when_caller_omits(monkeypatch):
+    import anchor_client as ac
+    from anchor_client import Endpoint
+
+    captured = {}
+
+    class FakeResp:
+        status_code = 200
+        def raise_for_status(self):
+            return None
+        def json(self):
+            return {"choices": [{"message": {"content": "ok"}}]}
+
+    def fake_post(url, *, json, headers, timeout):
+        captured["timeout"] = timeout
+        return FakeResp()
+
+    monkeypatch.setattr(ac, "_post_with_retry", fake_post)
+    ep = Endpoint(
+        name="nvidia-build",
+        tier="reasoner",
+        base_url="https://integrate.api.nvidia.com/v1",
+        model="nvidia/nemotron-3.5-lightning-30b-a3b",
+        quirks={"timeout": 900},
+    )
+    ep.chat([{"role": "user", "content": "hi"}], max_tokens=16)
+    assert captured["timeout"] == 900
+    ep.chat([{"role": "user", "content": "hi"}], max_tokens=16, timeout=12)
+    assert captured["timeout"] == 12
+
+
+def test_endpoint_chat_default_timeout_is_600(monkeypatch):
+    import anchor_client as ac
+    from anchor_client import Endpoint
+
+    captured = {}
+
+    class FakeResp:
+        status_code = 200
+        def raise_for_status(self):
+            return None
+        def json(self):
+            return {"choices": [{"message": {"content": "ok"}}]}
+
+    def fake_post(url, *, json, headers, timeout):
+        captured["timeout"] = timeout
+        return FakeResp()
+
+    monkeypatch.setattr(ac, "_post_with_retry", fake_post)
+    ep = Endpoint(
+        name="lan",
+        tier="mid",
+        base_url="http://10.0.1.10:8000/v1",
+        model="x",
+    )
+    ep.chat([{"role": "user", "content": "hi"}], max_tokens=16)
+    assert captured["timeout"] == 600
+
+
+def test_nvidia_build_fallback_does_not_invent_timeout_quirk(monkeypatch):
+    """Live ping was 3.11s ≪ 600s — overlay omits quirks.timeout."""
+    import nvidia_build_probe as nbp
+    import anchor_client as ac
+    from anchor_client import HEALTH_TIMEOUT_S
+
+    class Probe:
+        key_source = "NVIDIA_API_KEY"
+
+    monkeypatch.setattr(nbp, "probe_build", lambda: Probe())
+    monkeypatch.setattr(nbp, "preferred_backend", lambda probe, prefer_local=False: "build")
+    monkeypatch.setattr(
+        nbp, "list_build_model_ids",
+        lambda probe: ["nvidia/nemotron-3.5-lightning-30b-a3b"],
+    )
+    monkeypatch.setattr(
+        nbp, "choose_build_model",
+        lambda ids: "nvidia/nemotron-3.5-lightning-30b-a3b",
+    )
+    fleet = ac.Fleet.__new__(ac.Fleet)
+    fleet.prefer_local = False
+    ep, _note = fleet._nvidia_build_fallback()
+    assert ep is not None
+    assert "timeout" not in ep.quirks
+    assert HEALTH_TIMEOUT_S == 3.0
+
+
 def test_endpoint_sends_reasoning_effort_quirk(monkeypatch):
     """Grok endpoint quirk injects reasoning_effort into the OpenAI body."""
     import anchor_client as ac

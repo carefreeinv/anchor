@@ -86,6 +86,10 @@ An absent or unreachable key never hangs a chat — `Fleet.pick` raises
 `LookupError` in seconds. An explicit operator preference for local always
 wins, even with a live Build key.
 
+**Two clocks.** `GET /v1/models` (probe and `Fleet.pick` health) is about **3s**.
+Chat POST (`Endpoint.chat`) defaults to **600s**; set registry `quirks.timeout`
+on an endpoint to change only that chat wait. Do not raise the probe.
+
 ## Aider wiring
 
 If you're running Aider against this project, point its `.aider.conf.yml` at
@@ -94,6 +98,8 @@ the Build endpoint when the probe reports `build`:
 ```yaml
 openai-api-base: https://integrate.api.nvidia.com/v1
 model: openai/nvidia/nemotron-3.5-lightning-30b-a3b
+timeout: 900
+stream: false
 ```
 
 Aider reads `OPENAI_API_KEY` for any `openai-api-base` target, so also set:

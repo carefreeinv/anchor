@@ -423,7 +423,10 @@ class Endpoint:
 
     def chat(self, messages: list[dict], *, thinking: bool = False,
              temperature: float | None = None, max_tokens: int = 4096,
-             timeout: int = 600, _budget_retry: bool = False) -> str:
+             timeout: int | None = None, _budget_retry: bool = False) -> str:
+        if timeout is None:
+            raw = self.quirks.get("timeout")
+            timeout = int(raw) if raw is not None else 600
         msgs = [dict(m) for m in messages]
 
         # Registry-driven guardrail line(s) a model needs to behave (Gemma's BLOCKED

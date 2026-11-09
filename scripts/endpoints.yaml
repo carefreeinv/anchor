@@ -25,6 +25,9 @@
 #   max_context: <n>                 serving context ceiling; completion capped to it
 #   min_completion_tokens: <n>       floor for max_tokens (thinking locals / Ollama)
 #   openai_think: true|false         Ollama opt-in only; 400 → drop + cache skip
+#   timeout: <seconds>               default HTTP timeout for chat POST when the
+#                                    caller omits timeout= (otherwise 600). Health
+#                                    GET /models stays HEALTH_TIMEOUT_S (3s).
 endpoints:
   - name: h100-executor
     tier: executor-heavy
