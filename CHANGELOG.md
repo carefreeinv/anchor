@@ -6,6 +6,8 @@ Newest first.
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-11-10
+
 ### Added
 
 - **`anchor release`.** Unmerged-work table vs the release base, suggested next tag, optional plan-diff critic. `--dry-run` never writes git. TTY `--yes` folds CHANGELOG, bumps `pyproject.toml` when present, and creates an annotated tag. TTY `--push` publishes the base and tag without `--force`. Headless `--yes`/`--push` exit 3. Never merges.
