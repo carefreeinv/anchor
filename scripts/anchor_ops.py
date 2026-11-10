@@ -850,20 +850,34 @@ def _remote_branches(root: Path, branch: str) -> list[str]:
     return [line for line in p.stdout.splitlines() if line.strip()] if p.returncode == 0 else []
 
 
+_VERDICT_META_RE = re.compile(
+    r"\b(?:do\s+not|don't|does\s+not|didn't)\s+(ACCEPT|REVISE|ESCALATE)\b"
+    r"|\bconstraints\s+against\s+(ACCEPT|REVISE|ESCALATE)\b"
+    r"|\bagainst\s+(ACCEPT|REVISE|ESCALATE)\b"
+    r"|\bnot\s+a\s+(ACCEPT|REVISE|ESCALATE)\b",
+    re.IGNORECASE,
+)
+_VERDICT_LABELED_RE = re.compile(
+    r"(?:^|\b)(?:\*{0,2}verdict\*{0,2})\W{0,12}(ACCEPT|REVISE|ESCALATE)\b",
+    re.IGNORECASE,
+)
+_VERDICT_WORD_RE = re.compile(r"\b(ACCEPT|REVISE|ESCALATE)\b", re.IGNORECASE)
+
+
 def critic_verdict(text: str) -> str:
     """ACCEPT | REVISE | ESCALATE from a critic reply.
 
     ``## Verdict`` headings are the current verdict. Empty headings are
     skipped so a duplicated ``## Verdict`` / ``## Verdict ACCEPT`` pair
-    (Lightning) is ACCEPT. Option lists and ``~~strike~~`` are ignored; of
-    what remains in the **last non-empty** verdict section, the most
-    cautious word wins (ESCALATE > REVISE > ACCEPT). If every verdict
-    heading is empty, UNKNOWN — a prior-round ``verdict: ACCEPT`` outside
-    those sections is not used. Without a heading, labeled ``Verdict:``
-    lines (then any remaining word) are used the same way.
+    (Lightning) is ACCEPT. Option lists, ``~~strike~~``, and negation/meta
+    mentions (``do not REVISE``, ``against REVISE``) are ignored. A word on
+    the heading line wins unless a later labeled ``Verdict:`` line
+    contradicts it (then most-cautious of those labels). Otherwise the most
+    cautious remaining word in the last non-empty section wins. If every
+    verdict heading is empty, UNKNOWN — a prior-round ``verdict: ACCEPT``
+    outside those sections is not used. Without a heading, labeled
+    ``Verdict:`` lines (then any remaining word) are used the same way.
     """
-    import re
-
     rank = {"ESCALATE": 3, "REVISE": 2, "ACCEPT": 1}
     cleaned = re.sub(r"~~[^~]*~~", " ", text)
     cleaned = re.sub(
@@ -879,11 +893,25 @@ def critic_verdict(text: str) -> str:
             return "UNKNOWN"
         return max(words, key=lambda w: rank[w])
 
+    def _strip_meta(blob: str) -> str:
+        return _VERDICT_META_RE.sub(" ", blob)
+
     def _words(blob: str) -> set[str]:
-        return {
-            w.upper()
-            for w in re.findall(r"\b(ACCEPT|REVISE|ESCALATE)\b", blob, re.IGNORECASE)
-        }
+        return {w.upper() for w in _VERDICT_WORD_RE.findall(_strip_meta(blob))}
+
+    def _labeled(blob: str) -> set[str]:
+        return {m.group(1).upper() for m in _VERDICT_LABELED_RE.finditer(_strip_meta(blob))}
+
+    def _section_verdict(heading: str, body: str) -> set[str]:
+        head_words = _words(heading)
+        labels = _labeled(body)
+        if head_words and labels:
+            return head_words | labels
+        if head_words:
+            return head_words
+        if labels:
+            return labels
+        return _words(heading + "\n" + body)
 
     heading_re = re.compile(
         r"^##[^\n]*\bverdict\b[^\n]*",
@@ -897,15 +925,14 @@ def critic_verdict(text: str) -> str:
         end = matches[i + 1].start() if i + 1 < len(matches) else len(cleaned)
         nxt_h = re.search(r"^##\s", cleaned[m.end():end], re.MULTILINE)
         stop = m.end() + nxt_h.start() if nxt_h else end
-        words = _words(cleaned[m.start():stop])
+        heading = cleaned[m.start():m.end()]
+        body = cleaned[m.end():stop]
+        words = _section_verdict(heading, body)
         if words:
             last_nonempty = words
     if had_heading:
         return _pick(last_nonempty or set())
-    labeled = {
-        m.group(1).upper()
-        for m in re.finditer(r"verdict\W{0,12}(ACCEPT|REVISE|ESCALATE)", cleaned, re.IGNORECASE)
-    }
+    labeled = _labeled(cleaned)
     if labeled:
         return _pick(labeled)
     return _pick(_words(cleaned))

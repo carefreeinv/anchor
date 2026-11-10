@@ -930,6 +930,11 @@ def test_review_approve_with_remote_only_branch_does_not_archive(repo_project, t
         ("## Verdict ACCEPT", "ACCEPT"),
         ("## Verdict: REVISE", "REVISE"),
         ("## Verdict\n## Verdict\nREVISE", "REVISE"),
+        # Lightning ACCEPT + meta mention of REVISE in the same section
+        ("## Verdict\nACCEPT\n\nThe constraints against REVISE do not trigger.", "ACCEPT"),
+        ("## Verdict\nACCEPT\nDo not REVISE because verification was not pasted.", "ACCEPT"),
+        ("## Verdict ACCEPT\nREVISE if VERIFICATION shows pytest exit non-zero.", "ACCEPT"),
+        ("## Verdict\nACCEPT\n\n**Verdict: REVISE**", "REVISE"),
     ],
 )
 def test_critic_verdict(text, verdict):
