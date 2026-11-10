@@ -27,7 +27,113 @@ Newest first.
   overlay does not set a higher default. Aider against Build should use
   `timeout: 900`. Health `GET /models` stays 3s.
 
+- **Empty-finish gate.** `scripts/plan_finish_gate.py` refuses
+  `in-progress/` → `review-needed/` when the only commits since the
+  integration merge-base are under `.plans/**` or miss the plan Touches.
+  `work_once` auto-finish and `anchor work --finish` stay put on fail.
+  Operator exception: `## Handoff` line or `ANCHOR_EMPTY_FINISH=1`.
+
+- **Executor Touches file paste.** `orchestrate.py` `execute_task` appends a
+  read-only `FILES` block with the current worktree text of paths named in the
+  Step Touches cell (or a `Touches:` line), capped per file and dropped
+  largest-first when the prompt would exceed `max_context`. Secrets (`.env`,
+  keys) and `.plans/**` are omitted. Chat-only executors can emit a unified
+  diff or whole-file fence against that text.
+
+- **`anchor models`.** `list` prints registry name, aliases, machine, model,
+  effort, and tier. `nick ALIAS --endpoint NAME [--machine …] [--effort …]`
+  writes only a machine-local overlay (`~/.config/anchor/endpoints.local.yaml`
+  or `--overlay`). `--endpoint lightning` on `work` / `--run` / `--delegate`
+  resolves through `Fleet.lookup` (canonical `name:` or overlay alias).
+  Duplicate aliases fail at load (`RegistryConflict`). Overlay `effort`
+  is the worker default when `--effort` is omitted; the CLI flag still wins.
+
+- **Event-driven plan watchers.** `work_once.py --watch` stays up and pulls on
+  `.plans/{bugs,features,in-progress}` inotify events (debounced) with a long
+  poll heartbeat when inotify is missing. Optional MQTT poke
+  (`ANCHOR_MQTT_PLANS_TOPIC` or `anchor/v1/sites/{site}/plans/poke`) is a no-op
+  when unconfigured. `fleet_watch.py` emits `Type=simple` `--watch` units plus a
+  oneshot poll timer (`watch=0` restores interval-only). New `scripts/plan_watch.py`
+  ships in `FLEET_FILES`.
+
+- **`anchor fleet-watch`.** Status/list/once/emit wrap `fleet_watch.py`;
+  `--install-user` is operator-only (headless `--yes` still exits 3 and writes
+  nothing).
+
+- **Repo-root `.env` for fleet keys.** `anchor` plan verbs and
+  `nvidia_build_probe.py --probe` load a gitignored `.env` with setdefault
+  (exported environment wins). `Endpoint.chat` sends `Authorization` from the
+  first set of `ANCHOR_API_KEY`, `NVIDIA_API_KEY`, `NGC_API_KEY`. Template:
+  `.env.example`.
+
+- **Site inference-load limits over MQTT** — an operator (home-energy automation, lab controller, UPS monitor) publishes one **load level** for a site and every Anchor project honors it before running **local** inference. New **`scripts/inference_load.py`** carries the normative v1 contract: topic `anchor/v1/sites/{site_id}/inference/load` plus an optional per-project override topic that **outranks** it while fresh (mirrored under separate scopes, so a site heartbeat cannot erase a standing override, and a stale override falls through to the site rather than to the fail-safe), a JSON payload whose only required field is `level`, and the level→action matrix `off`→nothing · `low`→`small` · `mid`→`small,mid` · `high`→all fit tiers (aliases `0`–`3`, `full`, `none`; an explicit `allowed_tiers` replaces the row, and `off` denies regardless). **Opt-in and fail-safe by construction:** with nothing configured the resolved policy is `high` from source `disabled` and no worker changes behavior; once configured, `ttl_s` is measured against **local receipt time** — not the publisher's `ts`, so a skewed clock cannot hand out an immortal "full load" — a payload that **omits** `ttl_s` ages out after `ANCHOR_LOAD_MAX_AGE` (default 900s, `0` disables) so freshness is the consumer's guarantee rather than something a publisher can decline, and a missing, stale, or corrupt policy falls back to `ANCHOR_LOAD_FAILSAFE` (`hold`, the default, treats it as `off`; `last_known` keeps the stale level for labs; `unrestricted` opts out). An unknown level is a **parse error**: malformed messages are dropped, never applied, and can never widen the cap. **MQTT is confined to the subscriber** (`--watch`, the only `paho-mqtt` user), which validates and mirrors accepted messages to `.anchor/inference-load.json`; every consumer reads that mirror with the standard library, so a load check adds no dependency, no socket, and no stall to the claim path, a broker outage cannot hang a worker, and CI needs no broker. Writing the mirror by hand (`--set low --reason grid-peak`) or from any other bus runs the whole feature **without MQTT**. Endpoints gained an optional top-level **`local: true|false`** (not a quirk) with `Endpoint.is_local` and a base-URL heuristic behind it (loopback / RFC1918 / CGNAT / link-local / `.local`-style hostnames); every public hostname is **not** local, so a mis-set policy can never silently block a cloud tier. An explicit `local:` value that parses as neither true nor false is treated as **unknown** and falls through to that heuristic rather than as "not local" — a mangled annotation must not be able to switch the governor off — and the PyYAML-less fallback registry parser strips inline comments, so the documented `local: true  # my rack` form is read correctly on a lean install. Consumers: **`work_once.py`** refuses **before claiming** when a local-bound worker's tier is barred and exits idle (`1`) — leaving the backlog untouched rather than parked under a lease nobody is running — with `--local-worker` for tier-only workers and `--ignore-load` as a per-run override; **`fleet_watch.py`** copies the load settings into emitted systemd units and cron lines (**no secrets**: unit files and crontabs are world-readable, so `ANCHOR_MQTT_PASSWORD` is never emitted and `user:pass@` userinfo is stripped from `ANCHOR_MQTT_URL`, which is not used for auth anyway), accepts `local=1` in a `--worker` spec, and shows the current level in `--status`; the **model-fleet MCP** returns a structured `LOAD-LIMITED` refusal from `delegate` / `delegate_parallel_review` instead of sending work (refusing rather than quietly running one of the two independent critic passes), marks local endpoints and the site level in `list_fleet`, and leaves `fleet_health` ungated but labelled — you need to see a box come back before the cap lifts. New **`scripts/mqtt_load_publish.py`** is the operator-side publisher sharing that configuration, with `--retain` (warned when used without `--ttl`), `--dry-run`, `--mirror` (skipped when the publish failed, so a broker outage cannot leave one project on a local-only level), and explicit scope selection — it defaults to the **site** topic even when `ANCHOR_MQTT_PROJECT` is exported, with `--project` / `--topic` to opt into an override and the resolved topic always printed. `max_concurrent_local` is carried and displayed but **advisory**: nothing enforces a concurrency cap, and the docs and `--help` say so. `fleet_watch --load-watcher` emits a supervised `Type=simple` / `Restart=always` unit for the mirror **writer**, without which a configured broker plus a forgotten watcher leaves the fleet capped with no explanation. Freshness edges: a publisher `ts` can only make a message look **older** (so a retained message redelivered on reconnect cannot revive an abandoned level), and `ttl_s: 0` means stale-on-arrival rather than never. `Endpoint.is_local` and `endpoint_is_local` are now one implementation, so `local: "false"` cannot mean different things to `work_once` and the MCP. Both scripts ship to consumer projects via `FLEET_FILES`. Documented at [Site load via MQTT](/tooling/site-load), cross-linked from fleet workers, utility scripts, and the savings page's solar section. Covered by `tests/test_inference_load.py`, `tests/test_mqtt_load_publish.py` (publisher payload → subscriber accept path, no broker), `tests/test_model_fleet_load.py`, and new cases in `tests/test_work_once.py` / `test_fleet_watch.py` / `test_anchor_client.py`
+
+- **`scripts/anchor_ops.py` — transport-neutral operations registry under the CLI.**
+  Every `anchor plans|work|review|draft` verb/action is a named handler
+  (`plans.list`, `work.claim`, `review.review`, …) with typed params, a
+  `mutates` flag, and a `requires` class. `anchor_cli.py` is the terminal
+  adapter (parser, prompts, JSON/text). Adapters supply an `Answers` port;
+  a headless or future MCP adapter that never answers cannot merge or
+  substitute an operator flag. Golden `--json` snapshots pin the envelope.
+  Scaffolded with `--fleet` as `.anchor/scripts/anchor_ops.py`.
+
+- **`anchor plans | work | review | draft` — the plan workflow from a terminal.**
+  `anchor work --list` / `anchor work [<slug>]` / `--heartbeat` / `--finish` /
+  `--return`, `anchor review [--list | <slug>]`, `anchor draft <slug>` /
+  `--promote <slug> --to features|bugs`, and `anchor plans [--board]` do the
+  deterministic parts (pick, claim, lane moves, the merge gate) by calling
+  `plan_select`, `plan_lease`, `work_once` and `merge_feature`, with no model on
+  any default path. Headless runs (`--non-interactive`, `ANCHOR_NONINTERACTIVE=1`,
+  or no TTY) never prompt, always print schema-v1 JSON, never merge and never
+  start a model; a step that needs an operator exits `3` naming the answer.
+  `anchor review` merges only after an in-terminal Approve, only by fast-forward
+  through `merge_feature.py`'s gate (new `run(..., ff_only=True)` mode, re-checked
+  at merge time so a target that moves mid-prompt never leaves a staged merge),
+  onto `dev`/`develop`, never `main`. After a delegated critic says REVISE or
+  ESCALATE, Approve also needs an explicit "approve despite critic concerns?"
+  yes; a remote-only `feature/<slug>` stops instead of archiving unmerged.
+  `--delegate [ENDPOINT]` (interactive only) sends a critic pass or plan prose to
+  an `endpoints.yaml` endpoint via `anchor_client.py`. Existing
+  `anchor <project-dir> [flags]` scaffolding is unchanged; a project directory
+  named like a verb is `./work`. Contract: `anchor/cli.md`, docs
+  *Tooling → Plan workflow verbs*.
+
+- **`scripts/plan_store.py` — one module for plans on disk.** Every workflow
+  script (and the project-orchestrator MCP) now lists lanes, finds slugs, reads
+  and moves plans through it instead of globbing `.plans/` itself; callers see
+  lanes, slugs and `<lane>/<name>` only. Scaffolded with `--fleet` as
+  `.anchor/scripts/plan_store.py`.
+
+- **Shared plan leases on an orphan `leases` branch** (`scripts/lease_branch.py`).
+  With a git remote, a claim is published to `leases/<slug>.json` before the plan
+  leaves `bugs/`|`features/`, so a plan already leased from another clone is
+  refused and `plan_select.py --next` skips it; the fast-forward push is the lock.
+  `python scripts/lease_branch.py --status [--json]` lists live leases,
+  `--check-isolation` verifies the branch holds only `leases/*.json`, and
+  `--compact` (operator only) re-roots its history. No remote or an unreachable
+  one falls back to the local lease with a warning; `ANCHOR_LEASE_STRICT=1`
+  refuses instead. `*.local.md` plans are not published unless
+  `ANCHOR_LEASE_PUBLISH_LOCAL=1`; `ANCHOR_LEASE_BRANCH=0` disables the layer.
+  A lease is owned by agent id **plus host**, so same-named agents on different
+  machines cannot take or delete each other's claims; a foreign `leases` branch is
+  never adopted or overwritten. An expired shared lease on a **ready** plan
+  (`bugs/`/`features/`) is reclaimable after clock-skew slack; an expired lease
+  on `in-progress/` still needs explicit recover. Push retries treat ref-lock /
+  `failed to update ref` as a lost CAS race; hook and protected-branch refusals
+  stay unavailable. Scaffolded projects receive the module via `FLEET_FILES`.
+
+- **Agents offer `smky` for reusable browser smoke tests, only when it fits.**
+  `anchor/ANCHOR.md` ("Code quality defaults") now tells an agent that is about to
+  verify a UI change with a one-off browser probe or throwaway script to ask once,
+  in interactive sessions, whether to install [smky](https://carefreeinv.com/smky/)
+  instead. It applies only to Playwright projects that want smoke-level coverage
+  (no mature Playwright/Cypress suite already in place), shows the exact install
+  command, and installs only on an explicit yes. Nothing is scaffolded or
+  auto-installed, and unattended runs never ask.
+
 ### Changed
+
+- **Public docs lead with the CLI loop.** README Quick start, intro, quick-start (technical and non-technical), skill overview, and how-work-reaches-dev name `anchor work` / `anchor review` / `anchor draft "<desc>"` as the daily path; slash skills are the in-harness adapter after one probe. CHANGELOG Unreleased is a single Added/Changed/Fixed stack.
 
 - **Skills and standing rules match the default CLI loop.** GROK.md rule 13,
   CLAUDE.md prefer-anchor, `/work` `/review` `/draft` skill tables (and
@@ -92,79 +198,6 @@ Newest first.
   `fleet-watch --once` without `--run` passes `--no-run`. Headless review still
   does not start a model.
 
-### Fixed
-
-- **Tiny / swarm workers refuse mid-or-higher plans.** Highest listed
-  Preferred tier is the floor: `small, mid` is mid work. `classify_fit`,
-  `work_once` execute, and `orchestrate.py` refuse before chat (`--no-fit-check`
-  / `--insist` override). Unlabeled plans are a mid floor for `small` workers.
-  Preferred `small` alone stays swarm-eligible.
-
-- **NOOP retry names whole-file fences.** After `NoApplyableHunks` or an
-  unchanged worktree, the executor history line asks for a unified diff or a
-  whole-file fence.
-
-- **CLI critic UNKNOWN on duplicated `## Verdict`.** `critic_verdict`
-  skips empty `## Verdict` headings and uses the last non-empty section, so
-  Lightning's `## Verdict` / `## Verdict ACCEPT` pair is ACCEPT. An empty
-  section still stays UNKNOWN when the only ACCEPT is prior-round prose.
-
-- **CLI critic first-pass false REVISE.** `anchor review` attaches a
-  VERIFICATION block (`git diff --stat` plus `check_docs_sync.py` when that
-  script exists) to every critic slice, and the last slice is told to verdict
-  the whole plan. Lightning was REVISEing when logs were missing from the
-  prompt or when the last 8k chunk was tests/docs only.
-
-- **`anchor review --delegate` critic budget.** Critic chat uses thinking-off
-  and a short critic system prompt (not full mythos-core). Diffs are split on
-  `diff --git` boundaries (~8k chars) so NVIDIA Lightning can emit a
-  `## Verdict` instead of HTTP 200 / `finish_reason=length` / empty content.
-
-### Added
-
-- **Empty-finish gate.** `scripts/plan_finish_gate.py` refuses
-  `in-progress/` → `review-needed/` when the only commits since the
-  integration merge-base are under `.plans/**` or miss the plan Touches.
-  `work_once` auto-finish and `anchor work --finish` stay put on fail.
-  Operator exception: `## Handoff` line or `ANCHOR_EMPTY_FINISH=1`.
-
-- **Executor Touches file paste.** `orchestrate.py` `execute_task` appends a
-  read-only `FILES` block with the current worktree text of paths named in the
-  Step Touches cell (or a `Touches:` line), capped per file and dropped
-  largest-first when the prompt would exceed `max_context`. Secrets (`.env`,
-  keys) and `.plans/**` are omitted. Chat-only executors can emit a unified
-  diff or whole-file fence against that text.
-
-- **`anchor models`.** `list` prints registry name, aliases, machine, model,
-  effort, and tier. `nick ALIAS --endpoint NAME [--machine …] [--effort …]`
-  writes only a machine-local overlay (`~/.config/anchor/endpoints.local.yaml`
-  or `--overlay`). `--endpoint lightning` on `work` / `--run` / `--delegate`
-  resolves through `Fleet.lookup` (canonical `name:` or overlay alias).
-  Duplicate aliases fail at load (`RegistryConflict`). Overlay `effort`
-  is the worker default when `--effort` is omitted; the CLI flag still wins.
-
-- **Event-driven plan watchers.** `work_once.py --watch` stays up and pulls on
-  `.plans/{bugs,features,in-progress}` inotify events (debounced) with a long
-  poll heartbeat when inotify is missing. Optional MQTT poke
-  (`ANCHOR_MQTT_PLANS_TOPIC` or `anchor/v1/sites/{site}/plans/poke`) is a no-op
-  when unconfigured. `fleet_watch.py` emits `Type=simple` `--watch` units plus a
-  oneshot poll timer (`watch=0` restores interval-only). New `scripts/plan_watch.py`
-  ships in `FLEET_FILES`.
-
-- **`anchor fleet-watch`.** Status/list/once/emit wrap `fleet_watch.py`;
-  `--install-user` is operator-only (headless `--yes` still exits 3 and writes
-  nothing).
-
-- **Repo-root `.env` for fleet keys.** `anchor` plan verbs and
-  `nvidia_build_probe.py --probe` load a gitignored `.env` with setdefault
-  (exported environment wins). `Endpoint.chat` sends `Authorization` from the
-  first set of `ANCHOR_API_KEY`, `NVIDIA_API_KEY`, `NGC_API_KEY`. Template:
-  `.env.example`.
-
-- **Site inference-load limits over MQTT** — an operator (home-energy automation, lab controller, UPS monitor) publishes one **load level** for a site and every Anchor project honors it before running **local** inference. New **`scripts/inference_load.py`** carries the normative v1 contract: topic `anchor/v1/sites/{site_id}/inference/load` plus an optional per-project override topic that **outranks** it while fresh (mirrored under separate scopes, so a site heartbeat cannot erase a standing override, and a stale override falls through to the site rather than to the fail-safe), a JSON payload whose only required field is `level`, and the level→action matrix `off`→nothing · `low`→`small` · `mid`→`small,mid` · `high`→all fit tiers (aliases `0`–`3`, `full`, `none`; an explicit `allowed_tiers` replaces the row, and `off` denies regardless). **Opt-in and fail-safe by construction:** with nothing configured the resolved policy is `high` from source `disabled` and no worker changes behavior; once configured, `ttl_s` is measured against **local receipt time** — not the publisher's `ts`, so a skewed clock cannot hand out an immortal "full load" — a payload that **omits** `ttl_s` ages out after `ANCHOR_LOAD_MAX_AGE` (default 900s, `0` disables) so freshness is the consumer's guarantee rather than something a publisher can decline, and a missing, stale, or corrupt policy falls back to `ANCHOR_LOAD_FAILSAFE` (`hold`, the default, treats it as `off`; `last_known` keeps the stale level for labs; `unrestricted` opts out). An unknown level is a **parse error**: malformed messages are dropped, never applied, and can never widen the cap. **MQTT is confined to the subscriber** (`--watch`, the only `paho-mqtt` user), which validates and mirrors accepted messages to `.anchor/inference-load.json`; every consumer reads that mirror with the standard library, so a load check adds no dependency, no socket, and no stall to the claim path, a broker outage cannot hang a worker, and CI needs no broker. Writing the mirror by hand (`--set low --reason grid-peak`) or from any other bus runs the whole feature **without MQTT**. Endpoints gained an optional top-level **`local: true|false`** (not a quirk) with `Endpoint.is_local` and a base-URL heuristic behind it (loopback / RFC1918 / CGNAT / link-local / `.local`-style hostnames); every public hostname is **not** local, so a mis-set policy can never silently block a cloud tier. An explicit `local:` value that parses as neither true nor false is treated as **unknown** and falls through to that heuristic rather than as "not local" — a mangled annotation must not be able to switch the governor off — and the PyYAML-less fallback registry parser strips inline comments, so the documented `local: true  # my rack` form is read correctly on a lean install. Consumers: **`work_once.py`** refuses **before claiming** when a local-bound worker's tier is barred and exits idle (`1`) — leaving the backlog untouched rather than parked under a lease nobody is running — with `--local-worker` for tier-only workers and `--ignore-load` as a per-run override; **`fleet_watch.py`** copies the load settings into emitted systemd units and cron lines (**no secrets**: unit files and crontabs are world-readable, so `ANCHOR_MQTT_PASSWORD` is never emitted and `user:pass@` userinfo is stripped from `ANCHOR_MQTT_URL`, which is not used for auth anyway), accepts `local=1` in a `--worker` spec, and shows the current level in `--status`; the **model-fleet MCP** returns a structured `LOAD-LIMITED` refusal from `delegate` / `delegate_parallel_review` instead of sending work (refusing rather than quietly running one of the two independent critic passes), marks local endpoints and the site level in `list_fleet`, and leaves `fleet_health` ungated but labelled — you need to see a box come back before the cap lifts. New **`scripts/mqtt_load_publish.py`** is the operator-side publisher sharing that configuration, with `--retain` (warned when used without `--ttl`), `--dry-run`, `--mirror` (skipped when the publish failed, so a broker outage cannot leave one project on a local-only level), and explicit scope selection — it defaults to the **site** topic even when `ANCHOR_MQTT_PROJECT` is exported, with `--project` / `--topic` to opt into an override and the resolved topic always printed. `max_concurrent_local` is carried and displayed but **advisory**: nothing enforces a concurrency cap, and the docs and `--help` say so. `fleet_watch --load-watcher` emits a supervised `Type=simple` / `Restart=always` unit for the mirror **writer**, without which a configured broker plus a forgotten watcher leaves the fleet capped with no explanation. Freshness edges: a publisher `ts` can only make a message look **older** (so a retained message redelivered on reconnect cannot revive an abandoned level), and `ttl_s: 0` means stale-on-arrival rather than never. `Endpoint.is_local` and `endpoint_is_local` are now one implementation, so `local: "false"` cannot mean different things to `work_once` and the MCP. Both scripts ship to consumer projects via `FLEET_FILES`. Documented at [Site load via MQTT](/tooling/site-load), cross-linked from fleet workers, utility scripts, and the savings page's solar section. Covered by `tests/test_inference_load.py`, `tests/test_mqtt_load_publish.py` (publisher payload → subscriber accept path, no broker), `tests/test_model_fleet_load.py`, and new cases in `tests/test_work_once.py` / `test_fleet_watch.py` / `test_anchor_client.py`
-
-### Changed
-
 - **CLI docs lead with the work loop.** README, Quick Start, the scaffolder
   CLI page, `anchor/cli.md` / Plan workflow verbs, and `/work` skill docs
   name `anchor work --list|--run|--finish`, `models`, and `fleet-watch`
@@ -208,7 +241,45 @@ Newest first.
 - **README / Quick Start** name `anchor plans | work | review | draft` as the
   terminal `.plans/` loop (`anchor --help` stays the scaffolder).
 
+- **Two finish workflows for tracked plans.** Human-assisted `/work` still parks
+  in `review-needed/` (or merges to `dev` only when the operator answers the
+  culmination question). Autonomous / cloud runs (`work_once.py`, fleet,
+  coordinator MCP) loop executor → critic until **ACCEPT**, then move the plan
+  `in-progress/` → `completed/` **on `feature/<slug>`** and open a pull request
+  targeting integration. They still **never merge**. Critic **REVISE** never
+  archives and never opens a PR. `/review` remains the human survey for
+  `review-needed/` and still does not auto-open a PR. Doctrine, `/work`,
+  `/review`, Chat, platform briefs, and
+  [How work reaches `dev`](https://carefreeinv.com/anchor/tooling/how-work-reaches-dev)
+  describe the split.
+
 ### Fixed
+
+- **Tiny / swarm workers refuse mid-or-higher plans.** Highest listed
+  Preferred tier is the floor: `small, mid` is mid work. `classify_fit`,
+  `work_once` execute, and `orchestrate.py` refuse before chat (`--no-fit-check`
+  / `--insist` override). Unlabeled plans are a mid floor for `small` workers.
+  Preferred `small` alone stays swarm-eligible.
+
+- **NOOP retry names whole-file fences.** After `NoApplyableHunks` or an
+  unchanged worktree, the executor history line asks for a unified diff or a
+  whole-file fence.
+
+- **CLI critic UNKNOWN on duplicated `## Verdict`.** `critic_verdict`
+  skips empty `## Verdict` headings and uses the last non-empty section, so
+  Lightning's `## Verdict` / `## Verdict ACCEPT` pair is ACCEPT. An empty
+  section still stays UNKNOWN when the only ACCEPT is prior-round prose.
+
+- **CLI critic first-pass false REVISE.** `anchor review` attaches a
+  VERIFICATION block (`git diff --stat` plus `check_docs_sync.py` when that
+  script exists) to every critic slice, and the last slice is told to verdict
+  the whole plan. Lightning was REVISEing when logs were missing from the
+  prompt or when the last 8k chunk was tests/docs only.
+
+- **`anchor review --delegate` critic budget.** Critic chat uses thinking-off
+  and a short critic system prompt (not full mythos-core). Diffs are split on
+  `diff --git` boundaries (~8k chars) so NVIDIA Lightning can emit a
+  `## Verdict` instead of HTTP 200 / `finish_reason=length` / empty content.
 
 - **`reply_has_applyable` does not raise on overlapping patches.** The probe
   treats `ApplyError` as applyable so orchestrate records APPLY instead of
@@ -278,93 +349,10 @@ Newest first.
   failure) prints `did you mean \`anchor ./work …\` to scaffold the
   directory?` and still exits 2.
 
-### Fixed
-
 - **`anchor review --delegate` prints the critic before the decision prompt.**
   Interactive non-JSON runs display `--- critic (endpoint) ---` from the
   operations core (`Ctx.display`) before Approve can merge. Headless runs
   refuse `delegate` / `--run` even if an adapter injected the capability.
-
-### Changed
-
-- **Two finish workflows for tracked plans.** Human-assisted `/work` still parks
-  in `review-needed/` (or merges to `dev` only when the operator answers the
-  culmination question). Autonomous / cloud runs (`work_once.py`, fleet,
-  coordinator MCP) loop executor → critic until **ACCEPT**, then move the plan
-  `in-progress/` → `completed/` **on `feature/<slug>`** and open a pull request
-  targeting integration. They still **never merge**. Critic **REVISE** never
-  archives and never opens a PR. `/review` remains the human survey for
-  `review-needed/` and still does not auto-open a PR. Doctrine, `/work`,
-  `/review`, Chat, platform briefs, and
-  [How work reaches `dev`](https://carefreeinv.com/anchor/tooling/how-work-reaches-dev)
-  describe the split.
-
-### Added
-
-- **`scripts/anchor_ops.py` — transport-neutral operations registry under the CLI.**
-  Every `anchor plans|work|review|draft` verb/action is a named handler
-  (`plans.list`, `work.claim`, `review.review`, …) with typed params, a
-  `mutates` flag, and a `requires` class. `anchor_cli.py` is the terminal
-  adapter (parser, prompts, JSON/text). Adapters supply an `Answers` port;
-  a headless or future MCP adapter that never answers cannot merge or
-  substitute an operator flag. Golden `--json` snapshots pin the envelope.
-  Scaffolded with `--fleet` as `.anchor/scripts/anchor_ops.py`.
-
-- **`anchor plans | work | review | draft` — the plan workflow from a terminal.**
-  `anchor work --list` / `anchor work [<slug>]` / `--heartbeat` / `--finish` /
-  `--return`, `anchor review [--list | <slug>]`, `anchor draft <slug>` /
-  `--promote <slug> --to features|bugs`, and `anchor plans [--board]` do the
-  deterministic parts (pick, claim, lane moves, the merge gate) by calling
-  `plan_select`, `plan_lease`, `work_once` and `merge_feature`, with no model on
-  any default path. Headless runs (`--non-interactive`, `ANCHOR_NONINTERACTIVE=1`,
-  or no TTY) never prompt, always print schema-v1 JSON, never merge and never
-  start a model; a step that needs an operator exits `3` naming the answer.
-  `anchor review` merges only after an in-terminal Approve, only by fast-forward
-  through `merge_feature.py`'s gate (new `run(..., ff_only=True)` mode, re-checked
-  at merge time so a target that moves mid-prompt never leaves a staged merge),
-  onto `dev`/`develop`, never `main`. After a delegated critic says REVISE or
-  ESCALATE, Approve also needs an explicit "approve despite critic concerns?"
-  yes; a remote-only `feature/<slug>` stops instead of archiving unmerged.
-  `--delegate [ENDPOINT]` (interactive only) sends a critic pass or plan prose to
-  an `endpoints.yaml` endpoint via `anchor_client.py`. Existing
-  `anchor <project-dir> [flags]` scaffolding is unchanged; a project directory
-  named like a verb is `./work`. Contract: `anchor/cli.md`, docs
-  *Tooling → Plan workflow verbs*.
-
-- **`scripts/plan_store.py` — one module for plans on disk.** Every workflow
-  script (and the project-orchestrator MCP) now lists lanes, finds slugs, reads
-  and moves plans through it instead of globbing `.plans/` itself; callers see
-  lanes, slugs and `<lane>/<name>` only. Scaffolded with `--fleet` as
-  `.anchor/scripts/plan_store.py`.
-
-- **Shared plan leases on an orphan `leases` branch** (`scripts/lease_branch.py`).
-  With a git remote, a claim is published to `leases/<slug>.json` before the plan
-  leaves `bugs/`|`features/`, so a plan already leased from another clone is
-  refused and `plan_select.py --next` skips it; the fast-forward push is the lock.
-  `python scripts/lease_branch.py --status [--json]` lists live leases,
-  `--check-isolation` verifies the branch holds only `leases/*.json`, and
-  `--compact` (operator only) re-roots its history. No remote or an unreachable
-  one falls back to the local lease with a warning; `ANCHOR_LEASE_STRICT=1`
-  refuses instead. `*.local.md` plans are not published unless
-  `ANCHOR_LEASE_PUBLISH_LOCAL=1`; `ANCHOR_LEASE_BRANCH=0` disables the layer.
-  A lease is owned by agent id **plus host**, so same-named agents on different
-  machines cannot take or delete each other's claims; a foreign `leases` branch is
-  never adopted or overwritten. An expired shared lease on a **ready** plan
-  (`bugs/`/`features/`) is reclaimable after clock-skew slack; an expired lease
-  on `in-progress/` still needs explicit recover. Push retries treat ref-lock /
-  `failed to update ref` as a lost CAS race; hook and protected-branch refusals
-  stay unavailable. Scaffolded projects receive the module via `FLEET_FILES`.
-
-- **Agents offer `smky` for reusable browser smoke tests, only when it fits.**
-  `anchor/ANCHOR.md` ("Code quality defaults") now tells an agent that is about to
-  verify a UI change with a one-off browser probe or throwaway script to ask once,
-  in interactive sessions, whether to install [smky](https://carefreeinv.com/smky/)
-  instead. It applies only to Playwright projects that want smoke-level coverage
-  (no mature Playwright/Cypress suite already in place), shows the exact install
-  command, and installs only on an explicit yes. Nothing is scaffolded or
-  auto-installed, and unattended runs never ask.
-
-### Fixed
 
 - **`anchor review --delegate` no longer treats a template options line or a
   struck-through ACCEPT as the critic verdict.** `critic_verdict` ignores

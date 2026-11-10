@@ -3,7 +3,7 @@ sidebar_position: 1.5
 sidebar_label: Plan workflow verbs
 ---
 
-<!-- synced-from: anchor/cli.md @ 259d7254599881262df28a36151f7a6fb348498e -->
+<!-- synced-from: anchor/cli.md @ 9001bbd4a9111b96f6e585c70cc9fe3681e9c646 -->
 
 # The plan-workflow CLI: what `anchor` does itself, and what it hands back
 
@@ -111,7 +111,7 @@ that answer, so the CLI has none that tries.
 | `--list`: ready plans with your fit and deps | deterministic | `plan_select.inventory` |
 | claim (bare pick or named slug) | deterministic | `work_once.pick_claim_one`: the same pick, skip and lease rules as `work_once.py` |
 | `--heartbeat`, `--finish` (→ `review-needed/`), `--return` | deterministic | `plan_lease`; only the lease holder may move its plan |
-| carry out the plan's Steps | **model** | default after claim (interactive **and** headless); `--no-run` claims only |
+| carry out the plan's Steps | **model** | bare `anchor work` (or named slug) hands the plan to `orchestrate.py`; `--no-run` claims only |
 
 `anchor work` has no merge. Interactive execute that exits 0 (and
 `work_once --once` exit 0) moves the plan to `review-needed/` the same way

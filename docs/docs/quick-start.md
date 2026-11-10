@@ -30,7 +30,7 @@ Anchor is a **process kit**, not a new chat model. It teaches your agent to:
 - **Do one clear job at a time**, then check that it really worked.
 - Use **cheaper / local models** for routine steps and save the expensive model for planning and review.
 
-Day to day you mostly type short slash commands into the agent.
+Day to day, once `anchor` is on PATH, the same loop is **`anchor work`**, **`anchor review`**, and **`anchor draft "<desc>"`**. In Claude or Grok, tell the agent to prefer those verbs after one probe; slash `/work` `/review` `/draft` stay the in-harness aliases.
 
 ### Step 1 — Get Anchor on your computer
 
@@ -78,16 +78,17 @@ When it finishes, your project has Anchor instructions, plan folders under **`.p
 
 | You want to… | Type this | What happens |
 |--------------|-----------|--------------|
-| Capture an idea as a plan | `/draft` or `/draft fix login button` | Writes a draft under `.plans/drafts/` |
-| See drafts | `/draft --list` | Lists what is waiting |
-| Make a draft ready for agents | `/draft --promote <name>` | Moves it to bugs or features |
-| Have the agent do ready work | `/work` | Picks a fit plan and implements it |
-| Sign off finished agent work | `/review` | You approve or send work back |
-| Background workers on a machine | `/fleet-watch` | Optional; for always-on pullers |
+| Capture an idea as a plan | `anchor draft "fix login button"` (or `/draft`) | Writes a draft under `.plans/drafts/` |
+| See drafts | `anchor draft --list` | Lists what is waiting |
+| Make a draft ready for agents | `anchor draft --promote <name>` | Moves it to bugs or features |
+| Have the agent do ready work | `anchor work` (or `/work`) | Picks a fit plan and implements it |
+| Sign off finished agent work | `anchor review` (or `/review`) | Critic, then you approve or send work back |
+| Empty queue, `dev` ahead of `main` | `anchor review --promote` | Promotion review (you still confirm) |
+| Background workers on a machine | `anchor fleet-watch` | Optional; for always-on pullers |
 
-You do **not** need to understand every folder under `.plans/` on day one. Promote drafts when they look clear; run `/work` when you want implementation; use `/review` when the agent says work is ready for you.
+You do **not** need to understand every folder under `.plans/` on day one. Promote drafts when they look clear; run `anchor work` when you want implementation; use `anchor review` when work is ready for you.
 
-The same loop from a terminal (after Step 2) is `anchor draft`, `anchor work`, and `anchor review`. Full contract: [Plan workflow verbs](/tooling/plan-verbs).
+In Claude or Grok, ask the agent to probe `anchor work --help` once this session and prefer the CLI for the rest. Full contract: [Plan workflow verbs](/tooling/plan-verbs).
 
 ### If something feels stuck
 
@@ -164,19 +165,7 @@ Useful flags — full reference on [the CLI page](/tooling/cli):
 
 ### 5. Plan and execute
 
-In a coding agent, the slash skills:
-
-| Command | Role |
-|---------|------|
-| [`/draft`](/skills/draft) | Create, list, load drafts; `--promote <slug>` → bugs/features |
-| [`/work`](/skills/work) | Execute next (or named) ready plan |
-| [`/review`](/skills/review) | Human sign-off for `review-needed/` |
-| [`/fleet-watch`](/skills/fleet-watch) | Durable multi-tier pullers |
-| [`/audit`](/skills/audit) | Security audit → prioritized bug plans |
-| [`/deploy`](/skills/deploy) | Ship the project with the tooling it already uses |
-| [`/optimize`](/skills/optimize) | Standards scan → checkbox-picked improvement plans |
-
-From a terminal, the same `.plans/` loop with no chat harness ([Plan workflow verbs](/tooling/plan-verbs)):
+Daily loop from a terminal ([Plan workflow verbs](/tooling/plan-verbs)). In a coding agent, probe once then prefer the same argv; slash [`/work`](/skills/work) [`/review`](/skills/review) [`/draft`](/skills/draft) are harness adapters.
 
 ```bash
 cd /path/to/your-app          # directory that contains .plans/

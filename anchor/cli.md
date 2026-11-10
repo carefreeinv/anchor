@@ -104,7 +104,7 @@ that answer, so the CLI has none that tries.
 | `--list`: ready plans with your fit and deps | deterministic | `plan_select.inventory` |
 | claim (bare pick or named slug) | deterministic | `work_once.pick_claim_one`: the same pick, skip and lease rules as `work_once.py` |
 | `--heartbeat`, `--finish` (→ `review-needed/`), `--return` | deterministic | `plan_lease`; only the lease holder may move its plan |
-| carry out the plan's Steps | **model** | named slug (or `--run` alias) hands the plan to `orchestrate.py` interactively; headless named-slug still pending `execute` |
+| carry out the plan's Steps | **model** | bare `anchor work` (or named slug) hands the plan to `orchestrate.py`; `--no-run` claims only |
 
 `anchor work` has no merge. Interactive execute that exits 0 (and
 `work_once --once` exit 0) moves the plan to `review-needed/` the same way

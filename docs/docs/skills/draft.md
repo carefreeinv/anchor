@@ -12,6 +12,13 @@ list, load, promote) — not implementing. See [Skills overview](/skills/overvie
 
 Does **not** implement product code. Does **not** run [`/work`](/skills/work). Promotion is **only** via explicit promote args (not a side effect of create/load, and never from `/work` or fleet pullers). Probe once this session (`anchor draft --help`); then **`anchor draft "a short brief"`** (remainder is the description; default `*.local.md`; `--no-delegate` skeleton) / `anchor draft --list` / `anchor draft --promote <slug>` instead of walking `.plans/drafts/` by hand.
 
+| Intent | argv |
+|--------|------|
+| Planner fill | `anchor draft "a short brief"` |
+| List drafts | `anchor draft --list` |
+| Skeleton only | `anchor draft --no-delegate --title '…' --goal '…'` |
+| Promote | `anchor draft --promote <slug>` |
+
 ## Usage
 
 | Invocation | Behavior |

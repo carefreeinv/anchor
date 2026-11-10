@@ -17,11 +17,11 @@ flowchart LR
   dev["dev"]
   main["main"]
 
-  feat -->|"/review Approve<br/>(AI critic + human survey)"| dev
+  feat -->|"anchor review Approve<br/>(AI critic + human survey)"| dev
   feat -->|"/work culmination answer<br/>(scoped-merge gate)"| dev
   feat -->|"autonomous critic ACCEPT<br/>completed/ on branch"| pr
   pr -->|"human merges the PR"| dev
-  dev -->|"/review empty-queue Promote"| main
+  dev -->|"anchor review --promote"| main
 ```
 
 ## The two local-merge routes onto integration

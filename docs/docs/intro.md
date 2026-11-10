@@ -12,7 +12,7 @@ A Mythos-class model's advantage is disciplined process over long horizons — c
 ```mermaid
 flowchart TB
   doctrine["Doctrine + mythos-core"]
-  plans[".plans / /work"]
+  plans[".plans / anchor work"]
   fleet["Fleet watchers + hardware"]
   platforms["Platform agents"]
   verify["Tooling verifies"]
@@ -75,7 +75,7 @@ cd anchor
 
 Ready to try it? The **[Quick Start](/quick-start)** page has two tracks:
 
-- **[For Non-Technical People](/quick-start#for-non-technical-people)** — plain-language setup with Claude Code or Grok Build (`/install-anchor`, `/config`, `/draft`, `/work`).
+- **[For Non-Technical People](/quick-start#for-non-technical-people)** — install `anchor`, then tell the agent to run `anchor work`, `anchor review`, `anchor draft "<desc>"` (slash `/work` `/review` `/draft` after one probe).
 - **[For Technical People](/quick-start#for-technical-people)** — CLI, defaults, scaffold flags, `anchor plans | work | review | draft`, and optional fleet endpoints.
 
 ## Start here

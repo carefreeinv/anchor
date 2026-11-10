@@ -27,7 +27,7 @@ A Mythos-class model's edge is not intelligence-per-token — it's **discipline 
 | `scripts/` | Python utilities: prompt tuner, orchestrator, `work_once` / `fleet_watch`, router, benchmark, device-fit |
 | `mcp/` | MCP servers: `anchor-prompts` (scaffolding tools), `model-fleet` (delegation/routing) |
 | `docs/` | Docusaurus documentation site (`cd docs && npm install && npm start`) |
-| Scaffold plans | Projects get a tracked `.plans/` tree (`/work`); source: `anchor/scaffold/plans/` |
+| Scaffold plans | Projects get a tracked `.plans/` tree (`anchor work`); source: `anchor/scaffold/plans/` |
 
 **Docs rule (all Anchor projects):** documentation describes the project’s **current shipped state**, not `.plans/` backlog. See `CLAUDE.md` / `anchor/ANCHOR.md`. This repository’s own `.plans/` (if present) is private working backlog and must not appear in public docs.
 
@@ -35,7 +35,7 @@ A Mythos-class model's edge is not intelligence-per-token — it's **discipline 
 
 1. Read `anchor/ANCHOR.md` — the doctrine everything else implements.
 2. Run `./config.sh` (or type `/config` in Claude Code / Grok Build) to pick your default platform(s), whether you want fleet tooling, model priority, and **preferred orchestrator** (who coordinates multi-step work; e.g. `claude:opus`). It saves your answer and shows you the exact `anchor <project-dir>` command to scaffold a project with it.
-3. Scaffold a project (`cd my-app && anchor`, or `anchor <project-dir>`). From the Anchor repo, **`/anchor <project-path>`** (path required) runs the CLI with conflict-aware help when the project already has agent config. **Inside a scaffolded project**, `/anchor` (no path) locates the local Anchor checkout and conforms **this** project. Then use **`/work`** or **`anchor work`** for ready plans under `.plans/`, or **`/fleet-watch`** for reboot-persistent pullers. Set a durable orchestrator anytime: `anchor --set-orchestrator …`. Refresh an existing install: `anchor --check` / `anchor --diff` / `anchor --upgrade --yes` (or project `/anchor`).
+3. Scaffold a project (`cd my-app && anchor`, or `anchor <project-dir>`). From the Anchor repo, **`/anchor <project-path>`** (path required) runs the CLI with conflict-aware help when the project already has agent config. **Inside a scaffolded project**, `/anchor` (no path) locates the local Anchor checkout and conforms **this** project. Daily loop: **`anchor work`**, **`anchor review`**, **`anchor draft "<desc>"`**. Slash `/work` `/review` `/draft` are the in-harness aliases after one CLI probe. **`anchor fleet-watch`** (or `/fleet-watch`) installs reboot-persistent pullers. Set a durable orchestrator anytime: `anchor --set-orchestrator …`. Refresh an existing install: `anchor --check` / `anchor --diff` / `anchor --upgrade --yes` (or project `/anchor`).
 4. Point `scripts/endpoints.yaml` at your endpoints; use `scripts/orchestrate.py` to run the orchestrator pattern across them — see your `hardware/` folder's README to serve models on your own fleet. Fleet design: docs **Tooling → Fleet workers**.
 
 Skipping step 2 is fine too — `anchor --platform claude,grok` (etc.) or the interactive survey it falls back to both still work without saved defaults.
@@ -47,10 +47,11 @@ Once `anchor` is on PATH, the same binary runs the `.plans/` workflow from a ter
 ```bash
 anchor plans                 # every plan, by lane
 anchor work --list --tier mid
-anchor work --run --endpoint <nick>  # TTY: claim + orchestrate; exit 0 → review-needed/
-anchor work --finish <slug>  # or --no-finish to keep the lease after --run
-anchor review --list
-anchor draft <slug>
+anchor work                  # pick + execute (interactive and headless)
+anchor work --no-run         # claim only
+anchor review                # critic on the top review-needed/ plan
+anchor review --promote      # empty queue: integration → mainline (explicit)
+anchor draft "fix leftover worktrees"
 anchor models list           # registry + overlay nicknames
 anchor fleet-watch --status
 ```

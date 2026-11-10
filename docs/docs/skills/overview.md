@@ -5,9 +5,10 @@ sidebar_label: Overview
 
 # Skills
 
-Agent **slash commands** that implement Anchor process: plans, fleet watchers,
-scaffold/upgrade, CLI install, and local-model fit. Same idea on Claude Code
-and Grok Build; install paths differ.
+Day-to-day plan work is **`anchor work`**, **`anchor review`**, and
+**`anchor draft "<desc>"`** when `anchor` is on PATH. Slash commands below are
+the in-harness adapters (probe the CLI once this session; last-known-good wins).
+Same idea on Claude Code and Grok Build; install paths differ.
 
 ## Where each skill is best used
 
