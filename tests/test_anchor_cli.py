@@ -260,6 +260,25 @@ def test_work_claims_and_hands_execution_back(project):
     assert doc["pending"][0]["needs"] == "model"
 
 
+def test_bare_work_starts_orchestrate(project, monkeypatch):
+    import work_once
+
+    seen: list = []
+
+    def fake_orch(dest, extra):
+        seen.append(dest)
+        return 0
+
+    monkeypatch.setattr(work_once, "run_orchestrate", fake_orch)
+    monkeypatch.setattr(work_once, "orchestrate_worktree_args", lambda *a, **k: [])
+    write(project, "features", "f1", priority="P3")
+    write(project, "bugs", "b1")
+    code, doc = cli(["work", "--root", str(project), "--agent-id", "a1"])
+    assert code == 0
+    assert seen
+    assert doc["result"]["plan"] == "review-needed/b1.md"
+
+
 def test_work_run_headless_starts_orchestrate(project, monkeypatch):
     import work_once
 
@@ -436,6 +455,15 @@ def test_work_heartbeat_finish_return(project):
 
 
 # --- review -----------------------------------------------------------------------
+
+
+def test_bare_review_picks_highest_priority(project):
+    write(project, "review-needed", "r-low", priority="P3")
+    write(project, "review-needed", "b1", priority="P1")
+    code, doc = cli(["review", "--no-delegate", "--root", str(project)])
+    assert code == 3
+    assert doc["result"]["plan"] == "review-needed/b1.md"
+    assert doc["action"] == "review"
 
 
 def test_review_list(project):
@@ -669,6 +697,19 @@ def test_delegation_round_trips_one_step_interactively(project, stub_fleet):
     assert doc["result"]["delegated_to"] == "stub" and doc["pending"] == []
     text = (project / ".plans" / "drafts" / "d2.md").read_text(encoding="utf-8")
     assert text.startswith("# Plan: delegated")
+
+
+def test_draft_brief_kebabs_and_writes_planner_plan(project, stub_fleet):
+    ep, reg = stub_fleet
+    code, doc = cli([
+        "draft", "a", "short", "brief", "--root", str(project),
+        "--registry", str(reg),
+    ])
+    assert code == 0 and ep.calls == 1
+    rel = doc["result"]["plan"]
+    assert rel == "drafts/a-short-brief.local.md"
+    text = (project / ".plans" / rel).read_text(encoding="utf-8")
+    assert "## Goal" in text and "## Steps" in text and "## Done when" in text
 
 
 def test_headless_planner_delegates(project, stub_fleet):

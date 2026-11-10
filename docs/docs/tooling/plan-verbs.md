@@ -156,8 +156,8 @@ without committing.
 | Part | Kind | Why |
 |------|------|-----|
 | `--list` drafts | deterministic | directory read |
-| scaffold `drafts/<slug>` (`--local` for private) | deterministic | a header skeleton; refuses a slug already in use anywhere |
-| write the Goal, Steps and Done when | **model** | pending `plan-prose`; `--delegate` asks the planner endpoint, and the reply is written only if it has all three sections |
+| scaffold `drafts/<kebab>.local.md` (default private; `--shared` for tracked) | deterministic | kebab from the brief; refuses a slug already in use anywhere |
+| write the Goal, Steps and Done when | **model** | planner runs by default (headless too); `--no-delegate` keeps the skeleton |
 | `--promote <slug> --to bugs\|features` | deterministic | `plan_store.move` |
 | which ready lane, when `--to` is omitted | **operator** | asked interactively; exit 3 headless |
 

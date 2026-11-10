@@ -224,7 +224,7 @@ def test_golden_review_list_empty(project):
 
 def test_golden_review_headless_needs_operator(project):
     write(project, "review-needed", "r1")
-    code, doc = cli(["review", "r1", "--root", str(project)])
+    code, doc = cli(["review", "r1", "--no-delegate", "--root", str(project)])
     assert_golden("review_headless_needs_operator", code, doc, project)
 
 
@@ -279,7 +279,7 @@ def test_golden_review_approve_not_fast_forward(repo_project):
 
 
 def test_golden_review_headless_never_merges(repo_project):
-    code, doc = cli(["review", "r1", "--root", str(repo_project)])
+    code, doc = cli(["review", "r1", "--no-delegate", "--root", str(repo_project)])
     assert_golden("review_headless_never_merges", code, doc, repo_project)
 
 
