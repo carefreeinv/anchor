@@ -259,6 +259,23 @@ def test_work_list_empty_is_nothing_to_do(project):
     assert code == 1 and doc["result"]["plans"] == []
 
 
+def test_work_list_from_nested_cwd_without_root(project, monkeypatch):
+    write(project, "features", "f1")
+    nested = project / "src" / "pkg"
+    nested.mkdir(parents=True)
+    monkeypatch.chdir(nested)
+    code, doc = cli(["work", "--list"])
+    assert code == 0
+    (row,) = doc["result"]["plans"]
+    assert row["rel"] == "features/f1.md"
+
+
+def test_work_list_no_ancestor_plans_is_hard_error(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    code, doc = cli(["work", "--list"])
+    assert code == 2 and "no .plans/" in doc["error"]
+
+
 def test_work_claims_and_hands_execution_back(project):
     write(project, "features", "f1", priority="P3")
     write(project, "bugs", "b1")

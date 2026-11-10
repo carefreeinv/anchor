@@ -345,10 +345,10 @@ class FleetWatchParams:
 
 def plans_root(root: str) -> Path:
     path = Path(root).expanduser().resolve()
-    plans = plan_store.plans_root_for(path)
-    if not plans.is_dir():
-        raise CliError(f"no .plans/ tree under {path}")
-    return plans
+    found = plan_store.discover_project_root(path)
+    if found is None:
+        raise CliError(f"no .plans/ tree under {path} (walked parents)")
+    return plan_store.plans_root_for(found)
 
 
 def _title(ref: plan_store.PlanRef) -> str:

@@ -1,7 +1,7 @@
 {
   "doc": {
     "action": "plans",
-    "error": "no .plans/ tree under <ROOT>",
+    "error": "no .plans/ tree under <ROOT> (walked parents)",
     "exit_code": 2,
     "mode": "non-interactive",
     "notes": [],

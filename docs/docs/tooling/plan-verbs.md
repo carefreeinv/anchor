@@ -3,7 +3,7 @@ sidebar_position: 1.5
 sidebar_label: Plan workflow verbs
 ---
 
-<!-- synced-from: anchor/cli.md @ c26022bdfb9fb5785fe538df83e28aa87d015104 -->
+<!-- synced-from: anchor/cli.md @ 5428e128f31ea0b9cc64024dadb83ca4e63dc337 -->
 
 # The plan-workflow CLI: what `anchor` does itself, and what it hands back
 
@@ -17,7 +17,7 @@ the critic (`--list` still lists). **`anchor draft "a short brief"`** asks the
 planner for a full plan under `drafts/` (default `*.local.md`; `--no-delegate`
 keeps the skeleton). Survey/merge stays with a human on a TTY.
 
-**Operator loop** (cwd is a project with `.plans/`; `anchor --help` is still the scaffolder):
+**Operator loop** (any directory inside a tree that has `.plans/`; `anchor` on PATH is the install wrapper; `--root` is optional — parents are walked; `anchor --help` is still the scaffolder):
 
 ```bash
 anchor plans                         # every lane

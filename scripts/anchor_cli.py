@@ -411,7 +411,22 @@ def _cli_action(args: argparse.Namespace) -> str:
     return verb
 
 
+def _bind_project_root(args: argparse.Namespace) -> None:
+    """Walk up from ``--root`` (default cwd) to the nearest ``.plans/`` tree."""
+    raw = getattr(args, "root", None)
+    if raw is None:
+        raw = getattr(args, "project", None)
+    if raw is None:
+        return
+    found = plan_store.discover_project_root(Path(raw))
+    if found is not None:
+        args.root = str(found)
+        if hasattr(args, "project"):
+            args.project = str(found)
+
+
 def _dispatch(args: argparse.Namespace, answers: Prompter, ctx: Ctx) -> Result:
+    _bind_project_root(args)
     verb = args.verb
     if verb == "plans":
         if args.board:

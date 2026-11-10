@@ -234,6 +234,40 @@ def plans_root_for(project_root: Path) -> Path:
     return project_root / PLANS_DIRNAME
 
 
+_PLAN_LANE_HINTS = frozenset(
+    ("bugs", "features", "drafts", "in-progress", "review-needed",
+     "completed", "ambiguous", "blocked")
+)
+
+
+def looks_like_plans_tree(plans_dir: Path) -> bool:
+    """True when ``plans_dir`` is an Anchor ``.plans/`` (has a known lane or README)."""
+    if not plans_dir.is_dir():
+        return False
+    try:
+        names = {p.name for p in plans_dir.iterdir()}
+    except OSError:
+        return False
+    if names & _PLAN_LANE_HINTS:
+        return True
+    return (plans_dir / "README.md").is_file()
+
+
+def discover_project_root(start: Path) -> Path | None:
+    """Nearest ancestor of ``start`` (inclusive) that contains a ``.plans/`` tree."""
+    cur = start.expanduser()
+    try:
+        cur = cur.resolve()
+    except OSError:
+        return None
+    if cur.is_file():
+        cur = cur.parent
+    for candidate in (cur, *cur.parents):
+        if looks_like_plans_tree(candidate / PLANS_DIRNAME):
+            return candidate
+    return None
+
+
 def lane_names(plans_root: Path) -> list[str]:
     """Sorted lane directory names (dot-dirs are sidecars, not lanes)."""
     if not plans_root.is_dir():

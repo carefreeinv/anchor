@@ -8,6 +8,8 @@ Newest first.
 
 ### Added
 
+- **CLI verbs discover the project from cwd.** `anchor work` / `review` / `draft` / `plans` walk parents of `--root` (default cwd) until they find a `.plans/` tree, so a PATH-installed `anchor` works from a nested directory in another repo. Bare `anchor` with no verb inside such a tree exits 2 and names `anchor work` instead of scaffolding. Explicit `--root` that already contains `.plans/` is unchanged.
+
 - **CLI next-command hints.** `anchor work` / `review` / `draft` print `Run \`anchor …\` to …` on success and failure (same sentence in JSON `pending[].detail`): finish → `anchor review <slug>`; claim-only → `anchor work --finish <slug>`; failed `--run` → `anchor work <slug>`; draft create → `anchor draft --promote <slug>`; promote → `anchor work <slug>`.
 
 - **Per-call model reasoning logs.** `Endpoint.chat` (CLI `--delegate` / `--run`,

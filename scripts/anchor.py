@@ -1672,7 +1672,33 @@ def main(argv: list[str] | None = None) -> None:
         except ImportError:
             pass
         raise SystemExit(anchor_cli.main(argv))
+    _refuse_bare_scaffold_inside_plans_tree(argv)
     scaffold_main(argv)
+
+
+_SCAFFOLD_OK_WITHOUT_PATH = (
+    "--upgrade", "--update", "--check", "--diff", "--list",
+    "--set-orchestrator", "--set-review-batch", "--show-review-batch",
+)
+
+
+def _refuse_bare_scaffold_inside_plans_tree(argv: list[str]) -> None:
+    """Bare ``anchor`` in a tree that already has ``.plans/`` is a verb, not a scaffold."""
+    if argv and not argv[0].startswith("-"):
+        return
+    if any(a.split("=", 1)[0] in _SCAFFOLD_OK_WITHOUT_PATH for a in argv):
+        return
+    import plan_store
+
+    found = plan_store.discover_project_root(Path.cwd())
+    if found is None:
+        return
+    print(
+        f"this tree already has .plans/ at {found}; "
+        "did you mean `anchor work` / `anchor plans`?",
+        file=sys.stderr,
+    )
+    raise SystemExit(2)
 
 
 def scaffold_main(argv: list[str] | None = None) -> None:

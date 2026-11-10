@@ -190,6 +190,15 @@ def test_move_keeps_name_and_refuses_collision(plans: Path):
         plan_store.move(plans, "features/ghost.md", "blocked")
 
 
+def test_discover_project_root_walks_to_plans(tmp_path: Path):
+    root = tmp_path / "proj"
+    nested = root / "src" / "pkg"
+    nested.mkdir(parents=True)
+    (root / ".plans" / "features").mkdir(parents=True)
+    assert plan_store.discover_project_root(nested) == root.resolve()
+    assert plan_store.discover_project_root(tmp_path) is None
+
+
 def test_stray_entries(plans: Path):
     (plans / "README.md").write_text("# plans\n", encoding="utf-8")
     (plans / "loose.md").write_text("# loose\n", encoding="utf-8")
@@ -323,6 +332,7 @@ ALLOWED = {
     ("scripts/release_progress.py", ".releases/"),  # release definition, not a plan
     # leases branch key is basename-without-.md (keeps `.local`); not a lane glob
     ("scripts/lease_branch.py", 'endswith(".md")'),
+    ("scripts/anchor_cli.py", ".local.md"),
 }
 
 _PLAN_TOKENS = {".md", ".local.md", "*.md", "*.local.md", "README.md"}

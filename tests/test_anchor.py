@@ -8,6 +8,17 @@ import pytest
 import anchor
 
 
+def test_bare_anchor_inside_plans_tree_hints_work(tmp_path, monkeypatch, capsys):
+    (tmp_path / ".plans" / "features").mkdir(parents=True)
+    monkeypatch.chdir(tmp_path)
+    with pytest.raises(SystemExit) as ei:
+        anchor.main([])
+    assert ei.value.code == 2
+    err = capsys.readouterr().err
+    assert "already has .plans/" in err
+    assert "anchor work" in err
+
+
 def test_resolve_selection_returns_platform_files():
     pairs = anchor.resolve_selection(["claude"])
     assert pairs == anchor.PLATFORMS["claude"]["files"]
@@ -831,7 +842,8 @@ ANCHOR_PY = Path(anchor.__file__).resolve()
         ["proj", "--set-orchestrator", "claude:opus"],
     ],
 )
-def test_non_verb_argv_goes_to_the_scaffolder_unchanged(monkeypatch, argv):
+def test_non_verb_argv_goes_to_the_scaffolder_unchanged(monkeypatch, argv, tmp_path):
+    monkeypatch.chdir(tmp_path)
     seen = []
     monkeypatch.setattr(anchor, "scaffold_main", lambda a: seen.append(a))
     anchor.main(argv)

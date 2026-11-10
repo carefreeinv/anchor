@@ -10,7 +10,7 @@ the critic (`--list` still lists). **`anchor draft "a short brief"`** asks the
 planner for a full plan under `drafts/` (default `*.local.md`; `--no-delegate`
 keeps the skeleton). Survey/merge stays with a human on a TTY.
 
-**Operator loop** (cwd is a project with `.plans/`; `anchor --help` is still the scaffolder):
+**Operator loop** (any directory inside a tree that has `.plans/`; `anchor` on PATH is the install wrapper; `--root` is optional — parents are walked; `anchor --help` is still the scaffolder):
 
 ```bash
 anchor plans                         # every lane
