@@ -16,12 +16,13 @@ subcommand. Do not run `/work` here.
 ## CLI this session
 
 Probe **once**: `command -v anchor` **and** `anchor draft --help`. Success →
-list/promote/scaffold owned by the CLI for the rest of the session.
+list/create/promote owned by the CLI for the rest of the session.
 
 | Intent | argv |
 |--------|------|
 | List | `anchor draft --list` |
-| Scaffold | `anchor draft --local --title '…' --goal '…' <slug>` |
+| Planner fill | `anchor draft "a short brief"` (remainder is the description; default `*.local.md`) |
+| Skeleton only | `anchor draft --no-delegate --title '…' --goal '…'` |
 | Promote | `anchor draft --promote <slug>` |
 
 ## Usage

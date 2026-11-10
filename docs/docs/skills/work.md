@@ -10,13 +10,14 @@ sidebar_label: /work · execute plans
 
 Execute the next (or named) ready plan from **`.plans/`**. Same contract on every platform — only install paths and “no shell” adaptations differ.
 
-**Prefer the CLI for deterministic plan ops** when `anchor` is on PATH (or `./bin/anchor`): `anchor work --list|--finish|--return`, `anchor models list|nick`, `anchor fleet-watch`, `anchor plans`. Probe **once** this session (`anchor work --help` or `--list --json`); last-known-good CLI wins over re-implementation in later turns. Unattended execute is `python scripts/work_once.py --once --ensure-worktree --endpoint …` (headless `anchor work --run` does not start a model). Slash **`/work`** stays the operator-facing skill for in-session implementation; do not re-implement lane moves in chat when the CLI can do them. Missing `anchor` → `python scripts/…`, then mention [`/install-anchor`](/skills/install-anchor). Full verb contract: [Plan workflow verbs](/tooling/plan-verbs).
+**Prefer the CLI for the plan loop** when `anchor` is on PATH (or `./bin/anchor`): **`anchor work`** (pick+execute; `--no-run` claims only), **`anchor review`**, **`anchor draft "<desc>"`**. Also `anchor work --list|--finish|--return`, `anchor models list|nick`, `anchor fleet-watch`, `anchor plans`. Probe **once** this session (`anchor work --help` or `--list --json`); last-known-good CLI wins over re-implementation in later turns. Unattended `python scripts/work_once.py --once --ensure-worktree --endpoint …` is the no-TTY fallback if headless `anchor work` is refused. Slash **`/work`** stays the operator-facing skill for in-session implementation; do not re-implement lane moves in chat when the CLI can do them. Missing `anchor` → `python scripts/…`, then mention [`/install-anchor`](/skills/install-anchor). Full verb contract: [Plan workflow verbs](/tooling/plan-verbs).
 
 | Intent | argv |
 |--------|------|
 | List ready | `anchor work --list --json` |
-| Claim + unattended execute | `python scripts/work_once.py --once --ensure-worktree --endpoint <name> [--slug <slug>]` |
-| Named TTY execute | `anchor work <slug>` |
+| Pick + execute | `anchor work` (default `--run`; interactive **and** headless) |
+| Named execute | `anchor work <slug>` |
+| Claim only | `anchor work --no-run` |
 | Finish / return | `anchor work --finish|--return <slug> --agent-id <id>` |
 
 To **create** a plan first, use [**`/draft`**](/skills/draft) (writes under `.plans/drafts/`; optional `--local`).

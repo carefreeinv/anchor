@@ -26,7 +26,7 @@ file. Ignore those fields if present; do not write them.
 ## CLI this session
 
 Probe **once**: `command -v anchor` (or `./bin/anchor`) **and** `anchor work --help`
-or `anchor work --list --json`. Success → list/claim/finish/return are **owned by
+or `anchor work --list --json`. Success → list/claim/execute/finish/return are **owned by
 the CLI** for the rest of the session. Do not re-probe every turn. First failure
 → `python scripts/work_once.py`, then in-session; mention `/install-anchor`.
 Last-known-good this session wins over re-implementing lane moves in chat.
@@ -34,10 +34,11 @@ Last-known-good this session wins over re-implementing lane moves in chat.
 | Intent | argv |
 |--------|------|
 | List ready | `anchor work --list --json` |
-| Claim + unattended execute | `python scripts/work_once.py --once --ensure-worktree --endpoint <name> [--slug <slug>]` |
-| Named TTY execute | `anchor work <slug>` |
-| Claim only | `python scripts/work_once.py --once --no-run --slug <slug>` |
+| Pick + execute | `anchor work` (default `--run`; interactive **and** headless) |
+| Named execute | `anchor work <slug>` |
+| Claim only | `anchor work --no-run` (`--slug <slug>` when named) |
 | Finish / return | `anchor work --finish|--return <slug> --agent-id <id>` |
+| No-TTY fallback | `python scripts/work_once.py --once --ensure-worktree --endpoint <name>` if headless `anchor work` is refused |
 
 ## Usage
 

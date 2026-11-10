@@ -22,8 +22,11 @@ project root but `.anchor/scripts/<name>.py` is.
 
 This is **not** free-form “code review any PR.” Ad-hoc diffs belong to the
 platform’s code-review tools. This skill’s home is **`review-needed/`** plus
-the empty-queue promotion path. CLI: `anchor review <slug>` runs the critic
-interactively (`--no-delegate` skips; headless still pending).
+the empty-queue promotion path. CLI: **`anchor review`** picks the top
+`review-needed/` plan and runs the critic (headless too). `anchor review <slug>`
+names one. `--list` lists. `--no-delegate` skips. Empty queue with integration
+ahead of mainline: exit 2 names **`anchor review --promote`** (operator required;
+never auto-promote).
 
 ## CLI this session
 

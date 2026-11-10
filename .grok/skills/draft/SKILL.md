@@ -12,8 +12,11 @@ metadata:
 
 # /draft — planning mode → `./.plans/drafts`
 
-CLI equivalent for list/promote when `anchor` is on PATH: `anchor draft --list`,
-`anchor draft --promote <slug>`. Operate on plans under **`.plans/drafts/`**.
+CLI equivalent when `anchor` is on PATH: **`anchor draft "a short brief"`**
+asks the planner for a full plan under `drafts/` (remainder after flags is the
+description, not always a slug; default `*.local.md`; `--no-delegate` keeps the
+skeleton). Also `anchor draft --list`, `anchor draft --promote <slug>`.
+Operate on plans under **`.plans/drafts/`**.
 Modes: **create/refine**, **list**, **load/discuss**, and **promote** (to the
 ready lane the plan implies: `bugs/` or `features/`) when the user explicitly
 requests promote.
@@ -21,7 +24,7 @@ requests promote.
 ## CLI this session
 
 Probe **once**: `command -v anchor` (or `./bin/anchor`) **and** `anchor draft --help`.
-Success → list/promote/scaffold are **owned by the CLI** for the rest of the session.
+Success → list/create/promote are **owned by the CLI** for the rest of the session.
 Do not re-probe every turn. First failure → `ls .plans/drafts` / in-session write;
 mention `/install-anchor`. Last-known-good this session wins over walking
 `.plans/drafts/` by hand.
@@ -29,7 +32,8 @@ mention `/install-anchor`. Last-known-good this session wins over walking
 | Intent | argv |
 |--------|------|
 | List drafts | `anchor draft --list` |
-| Scaffold | `anchor draft --local --title '…' --goal '…' <slug>` then fill Goal/Steps/Done when |
+| Planner fill | `anchor draft "a short brief"` (remainder is the description; default `*.local.md`) |
+| Skeleton only | `anchor draft --no-delegate --title '…' --goal '…'` |
 | Promote | `anchor draft --promote <slug>` (`--to bugs\|features` when the lane is known) |
 
 Do **not** implement product code in this skill. Do **not** run `/work` here.

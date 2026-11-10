@@ -14,9 +14,12 @@ The same binary also runs the `.plans/` workflow. **Day-to-day plan work lives o
 ```bash
 anchor plans
 anchor work --list --tier mid
-anchor work --run --endpoint <nick>   # TTY only; headless --run does not start a model
+anchor work                          # pick + execute (interactive and headless)
+anchor work --no-run                 # claim only
 anchor work --finish <slug>
-anchor review --list
+anchor review                        # critic on the top review-needed/ plan
+anchor review --promote              # empty queue: integration → mainline (explicit)
+anchor draft "a short brief"
 anchor models list
 anchor fleet-watch --status
 ```

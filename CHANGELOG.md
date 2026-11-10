@@ -25,6 +25,13 @@ Newest first.
 
 ### Changed
 
+- **Skills and standing rules match the default CLI loop.** GROK.md rule 13,
+  CLAUDE.md prefer-anchor, `/work` `/review` `/draft` skill tables (and
+  `.claude/commands` copies), and docs mirrors now name `anchor work`
+  (pick+execute; `--no-run` claims), `anchor review` (pick+critic;
+  empty+ahead → `anchor review --promote`), and `anchor draft "<desc>"`.
+  `work_once.py` is the no-TTY fallback if headless `anchor work` is refused.
+
 - **`work_once --ensure-worktree` reuses a leftover `var/worktrees/` checkout**
   that already has `feature/<slug>`. It no longer exits 2 with a generic git
   checkout error after a successful claim. If the branch is checked out

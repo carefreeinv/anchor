@@ -29,7 +29,11 @@ project, where fleet tooling lives under **`.anchor/scripts/`** instead —
 substitute that prefix throughout when `scripts/<name>.py` isn't at the
 project root but `.anchor/scripts/<name>.py` is.
 
-CLI equivalent: `anchor review <slug>` (interactive critic, then survey). `--no-delegate` skips the critic. `anchor review --list` is package-only. Headless still pending until a TTY.
+CLI equivalent: **`anchor review`** picks the highest-priority `review-needed/`
+plan and runs the critic (headless too). `anchor review <slug>` names one.
+`--list` lists. `--no-delegate` skips the critic. Empty queue with integration
+ahead of mainline: the CLI exits 2 and names **`anchor review --promote`** —
+never auto-promote; the operator must pass `--promote`.
 This skill **embeds** an AI critic pass; it is not a separate “code review any
 diff” product. For ad-hoc uncommitted/PR review outside these modes, use the
 platform’s code-review tools.
@@ -44,8 +48,9 @@ Last-known-good this session wins over re-implementing the critic prompt in chat
 | Intent | argv |
 |--------|------|
 | List queue | `anchor review --list` |
-| Critic (advisory) | `anchor review <slug>` on a **TTY** (never `printf \| anchor review`; piped stdin is non-interactive and skips the model). `--no-delegate` skips. |
-| Skip critic | `anchor review --no-delegate <slug>` |
+| Pick + critic | `anchor review` |
+| Named critic | `anchor review <slug>` (`--no-delegate` skips) |
+| Empty queue + ahead | `anchor review --promote` (operator required; never auto) |
 
 Human survey (Approve / Needs Work / Skip) and merge stay in this skill.
 

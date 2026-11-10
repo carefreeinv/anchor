@@ -182,16 +182,18 @@ From a terminal, the same `.plans/` loop with no chat harness ([Plan workflow ve
 cd /path/to/your-app          # directory that contains .plans/
 anchor plans                  # every plan, by lane; --board for the kanban
 anchor work --list --tier mid # ready plans with your fit; claim nothing
-anchor work --run --endpoint <nick>  # TTY: claim + orchestrate.py
-anchor work --finish <slug>   # in-progress → review-needed/ (--run exit 0 also parks)
+anchor work                  # claim top ready plan + execute (interactive and headless)
+anchor work --no-run         # claim only
+anchor work --finish <slug>   # in-progress → review-needed/ (execute exit 0 also parks)
 anchor review --list
-anchor review <slug>          # package + Approve / Needs Work (TTY only)
-anchor draft <slug>
+anchor review                 # critic on the top review-needed/ plan
+anchor review --promote       # empty queue: integration → mainline (explicit)
+anchor draft "fix leftover worktrees"
 anchor models list
 anchor fleet-watch --status
 ```
 
-`anchor --help` is the scaffolder. Verb help is `anchor work --help` (etc.). Headless or `--json` prints schema-v1 JSON. Headless `--run` does not start a model — use `python scripts/work_once.py --once --run --ensure-worktree --endpoint …`. The CLI claims, heartbeats, finishes, and (after an in-terminal Approve) fast-forward merges to `dev`; `--no-finish` keeps the lease after a successful `--run`.
+`anchor --help` is the scaffolder. Verb help is `anchor work --help` (etc.). Headless or `--json` prints schema-v1 JSON. `--run` is the default for `anchor work` (interactive **and** headless). Empty `review-needed/` with integration ahead of mainline: `anchor review` exits 2 and names `anchor review --promote`. The CLI claims, heartbeats, finishes, and (after an in-terminal Approve) fast-forward merges to `dev`; `--no-finish` keeps the lease after a successful execute. Unattended `python scripts/work_once.py --once --run --ensure-worktree --endpoint …` is the no-TTY fallback if headless `anchor work` is refused.
 
 Architecture for always-on workers: [Fleet workers](/tooling/fleet-workers). Skills map: [Skills overview](/skills/overview).
 
