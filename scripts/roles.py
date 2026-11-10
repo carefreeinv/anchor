@@ -43,6 +43,18 @@ MCP_LIFECYCLE_TOOLS = (
     "plans_heartbeat",
     "plans_release",
     "plans_complete",
+    "work_claim",
+    "work_heartbeat",
+    "work_return",
+    "work_finish",
+    "work_complete",
+    "draft_create",
+)
+MCP_EXTRA_READ_TOOLS = (
+    "work_list",
+    "review_list",
+    "draft_list",
+    "review_prepare",
 )
 
 
@@ -63,28 +75,28 @@ PLANNER = RoleCapabilities(
     write_allow=(".plans/**",),
     write_deny=(),
     can_dispatch=False,
-    mcp_tools=MCP_READ_TOOLS,
+    mcp_tools=MCP_READ_TOOLS + MCP_EXTRA_READ_TOOLS,
 )
 EXECUTOR = RoleCapabilities(
     role="executor",
     write_allow=("**",),
     write_deny=(".plans/**",),
     can_dispatch=False,
-    mcp_tools=MCP_READ_TOOLS + MCP_LIFECYCLE_TOOLS,
+    mcp_tools=MCP_READ_TOOLS + MCP_EXTRA_READ_TOOLS + MCP_LIFECYCLE_TOOLS,
 )
 CRITIC = RoleCapabilities(
     role="critic",
     write_allow=(),
     write_deny=("**",),
     can_dispatch=False,
-    mcp_tools=MCP_READ_TOOLS,
+    mcp_tools=MCP_READ_TOOLS + MCP_EXTRA_READ_TOOLS,
 )
 ORCHESTRATOR = RoleCapabilities(
     role="orchestrator",
     write_allow=("**",),
     write_deny=(),
     can_dispatch=True,
-    mcp_tools=MCP_READ_TOOLS + MCP_LIFECYCLE_TOOLS,
+    mcp_tools=MCP_READ_TOOLS + MCP_EXTRA_READ_TOOLS + MCP_LIFECYCLE_TOOLS,
 )
 
 ROLES: dict[str, RoleCapabilities] = {

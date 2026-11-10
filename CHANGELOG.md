@@ -8,6 +8,8 @@ Newest first.
 
 ### Added
 
+- **project-orchestrator MCP tools from `anchor_ops`.** List/claim/heartbeat/return/finish/complete/draft/review-prepare share the CLI envelope. Approve/promote/`--delegate` stay unexposed. Legacy `plans_*` names remain.
+
 - **Harness budget ratchet.** `anchor/harness-budget.toml` freezes install
   deps (0), banned modules on `import anchor` (0), generated tokens on the
   default path (0), import-module count, and `--help` / `work --list` walls.

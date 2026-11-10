@@ -189,11 +189,11 @@ def test_bare_loop_never_picks_human_assigned(tmp_path):
 def test_named_human_assigned_refused_then_forced(tmp_path, capsys):
     root = _root(tmp_path)
     _plan(root / ".plans" / "features" / "hers.md", preferred="mid", assignee="alice")
-    # Named claim of a human plan is refused by default (exit 1, file stays put).
+    # Named claim of a human plan is refused by default (exit 2, file stays put).
     code = work_once.main(
         ["--root", str(root), "--slug", "hers", "--no-run", "--tier", "mid", "--agent-id", "w1"]
     )
-    assert code == 1
+    assert code == 2
     assert "assigned to alice" in capsys.readouterr().err
     assert (root / ".plans" / "features" / "hers.md").is_file()
     # --allow-assigned forces it (operator override).

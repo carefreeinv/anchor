@@ -231,6 +231,8 @@ class WorkClaimParams:
     root: str
     slug: str | None = None
     no_fit_check: bool = False
+    no_dep_check: bool = False
+    recover: bool = False
     run: bool = False
     no_finish: bool = False
     tier: str | None = None
@@ -607,6 +609,25 @@ def op_work_finish(params: WorkSlugParams, _answers: Answers, ctx: Ctx) -> Resul
     return res
 
 
+@_op("work.complete", mutates=True, requires=None)
+def op_work_complete(params: WorkSlugParams, _answers: Answers, ctx: Ctx) -> Result:
+    """Move in-progress → review-needed without the finish-gate (MCP alias)."""
+    plans = plans_root(params.root)
+    rel = _one(plans, "in-progress", params.slug).rel
+    plan_lease._assert_owner_if_in_progress(plans, rel, ctx.agent_id)
+    plan_lease.release(plans, rel, force=True)
+    dest_rel, dest_path = plan_lease._move_file(plans, rel, "review-needed")
+    res = Result("work", "complete")
+    res.data.update(
+        action="move_to_review_needed",
+        plan_rel=dest_rel,
+        path=str(dest_path),
+        agent_id=ctx.agent_id,
+    )
+    res.need("review", NEEDS_OPERATOR, f"sign-off: anchor review {params.slug}")
+    return res
+
+
 @_op("work.return", mutates=True, requires=None)
 def op_work_return(params: WorkSlugParams, _answers: Answers, ctx: Ctx) -> Result:
     plans = plans_root(params.root)
@@ -628,9 +649,19 @@ def op_work_claim(params: WorkClaimParams, _answers: Answers, ctx: Ctx) -> Resul
 
     plans = plans_root(params.root)
     res = Result("work", "claim")
+    if params.recover and params.slug:
+        rec = _one(plans, "in-progress", params.slug)
+        lease, dest = plan_lease.claim_and_move(
+            plans, rec.rel, ctx.agent_id, recover=True,
+        )
+        res.data.update(
+            plan=lease.plan_rel, path=str(dest), agent_id=ctx.agent_id,
+        )
+        return res
     ns = argparse.Namespace(
         slug=params.slug, path=None, no_fit_check=params.no_fit_check,
-        no_dep_check=False, allow_assigned=False, agent_id=ctx.agent_id,
+        no_dep_check=params.no_dep_check, recover=params.recover,
+        allow_assigned=False, agent_id=ctx.agent_id,
         lease_ttl=plan_lease.DEFAULT_TTL_SECONDS,
     )
     try:
@@ -881,11 +912,9 @@ def op_review(params: ReviewParams, answers: Answers, ctx: Ctx) -> Result:
     if params.no_delegate:
         res.need("critic", NEEDS_MODEL,
                  "AI critic pass over the plan's Done when and the branch diff")
-    elif ctx.mode.interactive:
-        _critic(params, ctx, ref, pkg, root, res)
+        res.notes.append("critic not delegated: MCP prepare-only")
     else:
-        res.need("critic", NEEDS_MODEL,
-                 "AI critic pass over the plan's Done when and the branch diff")
+        _critic(params, ctx, ref, pkg, root, res)
 
     try:
         return _decide(res, answers, root, plans, ref, pkg)

@@ -10,9 +10,10 @@ Per-project **limited** orchestrator for Anchor `.plans/`. Coding agents get lis
 |-----|--------|---------|
 | **L0 read** | `project_info`, `plans_list`, `plan_read`, `conventions_get`, `plans_inventory_for_deps`, `plans_stale_report` | on |
 | **L0.5 deps** | `plans_suggest_dependencies` — **heuristic only**, **propose only** (no file writes, no LLM) | on |
-| **L1 claim** | `plans_claim`, `plans_release`, `plans_complete` (**move only** — client asserts Done when) | on |
+| **L1 claim** | `plans_claim` / `work_claim`, `plans_release` / `work_return`, `plans_complete` / `work_complete` (**move only**), `work_finish` (finish-gate), `draft_create` | on |
+| **Prepare** | `review_prepare` — package only; never merge/approve (`needs_operator`) | on |
 | **L2–L4** | handoff / orchestrate / allowlisted shell | **off** (not shipped in v1) |
-| **Forbidden** | promote drafts, MCP git push/merge, plan markdown writes, path escape, foreign in-progress | always |
+| **Forbidden** | `review` Approve/promote, `--delegate`, MCP git push/merge, plan markdown writes, path escape, foreign in-progress | always |
 
 ### Role-scoped toolsets (`--role`)
 

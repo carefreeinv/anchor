@@ -4,6 +4,30 @@
 Binds to a single project root. Tools operate only under that project's ``.plans/``.
 No promote, no plan-file writes, no arbitrary shell. ``plans_complete`` is move-only.
 
+Exposure of ``anchor_ops`` operations (MCP is always non-interactive; Answers never
+answers; ``--delegate`` is not exposed):
+
+| Operation | MCP | Why |
+|-----------|-----|-----|
+| plans.list | exposed as ``plans_list`` / ``work_list`` | read |
+| plans.board | not exposed | TTY/passthrough |
+| models.list | not exposed | fleet, not this server |
+| models.nick | not exposed | mutates overlay |
+| work.list | exposed ``work_list`` | read |
+| work.claim | exposed ``work_claim`` (alias ``plans_claim``) | cap L1 |
+| work.heartbeat | exposed ``work_heartbeat`` (alias ``plans_heartbeat``) | cap L1 |
+| work.return | exposed ``work_return`` (alias ``plans_release``) | cap L1 |
+| work.finish | exposed ``work_finish`` | cap L1; finish-gate |
+| work.complete | exposed ``work_complete`` / ``plans_complete`` | move-only alias |
+| review.list | exposed ``review_list`` | read |
+| review.review | prepare-only ``review_prepare`` | never merge/approve |
+| review.promote | not exposed | lands mainline |
+| draft.list | exposed ``draft_list`` | read |
+| draft.create | exposed ``draft_create`` | scaffold only; no auto-promote |
+| draft.promote | not exposed | operator |
+| fleet-watch.* | not exposed | host/systemd |
+
+
 Toolsets are role-scoped (``scripts/roles.py``): a session opened as ``--role
 planner`` or ``--role critic`` never even sees the plan-lifecycle tools
 (``plans_claim`` / ``plans_release`` / ``plans_complete``) — deny by omission,
@@ -185,6 +209,145 @@ def conventions_get() -> str:
         return _err(e)
 
 
+def _op_json(name: str, params: object) -> str:
+    import ops_bridge
+
+    cfg = _cfg()
+    try:
+        return _out(ops_bridge.call_op(cfg.agent_id, name, params))
+    except ops_bridge.BridgeError as e:
+        return _err(e)
+    except coord.CoordinatorError as e:
+        return _err(e)
+
+
+def work_list() -> str:
+    """Ready plans with fit/deps (CLI ``work.list`` envelope)."""
+    import anchor_ops as _ops
+
+    cfg = _cfg()
+    return _op_json(
+        "work.list",
+        _ops.WorkListParams(root=str(cfg.project_root), tier=cfg.default_tier),
+    )
+
+
+def work_claim(slug: str, allow_unmet_deps: bool = False) -> str:
+    """Claim by slug (CLI envelope). Alias of plans_claim."""
+    import anchor_ops as _ops
+
+    cfg = _cfg()
+    coord.require_cap(cfg, coord.CAP_L1)
+    return _op_json(
+        "work.claim",
+        _ops.WorkClaimParams(
+            root=str(cfg.project_root),
+            slug=slug,
+            no_fit_check=True,
+            no_dep_check=allow_unmet_deps,
+            tier=cfg.default_tier,
+        ),
+    )
+
+
+def work_heartbeat(slug: str) -> str:
+    """Extend lease (CLI envelope)."""
+    import anchor_ops as _ops
+
+    cfg = _cfg()
+    coord.require_cap(cfg, coord.CAP_L1)
+    return _op_json(
+        "work.heartbeat",
+        _ops.WorkSlugParams(root=str(cfg.project_root), slug=slug),
+    )
+
+
+def work_return(slug: str) -> str:
+    """Return in-progress to ready (CLI envelope)."""
+    import anchor_ops as _ops
+
+    cfg = _cfg()
+    coord.require_cap(cfg, coord.CAP_L1)
+    return _op_json(
+        "work.return",
+        _ops.WorkSlugParams(root=str(cfg.project_root), slug=slug),
+    )
+
+
+def work_finish(slug: str) -> str:
+    """Finish with evidence gate → review-needed (CLI envelope)."""
+    import anchor_ops as _ops
+
+    cfg = _cfg()
+    coord.require_cap(cfg, coord.CAP_L1)
+    return _op_json(
+        "work.finish",
+        _ops.WorkSlugParams(root=str(cfg.project_root), slug=slug),
+    )
+
+
+def work_complete(slug: str) -> str:
+    """Move-only complete (legacy plans_complete; no finish-gate)."""
+    import anchor_ops as _ops
+
+    cfg = _cfg()
+    coord.require_cap(cfg, coord.CAP_L1)
+    return _op_json(
+        "work.complete",
+        _ops.WorkSlugParams(root=str(cfg.project_root), slug=slug),
+    )
+
+
+def review_list() -> str:
+    """review-needed inventory (CLI envelope)."""
+    import anchor_ops as _ops
+
+    cfg = _cfg()
+    return _op_json(
+        "review.list",
+        _ops.ReviewListParams(root=str(cfg.project_root)),
+    )
+
+
+def review_prepare(slug: str) -> str:
+    """Package a review; never merge or approve (needs_operator)."""
+    import anchor_ops as _ops
+
+    cfg = _cfg()
+    return _op_json(
+        "review.review",
+        _ops.ReviewParams(
+            root=str(cfg.project_root), slug=slug, no_delegate=True,
+        ),
+    )
+
+
+def draft_list() -> str:
+    """List drafts (CLI envelope)."""
+    import anchor_ops as _ops
+
+    cfg = _cfg()
+    return _op_json("draft.list", _ops.DraftListParams(root=str(cfg.project_root)))
+
+
+def draft_create(slug: str, title: str = "", goal: str = "") -> str:
+    """Scaffold a draft; does not promote."""
+    import anchor_ops as _ops
+
+    cfg = _cfg()
+    coord.require_cap(cfg, coord.CAP_L1)
+    return _op_json(
+        "draft.create",
+        _ops.DraftCreateParams(
+            root=str(cfg.project_root),
+            slug=slug,
+            title=title or None,
+            goal=goal or None,
+            local=True,
+        ),
+    )
+
+
 _TOOL_FUNCS = {
     fn.__name__: fn
     for fn in (
@@ -199,6 +362,16 @@ _TOOL_FUNCS = {
         plans_release,
         plans_complete,
         conventions_get,
+        work_list,
+        work_claim,
+        work_heartbeat,
+        work_return,
+        work_finish,
+        work_complete,
+        review_list,
+        review_prepare,
+        draft_list,
+        draft_create,
     )
 }
 
@@ -255,6 +428,9 @@ def main(argv: list[str] | None = None) -> None:
     args, _unknown = parser.parse_known_args(argv)
 
     try:
+        from anchor_client import load_dotenv
+
+        load_dotenv()
         _CFG = coord.build_config(
             args.project,
             agent_id=args.agent_id,

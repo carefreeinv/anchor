@@ -34,6 +34,7 @@ def _params(name: str, root: Path):
         "work.heartbeat": ops.WorkSlugParams(root=r, slug="missing"),
         "work.finish": ops.WorkSlugParams(root=r, slug="missing"),
         "work.return": ops.WorkSlugParams(root=r, slug="missing"),
+        "work.complete": ops.WorkSlugParams(root=r, slug="missing"),
         "review.list": ops.ReviewListParams(root=r),
         "review.review": ops.ReviewParams(root=r, slug="r1"),
         "review.promote": ops.ReviewPromoteParams(root=r),

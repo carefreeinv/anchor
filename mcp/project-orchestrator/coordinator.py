@@ -12,6 +12,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+import anchor_ops as _ops
+import ops_bridge
 import plan_lease
 import plan_select
 import plan_store
@@ -666,90 +668,79 @@ def plans_claim(
         rel = str(path.relative_to(plans)).replace("\\", "/")
     except ValueError as exc:
         raise CoordinatorError("claim only under .plans/") from exc
-
     lane = rel.split("/", 1)[0]
     if lane in plan_select.NON_EXECUTABLE_LANES:
         raise CoordinatorError(
             f"refuse claim/execute for lane {lane}/ (drafts|completed|ambiguous|blocked)"
         )
     if lane == "in-progress":
-        owner = plan_lease.owner_of(cfg.plans_root, rel)
-        if owner and owner != cfg.agent_id:
+        active = plan_lease.active_lease(cfg.plans_root, rel)
+        if active and active.agent_id != cfg.agent_id:
             raise CoordinatorError(
-                f"foreign in-progress owned by {owner!r} — ignore"
+                f"foreign in-progress owned by {active.agent_id!r} — ignore"
+            )
+        if active is None and not recover:
+            raise CoordinatorError(
+                f"{rel} has no active lease — pass recover=True to take over"
             )
     elif lane not in plan_select.READY_LANES:
         raise CoordinatorError(f"cannot claim from lane {lane}/")
 
-    # Assignee gate on ready plans: a plan assigned to a named human is theirs to
-    # complete — no agent claims it. (Editing its body for status/comments is a
-    # separate action and stays allowed.) No override here: MCP callers are agents.
-    if lane in plan_select.READY_LANES:
-        text = path.read_text(encoding="utf-8")
-        if not plan_select.is_agent_assignable(text):
-            who = plan_select.parse_assignee(text) or "a human"
-            raise CoordinatorError(
-                f"{rel} is assigned to {who} — agents do not complete it. "
-                f"A human completes it; agents may still edit its body for "
-                f"status/comments and commit that."
-            )
-
-    # Dep check on ready plans
-    if lane in plan_select.READY_LANES and not allow_unmet_deps:
-        text = path.read_text(encoding="utf-8")
-        deps = plan_select.parse_depends_on(text)
-        met, unmet, notes = plan_select.evaluate_dependencies(
-            cfg.plans_root, deps, git_check=True
-        )
-        if not met:
-            raise CoordinatorError(
-                f"unmet Depends on: {', '.join(unmet)}. "
-                f"Pass allow_unmet_deps=true to override. Notes: {'; '.join(notes)}"
-            )
-
+    slug = plan_slug(path)
     try:
-        lease, dest = plan_lease.claim_and_move(
-            cfg.plans_root, rel, cfg.agent_id, ttl_seconds=ttl_seconds, recover=recover
+        env = ops_bridge.call_op(
+            cfg.agent_id,
+            "work.claim",
+            _ops.WorkClaimParams(
+                root=str(cfg.project_root),
+                slug=slug,
+                no_fit_check=True,
+                no_dep_check=allow_unmet_deps,
+                recover=recover,
+                tier=cfg.default_tier,
+            ),
         )
-    except ClaimError as exc:
+    except ops_bridge.BridgeError as exc:
         raise CoordinatorError(str(exc)) from exc
-
+    if not env.get("ok"):
+        err = env.get("error") or "; ".join(env.get("notes") or []) or "claim refused"
+        raise CoordinatorError(err)
+    data = env.get("result") or {}
+    rel = data.get("plan") or data.get("plan_rel")
+    dest = data.get("path")
+    lease = plan_lease.read_lease(cfg.plans_root, rel) if rel else None
     return {
         "ok": True,
-        "plan_rel": lease.plan_rel,
-        "path": str(dest),
-        "agent_id": lease.agent_id,
-        "expires_at": lease.expires_at,
-        "origin_rel": lease.origin_rel,
+        "plan_rel": rel,
+        "path": dest,
+        "agent_id": data.get("agent_id") or cfg.agent_id,
+        "expires_at": lease.expires_at if lease else None,
+        "origin_rel": lease.origin_rel if lease else None,
     }
 
 
 def plans_heartbeat(cfg: CoordinatorConfig, plan_ref: str) -> dict[str, Any]:
-    """Extend this agent's lease on an in-progress plan (keep-alive).
-
-    A live agent calls this periodically so its in-progress work never looks
-    orphaned under the long TTL. Refuses if a different agent holds an active
-    lease.
-    """
+    """Extend this agent's lease on an in-progress plan (keep-alive)."""
     require_cap(cfg, CAP_L1)
     path = _resolve_plan_path(cfg, plan_ref)
-    plans = _real(cfg.plans_root)
-    rel = str(path.relative_to(plans)).replace("\\", "/")
-    lane = rel.split("/", 1)[0]
-    if lane != "in-progress":
-        raise CoordinatorError(
-            f"heartbeat requires an in-progress plan; got {lane}/"
-        )
+
     try:
-        lease = plan_lease.renew(cfg.plans_root, rel, cfg.agent_id)
-    except ClaimError as exc:
+        env = ops_bridge.call_op(
+            cfg.agent_id,
+            "work.heartbeat",
+            _ops.WorkSlugParams(root=str(cfg.project_root), slug=plan_slug(path)),
+        )
+    except ops_bridge.BridgeError as exc:
         raise CoordinatorError(str(exc)) from exc
+    if not env.get("ok"):
+        raise CoordinatorError(env.get("error") or "heartbeat refused")
+    data = env.get("result") or {}
     return {
         "ok": True,
         "action": "heartbeat",
-        "plan_rel": lease.plan_rel,
-        "agent_id": lease.agent_id,
-        "expires_at": lease.expires_at,
+        "plan_rel": data.get("plan"),
+        "agent_id": data.get("agent_id") or cfg.agent_id,
+        "expires_at": data.get("expires_at"),
     }
 
 
@@ -765,59 +756,54 @@ def plans_release(
     plans = _real(cfg.plans_root)
     rel = str(path.relative_to(plans)).replace("\\", "/")
     lane = rel.split("/", 1)[0]
-    try:
-        if lane == "in-progress":
-            dest = plan_lease.return_to_ready(
-                cfg.plans_root,
-                rel,
-                agent_id=cfg.agent_id,
-                target_lane=target_lane,
+    if lane != "in-progress":
+        try:
+            dropped = plan_lease.release(
+                cfg.plans_root, rel, agent_id=cfg.agent_id, force=False
             )
-            return {"ok": True, "action": "return_to_ready", "path": str(dest)}
-        # drop lease only
-        dropped = plan_lease.release(
-            cfg.plans_root, rel, agent_id=cfg.agent_id, force=False
-        )
+        except ClaimError as exc:
+            raise CoordinatorError(str(exc)) from exc
         return {"ok": True, "action": "release_lease", "dropped": dropped, "rel": rel}
-    except ClaimError as exc:
+
+    try:
+        env = ops_bridge.call_op(
+            cfg.agent_id,
+            "work.return",
+            _ops.WorkSlugParams(root=str(cfg.project_root), slug=plan_slug(path)),
+        )
+    except ops_bridge.BridgeError as exc:
         raise CoordinatorError(str(exc)) from exc
+    if not env.get("ok"):
+        raise CoordinatorError(env.get("error") or "release refused")
+    data = env.get("result") or {}
+    return {
+        "ok": True,
+        "action": "return_to_ready",
+        "path": data.get("path") or str(cfg.plans_root / (data.get("plan") or "")),
+    }
 
 
 def plans_complete(cfg: CoordinatorConfig, plan_ref: str) -> dict[str, Any]:
-    """Move an in-progress plan the agent believes is done → ``review-needed/``.
-
-    Client asserts Done when; no verify gate. The plan lands in ``review-needed/``
-    for **human sign-off** — only a human moves it on to ``completed/``. This
-    keeps "agent says done" and "actually done" as separate events.
-    """
+    """Move an in-progress plan the agent believes is done → ``review-needed/``."""
     require_cap(cfg, CAP_L1)
     path = _resolve_plan_path(cfg, plan_ref)
-    plans = _real(cfg.plans_root)
-    rel = str(path.relative_to(plans)).replace("\\", "/")
-    lane = rel.split("/", 1)[0]
-
-    if lane in ("drafts", "completed", "review-needed"):
-        raise CoordinatorError(f"refuse complete from {lane}/")
-    if lane != "in-progress":
-        raise CoordinatorError(
-            "plans_complete requires an in-progress plan (claim first); "
-            f"got {lane}/"
-        )
 
     try:
-        plan_lease._assert_owner_if_in_progress(cfg.plans_root, rel, cfg.agent_id)
-        plan_lease.release(cfg.plans_root, rel, force=True)
-        dest_rel, dest_path = plan_lease._move_file(
-            cfg.plans_root, rel, "review-needed"
+        env = ops_bridge.call_op(
+            cfg.agent_id,
+            "work.complete",
+            _ops.WorkSlugParams(root=str(cfg.project_root), slug=plan_slug(path)),
         )
-    except ClaimError as exc:
+    except ops_bridge.BridgeError as exc:
         raise CoordinatorError(str(exc)) from exc
-
+    if not env.get("ok"):
+        raise CoordinatorError(env.get("error") or "complete refused")
+    data = env.get("result") or {}
     return {
         "ok": True,
-        "action": "move_to_review_needed",
-        "plan_rel": dest_rel,
-        "path": str(dest_path),
+        "action": data.get("action") or "move_to_review_needed",
+        "plan_rel": data.get("plan_rel"),
+        "path": data.get("path"),
         "note": (
             "Client asserted Done when; moved to review-needed/ for human "
             "sign-off. Only a human moves it on to completed/."

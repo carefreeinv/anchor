@@ -6,6 +6,7 @@ import anchor_ops as ops
 EXPECTED = {
     "plans.list", "plans.board",
     "work.list", "work.claim", "work.heartbeat", "work.finish", "work.return",
+    "work.complete",
     "review.list", "review.review", "review.promote",
     "draft.list", "draft.create", "draft.promote",
     "fleet-watch.status", "fleet-watch.list", "fleet-watch.once",

@@ -4,7 +4,7 @@ sidebar_position: 3
 
 <!-- synced-from: mcp/model-fleet/README.md @ ced0b798cb6d8c9ef596f0d589062b8458b3887d -->
 <!-- synced-from: mcp/anchor-prompts/README.md @ 8bc9f0807b37234758877f8331fa90ccde11e32c -->
-<!-- synced-from: mcp/project-orchestrator/README.md @ 7483dd3e05094d984f765456a643a5fc4325bf4c -->
+<!-- synced-from: mcp/project-orchestrator/README.md @ c215e8face2be1508b0f4b55135e98f62a22a7ee -->
 
 # MCP servers
 
@@ -92,7 +92,7 @@ The delegation arm of the orchestrator pattern:
 |-----|------------|--------|
 | L0 | `project_info`, `plans_list`, `plan_read`, `conventions_get`, `plans_inventory_for_deps`, `plans_stale_report` | stale/tier-gap warnings are warn-only |
 | L0.5 | `plans_suggest_dependencies` | heuristic token overlap; **propose only** (no LLM) |
-| L1 | `plans_claim`, `plans_release`, `plans_complete` | complete is **move only** (client asserts Done when) |
+| L1 | `plans_claim`/`work_claim`, `plans_release`/`work_return`, `plans_complete`/`work_complete`, `work_finish`, `draft_create`, `review_prepare` | complete is **move only**; `work_finish` uses the finish-gate; `review_prepare` never merges |
 
 Toolsets are **role-scoped** (`scripts/roles.py`): start the server with `--role planner` or `--role critic` and the L1 lifecycle tools are never registered — the session cannot see them (deny by omission, not refusal). `--role executor` or no `--role` keeps the full surface. Role scoping hardens the orchestrated path only; a session without the server is bound by prompt doctrine alone.
 

@@ -392,21 +392,16 @@ def pick_claim_one(
             print("[work_once] no matching plan for slug/path", file=sys.stderr)
             return None
         if not rec.agent_assignable and not args.allow_assigned:
-            print(
-                f"[work_once] {rec.rel} is assigned to {rec.assignee or 'a human'} "
-                f"— agents do not complete it (use --allow-assigned to force)",
-                file=sys.stderr,
+            raise ValueError(
+                f"{rec.rel} is assigned to {rec.assignee or 'a human'} "
+                "— agents do not complete it"
             )
-            return None
         if not rec.deps_met and not args.no_dep_check:
-            print(
-                f"[work_once] unmet dependencies for {rec.rel}: "
-                f"{', '.join(rec.deps_unmet)} — skip (use --no-dep-check to override)",
-                file=sys.stderr,
+            raise ValueError(
+                f"unmet Depends on: {', '.join(rec.deps_unmet)}. "
+                "Pass allow_unmet_deps=true to override. Notes: "
+                + "; ".join(rec.deps_notes)
             )
-            for note in rec.deps_notes:
-                print(f"[work_once]   dep: {note}", file=sys.stderr)
-            return None
         if not args.no_fit_check and rec.fit not in (Fit.GOOD, Fit.UNKNOWN):
             print(
                 f"[work_once] fit={rec.fit.value} for {rec.rel} "
@@ -425,6 +420,7 @@ def pick_claim_one(
                 rec.rel,
                 args.agent_id,
                 ttl_seconds=args.lease_ttl,
+                recover=bool(getattr(args, "recover", False)),
             )
         except ClaimError as exc:
             print(f"[work_once] claim failed: {exc}", file=sys.stderr)
