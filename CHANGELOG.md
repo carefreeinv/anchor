@@ -6,6 +6,7 @@ Newest first.
 
 ## [Unreleased]
 
+## [0.4.2] - 2026-11-10
 ### Added
 
 - **`check_plans` reports nested misfiled plans.** `plan_store.misfiled()` finds plan-shaped markdown inside a lane that the active layout does not treat as an entry (e.g. `features/sub/x.md` under the flat layout). Obsolete `Status:` / `Lane:` lines inside fenced examples no longer fail the check.
