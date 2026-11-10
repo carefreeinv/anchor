@@ -145,6 +145,8 @@ Newest first.
 
 ### Changed
 
+- **`/review` uses one critic engine.** When `anchor` is configured this session, `anchor review` is the AI pass. Do not also spawn a Grok/Claude reviewer. Harness `spawn_subagent` is the fallback when the CLI is missing or failed, or when the operator asks for a second opinion. Dual ACCEPT is not a merge gate; the human survey still is.
+
 - **Public docs lead with the CLI loop.** README Quick start, intro, quick-start (technical and non-technical), skill overview, and how-work-reaches-dev name `anchor work` / `anchor review` / `anchor draft "<desc>"` as the daily path; slash skills are the in-harness adapter after one probe. CHANGELOG Unreleased is a single Added/Changed/Fixed stack. That three-verb loop, `--run` commit-prep, and CLI-first docs are the shipped CLI cut; operator `/release` tags after `/review --promote` to `main`.
 
 - **Skills and standing rules match the default CLI loop.** GROK.md rule 13,

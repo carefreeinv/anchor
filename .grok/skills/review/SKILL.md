@@ -42,7 +42,8 @@ platform’s code-review tools.
 
 Probe **once**: `command -v anchor` (or `./bin/anchor`) **and** `anchor review --help`.
 Success → list/delegate are **owned by the CLI** for the rest of the session.
-Do not re-probe every turn. First failure → in-session critic; mention `/install-anchor`.
+That CLI critic **is** the AI pass — do **not** also spawn a harness reviewer.
+Do not re-probe every turn. First failure → in-session critic (§7); mention `/install-anchor`.
 Last-known-good this session wins over re-implementing the critic prompt in chat.
 
 | Intent | argv |
@@ -348,9 +349,19 @@ Survey waits until AI pack is ready (or skip/fail stated).
 
 ## 7. AI code review (unless `--skip-ai`)
 
-**Fresh context required.** Spawn a **read-only** reviewer subagent
-(`spawn_subagent`, `subagent_type: general-purpose`, description prefix
-`[reviewer]`). The orchestrator must not sole-author the verdict.
+**One critic engine per invocation.** Do not run the CLI critic and a harness
+subagent in parallel. Dual-run only when the operator **asks** for a second
+opinion (state which engine already ran). Dual ACCEPT is not a merge gate —
+survey stays authoritative.
+
+**If `anchor` owns critic this session** (probe succeeded): run
+`anchor review <slug>` (or bare `anchor review` when this skill already picked
+the plan). That Verdict is the AI pass. Skip the spawn below.
+
+**Else** (CLI missing or the verb failed this session): **fresh context
+required.** Spawn a **read-only** reviewer subagent (`spawn_subagent`,
+`subagent_type: general-purpose`, description prefix `[reviewer]`). The
+orchestrator must not sole-author the verdict.
 
 **Subagent prompt must include:**
 

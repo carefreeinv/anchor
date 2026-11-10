@@ -24,8 +24,10 @@ the empty-queue **dev → main** gate. CLI: **`anchor review`** picks the top
 names one. `--list` lists. `--no-delegate` skips. Empty queue with integration
 ahead of mainline: exit 2 names **`anchor review --promote`** (operator required;
 never auto-promote). Probe once this session (`anchor review --help`);
-last-known-good CLI wins over re-implementing the critic in chat. Survey and
-merge stay in the skill.
+last-known-good CLI wins over re-implementing the critic in chat. When the CLI
+owns the critic this session, that is the **only** AI pass — do not also spawn a
+Grok/Claude reviewer unless the operator asks for a second opinion. Survey and
+merge stay in the skill. Dual ACCEPT is not a merge gate.
 
 | Intent | argv |
 |--------|------|
@@ -119,9 +121,11 @@ Human-assisted only. **Never** move to `completed/` or open a PR on critic **REV
 2. **Checkout** — `feature/<slug>` only when the tree is clean (or after confirm);
    dirty trees get a worktree offer, not a silent switch.
 3. **Launch** — low-risk local servers only; confirm Docker/migrations/deploy.
-4. **AI critic** — fresh subagent/context; format from `templates/review.md`
-   (ACCEPT | REVISE | ESCALATE). **Advisory** for merges and human lane moves.
-   Autonomous `/work` treats **ACCEPT** as a hard gate for archive-on-branch + PR.
+4. **AI critic** — **one** engine: `anchor review` when the CLI is configured
+   this session; otherwise a fresh harness subagent. Format from
+   `templates/review.md` (ACCEPT | REVISE | ESCALATE). **Advisory** for merges
+   and human lane moves. Autonomous `/work` treats **ACCEPT** as a hard gate for
+   archive-on-branch + PR.
 5. **Survey** — Approve | Needs Work | Skip | optional Defer.
 6. **Follow-ups** — e.g. override if AI was REVISE and human Approves; actionable
    bullets required for Needs Work.

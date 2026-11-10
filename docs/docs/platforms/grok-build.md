@@ -3,7 +3,7 @@ sidebar_position: 2
 sidebar_label: Grok Build
 ---
 
-<!-- synced-from: platforms/grok-build/GROK.md @ 8282fbcc89a0047716fe6972de2d0c8a8b95996a -->
+<!-- synced-from: platforms/grok-build/GROK.md @ d18e9083cc32dff20a58925b46cf5cfb4f035d47 -->
 
 # Grok Build
 
@@ -28,7 +28,7 @@ flowchart LR
   s -->|"two fails"| stop["Stop + escalate"]
 ```
 
-The hard rules (restate → plan → one-step-per-turn → verify-don't-claim → mark `(unverified)` → two-fail stop → scope → footer → **docs describe current state, not plans** → **`/commit-prep` before any commit outside `.plans/`, and before any merge commit** → **capacity limits are a scheduling problem**, not a failure: checkpoint, then reroute to the next model clearing the task's fitness floor, wait for a near reset, or stop and report — see [capacity routing](/capacity-routing) → **prefer `anchor` for the plan loop** (`anchor work` pick+execute / `--no-run` claims; `anchor review` pick+critic / empty+ahead names `anchor review --promote`; `anchor draft "<desc>"`; also `--list|--finish|--return`, `anchor models`, `anchor fleet-watch`, `anchor plans`; unattended `work_once.py --once --run --ensure-worktree` is the no-TTY fallback if headless `anchor work` is refused; probe once this session, last-known-good CLI wins over re-implementation; prefer `anchor fleet-watch` when on PATH) → **surface the best-fit skill**: before acting, offer an available `.grok/skills/` skill or command that fits the request in one line, then proceed — a suggestion, not a gate; only skills actually loaded, at most once per capability per session) plus three Grok-specific ones:
+The hard rules (restate → plan → one-step-per-turn → verify-don't-claim → mark `(unverified)` → two-fail stop → scope → footer → **docs describe current state, not plans** → **`/commit-prep` before any commit outside `.plans/`, and before any merge commit** → **capacity limits are a scheduling problem**, not a failure: checkpoint, then reroute to the next model clearing the task's fitness floor, wait for a near reset, or stop and report — see [capacity routing](/capacity-routing) → **prefer `anchor` for the plan loop** (`anchor work` pick+execute / `--no-run` claims; `anchor review` pick+critic / empty+ahead names `anchor review --promote`; `anchor draft "<desc>"`; also `--list|--finish|--return`, `anchor models`, `anchor fleet-watch`, `anchor plans`; unattended `work_once.py --once --run --ensure-worktree` is the no-TTY fallback if headless `anchor work` is refused; probe once this session, last-known-good CLI wins over re-implementation; one critic engine — CLI when configured, no parallel harness reviewer unless asked; prefer `anchor fleet-watch` when on PATH) → **surface the best-fit skill**: before acting, offer an available `.grok/skills/` skill or command that fits the request in one line, then proceed — a suggestion, not a gate; only skills actually loaded, at most once per capability per session) plus three Grok-specific ones:
 
 - Force risk enumeration before the plan ("list 3 ways this could go wrong") — surfaces the reasoning Grok skips.
 - **One task spec per session.** Restart instead of accumulating context; instruction decay makes long Grok sessions untrustworthy.

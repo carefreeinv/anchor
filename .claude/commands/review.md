@@ -31,7 +31,8 @@ never auto-promote).
 ## CLI this session
 
 Probe **once**: `command -v anchor` **and** `anchor review --help`. Success →
-list/critic owned by the CLI for the rest of the session.
+list/critic owned by the CLI for the rest of the session. That CLI critic **is**
+the AI pass — do **not** also spawn a harness reviewer. First failure → §7.
 
 | Intent | argv |
 |--------|------|
@@ -340,7 +341,15 @@ Launch may run while the AI pass runs; the **survey waits** for the AI pack
 
 ## 7. AI code review (unless `--skip-ai`)
 
-Run the critic in a **fresh context** (subagent / separate Task). The
+**One critic engine per invocation.** Do not run the CLI critic and a harness
+subagent in parallel. Dual-run only when the operator **asks** for a second
+opinion. Dual ACCEPT is not a merge gate.
+
+**If `anchor` owns critic this session:** run `anchor review <slug>` (or bare
+`anchor review` when this command already picked the plan). Skip the spawn
+below.
+
+**Else:** run the critic in a **fresh context** (subagent / separate Task). The
 orchestrator of this session must **not** be the sole author of the verdict
 (Anchor self-review rule).
 

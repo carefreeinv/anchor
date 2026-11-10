@@ -486,9 +486,10 @@ operator exception); otherwise stay in `in-progress/` or return/park. Optional:
 
 #### Autonomous critic loop (unattended / cloud)
 
-Spawn a **fresh-context** critic the same way `/review` §7 does (read-only
-subagent; `templates/review.md` verdict `ACCEPT | REVISE | ESCALATE`;
-**APPROVED** = `ACCEPT`). The executor does not ACCEPT its own work.
+Run **one** fresh-context critic the same way `/review` §7 does: CLI
+`anchor review --delegate` when `anchor` owns critic this session, else a
+read-only subagent (`templates/review.md` verdict `ACCEPT | REVISE | ESCALATE`;
+**APPROVED** = `ACCEPT`). Do not run both. The executor does not ACCEPT its own work.
 
 | Verdict | Action |
 |---------|--------|
