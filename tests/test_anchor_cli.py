@@ -1272,3 +1272,68 @@ def test_scaffold_collision_hint_when_verb_named_dir_exists(tmp_path):
     assert "anchor ./review" in (anchor_cli.scaffold_collision_hint(
         ["review", "--bogus"], cwd=named) or "")
     assert anchor_cli.scaffold_collision_hint(["review", "--bogus"], cwd=empty) is None
+
+
+def _release_repo(git_repo: Path) -> Path:
+    (git_repo / ".plans" / "features").mkdir(parents=True)
+    (git_repo / ".plans" / "features" / "extra.local.md").write_text(
+        "# Plan: extra\n- **Priority:** P2\n", encoding="utf-8",
+    )
+    (git_repo / "CHANGELOG.md").write_text(
+        "# Changelog\n\n## [Unreleased]\n\n### Added\n\n- thing\n",
+        encoding="utf-8",
+    )
+    _git(git_repo, "add", "CHANGELOG.md")
+    _git(git_repo, "commit", "-m", "changelog")
+    _git(git_repo, "tag", "-a", "v0.1.0", "-m", "v0.1.0")
+    _git(git_repo, "checkout", "-b", "feature/extra")
+    (git_repo / "extra.txt").write_text("x\n", encoding="utf-8")
+    _git(git_repo, "add", "extra.txt")
+    _git(git_repo, "commit", "-m", "extra")
+    _git(git_repo, "checkout", "main")
+    return git_repo
+
+
+def test_release_dry_run_json_lists_pending(git_repo):
+    repo = _release_repo(git_repo)
+    code, doc = cli(
+        ["release", "--dry-run", "--json", "--skip-review", "--all-pending",
+         "--root", str(repo)],
+    )
+    assert code == 0, doc
+    assert doc["action"] == "report"
+    assert doc["result"]["suggested_tag"] == "v0.2.0"
+    branches = [p["branch"] for p in doc["result"]["pending"]]
+    assert "feature/extra" in branches
+    tags = subprocess.run(
+        ["git", "-C", str(repo), "tag"], capture_output=True, text=True, check=True,
+    ).stdout
+    assert "v0.2.0" not in tags
+
+
+def test_release_yes_headless_does_not_tag(git_repo):
+    repo = _release_repo(git_repo)
+    code, doc = cli(
+        ["release", "--yes", "--skip-review", "--json", "--root", str(repo)],
+    )
+    assert code == 3, doc
+    tags = subprocess.run(
+        ["git", "-C", str(repo), "tag"], capture_output=True, text=True, check=True,
+    ).stdout.split()
+    assert "v0.2.0" not in tags
+
+
+def test_release_yes_tty_tags(git_repo):
+    repo = _release_repo(git_repo)
+    code, doc = cli(
+        ["release", "--yes", "--skip-review", "--json", "--root", str(repo)],
+        interactive=True,
+    )
+    assert code == 0, doc
+    assert doc["result"]["tag"] == "v0.2.0"
+    tags = subprocess.run(
+        ["git", "-C", str(repo), "tag"], capture_output=True, text=True, check=True,
+    ).stdout.split()
+    assert "v0.2.0" in tags
+    cl = (repo / "CHANGELOG.md").read_text(encoding="utf-8")
+    assert "## [0.2.0]" in cl

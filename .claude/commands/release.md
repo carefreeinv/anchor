@@ -20,6 +20,12 @@ project root but `.anchor/scripts/<name>.py` is.
 
 `$ARGUMENTS` is everything after `/release`.
 
+## CLI this session
+
+Probe **once**: `command -v anchor` **and** `anchor release --help`.
+Success → report/dry-run/ship owned by the CLI (`anchor release --dry-run`,
+TTY `--yes` / `--push`). Never merge. Headless never tags.
+
 ## Usage
 
 | Invocation | Behavior |

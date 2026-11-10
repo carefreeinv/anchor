@@ -3,11 +3,11 @@ sidebar_position: 1.5
 sidebar_label: Plan workflow verbs
 ---
 
-<!-- synced-from: anchor/cli.md @ 5428e128f31ea0b9cc64024dadb83ca4e63dc337 -->
+<!-- synced-from: anchor/cli.md @ 624a564092fcb03241258f3dc43c3592557a359b -->
 
 # The plan-workflow CLI: what `anchor` does itself, and what it hands back
 
-`anchor plans | work | review | draft | fleet-watch | models` runs the `.plans/` workflow from a
+`anchor plans | work | review | draft | fleet-watch | models | release` runs the `.plans/` workflow from a
 terminal, with no chat harness. It is a small, deterministic program: every
 decision it makes comes from a fixed set of outcomes with a rule you can name,
 and it runs no model on list/heartbeat/finish/return. **`anchor work`** picks
@@ -31,6 +31,7 @@ anchor review --promote              # empty queue: integration → mainline (ex
 anchor draft "fix leftover worktrees"
 anchor models list
 anchor fleet-watch --status
+anchor release --dry-run
 ```
 
 Each `work` / `review` / `draft` run prints one next command: `Run \`anchor …\` to …` (same sentence in JSON `pending[].detail`). Claim-only work names `anchor work --finish <slug>`; a finish or `--run` that parks names `anchor review <slug>`; a failed `--run` names `anchor work <slug>` to resume; draft create names `anchor draft --promote <slug>`; promote names `anchor work <slug>`.
@@ -135,7 +136,7 @@ culmination question inside a harness).
 |------|------|-----|
 | list `review-needed/` with hold notes | deterministic | directory read + `pending_merges.is_held` |
 | the review package: branch, target, head, changed files, fast-forward? | deterministic | git, via `merge_feature` helpers |
-| AI critic pass | **model** | bare `anchor review` picks the top `review-needed/` plan and runs the critic (headless too; `--list` lists; `--no-delegate` skips). The package includes `git diff --stat` and `check_docs_sync.py` so the critic does not REVISE for missing logs |
+| AI critic pass | **model** | interactive `anchor review <slug>` runs it (`--delegate` alias; `--no-delegate` skips; headless still pending). The package includes `git diff --stat` and `check_docs_sync.py` so the critic does not REVISE for missing logs |
 | **Approve / Needs Work / Skip / Defer** | **operator** | the `/review` sign-off; never inferred |
 | Approve after a critic verdict of REVISE, ESCALATE or unreadable | **operator** | a second, explicit "approve despite critic concerns?" yes; anything else leaves the plan in `review-needed/` |
 | Needs Work: which ready lane, and the notes | **operator** | notes must be real; an empty answer counts as no answer |
@@ -166,8 +167,8 @@ without committing.
 | Part | Kind | Why |
 |------|------|-----|
 | `--list` drafts | deterministic | directory read |
-| scaffold `drafts/<kebab>.local.md` (default private; `--shared` for tracked) | deterministic | kebab from the brief; refuses a slug already in use anywhere |
-| write the Goal, Steps and Done when | **model** | planner runs by default (headless too); `--no-delegate` keeps the skeleton |
+| scaffold `drafts/<slug>` (`--local` for private) | deterministic | a header skeleton; refuses a slug already in use anywhere |
+| write the Goal, Steps and Done when | **model** | pending `plan-prose`; `--delegate` asks the planner endpoint, and the reply is written only if it has all three sections |
 | `--promote <slug> --to bugs\|features` | deterministic | `plan_store.move` |
 | which ready lane, when `--to` is omitted | **operator** | asked interactively; exit 3 headless |
 
@@ -461,4 +462,46 @@ options:
                        ~/.config/anchor/endpoints.local.yaml)
   --registry REGISTRY  shared endpoints.yaml to resolve --endpoint
   --list               same as `models list`
+```
+
+### `anchor release --help`
+
+```text
+usage: anchor release [-h] [--root ROOT] [--json] [--non-interactive]
+                      [--dry-run] [--yes] [--push] [--base BASE]
+                      [--since DAYS] [--all-pending] [--skip-review]
+                      [--force-omit-finished] [--force-tag]
+                      [--bump {patch,minor,major}] [--tag TAG]
+                      [--delegate [ENDPOINT]] [--no-delegate]
+                      [--registry REGISTRY]
+
+options:
+  -h, --help            show this help message and exit
+  --root ROOT           project root containing .plans/ (default: cwd)
+  --json                machine-readable output (schema_version 1)
+  --non-interactive     never prompt; JSON output; stop with exit 3 where an
+                        answer is needed
+  --dry-run             print the report and suggested tag; do not write git
+  --yes                 TTY: fold CHANGELOG, bump pyproject, annotated tag (no
+                        push)
+  --push                TTY: git push the release base and tag (never --force)
+  --base BASE           release base branch (default: dev, else main)
+  --since DAYS          recency window in days (default 30)
+  --all-pending         list every branch ahead of its merge target
+  --skip-review         skip the plan-diff critic (warns)
+  --force-omit-finished
+                        tag even if completed/review-needed work is still off-
+                        base
+  --force-tag           tag even if plan-diff is HOLD
+  --bump {patch,minor,major}
+                        semver bump when --tag is omitted
+  --tag TAG             exact tag name (must match the repo scheme)
+  --delegate [ENDPOINT]
+                        send the judgment step to ENDPOINT from the registry
+                        (bare flag: first endpoint for the 'critic' role;
+                        critic/planner also run headless); alias of the
+                        default critic
+  --no-delegate         skip the critic chat (package + operator decision
+                        only)
+  --registry REGISTRY   endpoints.yaml (default: scripts/endpoints.yaml)
 ```

@@ -24,7 +24,7 @@ import plan_lease
 import plan_store
 
 SCHEMA_VERSION = 1
-VERBS = ("plans", "work", "review", "draft", "fleet-watch", "models")
+VERBS = ("plans", "work", "review", "draft", "fleet-watch", "models", "release")
 
 EXIT_OK = 0
 EXIT_NOTHING = 1
@@ -312,6 +312,25 @@ class DraftPromoteParams:
     root: str
     slug: str
     to: str | None = None
+
+
+@dataclass(frozen=True)
+class ReleaseParams:
+    root: str
+    dry_run: bool = False
+    yes: bool = False
+    push: bool = False
+    base: str | None = None
+    since: float | None = 30.0
+    all_pending: bool = False
+    skip_review: bool = False
+    force_omit_finished: bool = False
+    force_tag: bool = False
+    bump: str | None = None
+    tag: str | None = None
+    delegate: str | None = None
+    registry: str | None = None
+    no_delegate: bool = False
 
 
 @dataclass(frozen=True)
@@ -1682,3 +1701,333 @@ def _redirect_stdout(buf):
     import contextlib
 
     return contextlib.redirect_stdout(buf)
+
+
+_SEMVER_TAG_RE = re.compile(r"^v?(\d+)\.(\d+)\.(\d+)$")
+
+
+def _git_out(root: Path, *args: str) -> str:
+    p = subprocess.run(
+        ["git", "-C", str(root), *args],
+        capture_output=True, text=True, check=False,
+    )
+    if p.returncode != 0:
+        raise CliError((p.stderr or p.stdout or "git failed").strip())
+    return p.stdout.strip()
+
+
+def _release_base(root: Path, override: str | None) -> str:
+    import pending_merges as pm
+
+    if override:
+        return override
+    branches = set(pm.local_branches(root))
+    return (
+        pm._first_existing(pm.INTEGRATION_ORDER, branches)
+        or pm._first_existing(pm.MAINLINE_ORDER, branches)
+        or "HEAD"
+    )
+
+
+def _last_semver_tag(root: Path) -> str | None:
+    p = subprocess.run(
+        ["git", "-C", str(root), "tag", "--sort=-v:refname"],
+        capture_output=True, text=True, check=False,
+    )
+    if p.returncode != 0:
+        return None
+    for line in p.stdout.splitlines():
+        if _SEMVER_TAG_RE.match(line.strip()):
+            return line.strip()
+    return None
+
+
+def _bump_tag(last: str | None, level: str, *, v_prefix: bool) -> str:
+    major = minor = patch = 0
+    if last:
+        m = _SEMVER_TAG_RE.match(last)
+        if m:
+            major, minor, patch = (int(x) for x in m.groups())
+    if level == "major":
+        major, minor, patch = major + 1, 0, 0
+    elif level == "minor":
+        minor, patch = minor + 1, 0
+    else:
+        patch += 1
+    body = f"{major}.{minor}.{patch}"
+    return f"v{body}" if v_prefix else body
+
+
+def _changelog_wants_minor(root: Path) -> bool:
+    path = root / "CHANGELOG.md"
+    if not path.is_file():
+        return False
+    text = path.read_text(encoding="utf-8")
+    m = re.search(r"^## \[Unreleased\]\s*\n(.*?)(?=^## \[|\Z)", text, re.M | re.S)
+    if not m:
+        return False
+    return bool(re.search(r"^### Added\s*$", m.group(1), re.M))
+
+
+def _fold_changelog(root: Path, version: str) -> bool:
+    path = root / "CHANGELOG.md"
+    if not path.is_file():
+        return False
+    text = path.read_text(encoding="utf-8")
+    bare = version.lstrip("v")
+    from datetime import date
+    today = date.today().isoformat()
+    if re.search(rf"^## \[{re.escape(bare)}\]", text, re.M):
+        return False
+    repl = f"## [Unreleased]\n\n## [{bare}] - {today}"
+    new, n = re.subn(r"^## \[Unreleased\]\s*$", repl, text, count=1, flags=re.M)
+    if n != 1:
+        return False
+    path.write_text(new, encoding="utf-8")
+    return True
+
+
+def _bump_pyproject(root: Path, version: str) -> bool:
+    path = root / "pyproject.toml"
+    if not path.is_file():
+        return False
+    bare = version.lstrip("v")
+    text = path.read_text(encoding="utf-8")
+    new, n = re.subn(
+        r'(?m)^version\s*=\s*"[^"]+"',
+        f'version = "{bare}"',
+        text,
+        count=1,
+    )
+    if n != 1:
+        return False
+    path.write_text(new, encoding="utf-8")
+    return True
+
+
+def _release_report_data(params: ReleaseParams) -> dict[str, Any]:
+    import pending_merges as pm
+
+    root = Path(params.root)
+    try:
+        base = _release_base(root, params.base)
+    except pm.GitError as exc:
+        raise CliError(str(exc)) from exc
+    since = None if params.all_pending else params.since
+    try:
+        pending = pm.find_pending(root, since_days=since)
+    except pm.GitError as exc:
+        raise CliError(str(exc)) from exc
+    rows = []
+    finished_off = []
+    for item in pending:
+        lane = item.plan_lane
+        rows.append({
+            "branch": item.branch,
+            "target": item.target,
+            "ahead": item.ahead,
+            "plan_lane": lane,
+            "plan_slug": item.plan_slug,
+            "completed_plan": item.completed_plan,
+        })
+        if lane in ("completed", "review-needed") or item.completed_plan:
+            finished_off.append(item.branch)
+    last = _last_semver_tag(root)
+    v_prefix = (last or "v0.0.0").startswith("v")
+    level = params.bump or ("minor" if _changelog_wants_minor(root) else "patch")
+    suggested = params.tag or _bump_tag(last, level, v_prefix=v_prefix)
+    membership: list[str] = []
+    try:
+        import release_progress as rp
+
+        rels = rp.scan_releases(plan_store.plans_root_for(root))
+        for info in list(rels.values())[:8]:
+            membership.append(rp.format_line(info))
+    except Exception:
+        pass
+    return {
+        "base": base,
+        "last_tag": last,
+        "suggested_tag": suggested,
+        "bump": level,
+        "pending": rows,
+        "finished_off_base": finished_off,
+        "membership": membership,
+        "columns": ["branch", "target", "ahead", "plan_lane", "plan_slug"],
+    }
+
+
+def _plan_diff_verdict(
+    params: ReleaseParams, ctx: Ctx, data: dict[str, Any],
+) -> str:
+    if params.skip_review or params.no_delegate:
+        return "PASS_WITH_NOTES"
+    if not ctx.mode.interactive and not params.delegate:
+        return "SKIPPED"
+    if ctx.delegate is None:
+        return "SKIPPED"
+    root = Path(params.root)
+    last = data.get("last_tag") or ""
+    base = data["base"]
+    rng = f"{last}..{base}" if last else base
+    log = subprocess.run(
+        ["git", "-C", str(root), "log", "--oneline", rng],
+        capture_output=True, text=True, check=False,
+    ).stdout
+    stat = subprocess.run(
+        ["git", "-C", str(root), "diff", "--stat", rng],
+        capture_output=True, text=True, check=False,
+    ).stdout
+    blob = (log + "\n" + stat)[:8000]
+    user = (
+        "You are reviewing a release. Do not implement. "
+        "Judge commits already on the release base since the last tag. "
+        "End with ## Verdict and exactly one of PASS, PASS WITH NOTES, or HOLD.\n\n"
+        f"BASE: {base}\nLAST TAG: {last or '(none)'}\n\n{blob}"
+    )
+    try:
+        _name, out = _try_delegate(
+            ctx, endpoint=params.delegate or "auto", role="critic",
+            registry=params.registry, user=user,
+        )
+    except NotDelegated:
+        return "SKIPPED"
+    upper = out.upper()
+    if re.search(r"\bHOLD\b", upper):
+        return "HOLD"
+    if "PASS WITH NOTES" in upper or "PASS_WITH_NOTES" in upper:
+        return "PASS_WITH_NOTES"
+    if re.search(r"\bPASS\b", upper):
+        return "PASS"
+    return "PASS_WITH_NOTES"
+
+
+@_op("release.report", mutates=False, requires=None)
+def op_release_report(params: ReleaseParams, _answers: Answers, ctx: Ctx) -> Result:
+    data = _release_report_data(params)
+    res = Result("release", "report")
+    res.data.update(data)
+    res.data["plans"] = data["pending"]
+    verdict = _plan_diff_verdict(params, ctx, data)
+    res.data["review"] = verdict
+    if params.skip_review:
+        res.notes.append("plan-diff skipped (--skip-review)")
+    finished = data["finished_off_base"]
+    if finished:
+        res.exit_code = EXIT_NEEDS_OPERATOR
+        res.need(
+            "finished-off-base",
+            NEEDS_OPERATOR,
+            "finished work is not on the release base: " + ", ".join(finished)
+            + " — land it with /review or pass --force-omit-finished",
+        )
+        return res
+    if params.dry_run:
+        res.notes.append(
+            f"dry-run: would suggest {data['suggested_tag']} on {data['base']}"
+        )
+        return res
+    res.need(
+        "ship",
+        NEEDS_OPERATOR,
+        next_command(
+            f"anchor release --yes --skip-review --tag {data['suggested_tag']}",
+            f"tag {data['suggested_tag']} on a TTY (never merges)",
+        ),
+    )
+    res.exit_code = EXIT_NEEDS_OPERATOR
+    return res
+
+
+@_op("release.ship", mutates=True, requires=NEEDS_OPERATOR)
+def op_release_ship(params: ReleaseParams, _answers: Answers, ctx: Ctx) -> Result:
+    res = Result("release", "ship")
+    if not ctx.mode.interactive:
+        res.exit_code = EXIT_NEEDS_OPERATOR
+        res.need(
+            "ship",
+            NEEDS_OPERATOR,
+            "tag and push need an interactive operator (--yes / --push are not substitutes)",
+        )
+        return res
+    data = _release_report_data(params)
+    res.data.update(data)
+    finished = data["finished_off_base"]
+    if finished and not params.force_omit_finished:
+        res.exit_code = EXIT_NEEDS_OPERATOR
+        res.need(
+            "finished-off-base",
+            NEEDS_OPERATOR,
+            "finished work is not on the release base: " + ", ".join(finished),
+        )
+        return res
+    verdict = _plan_diff_verdict(params, ctx, data)
+    res.data["review"] = verdict
+    if verdict == "HOLD" and not params.force_tag:
+        res.exit_code = EXIT_NEEDS_OPERATOR
+        res.need(
+            "hold",
+            NEEDS_OPERATOR,
+            "plan-diff HOLD blocks the tag; pass --force-tag to override",
+        )
+        return res
+    root = Path(params.root)
+    base = data["base"]
+    head = _git_out(root, "rev-parse", "HEAD")
+    try:
+        base_sha = _git_out(root, "rev-parse", base)
+    except CliError as exc:
+        raise CliError(f"unknown --base {base!r}: {exc}") from exc
+    if head != base_sha:
+        raise CliError(
+            f"HEAD is not the release base {base} (checkout {base} or pass --base)"
+        )
+    tag = params.tag or data["suggested_tag"]
+    if params.yes:
+        _fold_changelog(root, tag)
+        _bump_pyproject(root, tag)
+        prep_script = Path(__file__).resolve().parent / "commit_prep.py"
+        if prep_script.is_file() and (root / "tests").is_dir():
+            prep = subprocess.run(
+                [sys.executable, str(prep_script), "--root", str(root)],
+                capture_output=True, text=True, check=False,
+            )
+            if prep.returncode != 0:
+                res.exit_code = EXIT_ERROR
+                res.error = f"commit-prep failed ({prep.returncode})"
+                res.notes.append((prep.stdout or prep.stderr or "")[-2000:])
+                return res
+        subprocess.run(
+            ["git", "-C", str(root), "add", "-A"],
+            check=False, capture_output=True,
+        )
+        subprocess.run(
+            ["git", "-C", str(root), "commit", "-m", f"Release {tag}"],
+            check=False, capture_output=True,
+        )
+        tagged = subprocess.run(
+            ["git", "-C", str(root), "tag", "-a", tag, "-m", f"Release {tag}"],
+            capture_output=True, text=True, check=False,
+        )
+        if tagged.returncode != 0:
+            raise CliError(tagged.stderr.strip() or f"git tag {tag} failed")
+        res.data["tag"] = tag
+    if params.push:
+        has = subprocess.run(
+            ["git", "-C", str(root), "rev-parse", "-q", "--verify", f"refs/tags/{tag}"],
+            capture_output=True, check=False,
+        )
+        if has.returncode != 0:
+            raise CliError(f"no tag {tag} at HEAD; run --yes first")
+        pushed = subprocess.run(
+            ["git", "-C", str(root), "push", "origin", base, tag],
+            capture_output=True, text=True, check=False,
+        )
+        if pushed.returncode != 0:
+            raise CliError(pushed.stderr.strip() or "git push failed")
+        res.data["pushed"] = [base, tag]
+    if not params.yes and not params.push:
+        res.exit_code = EXIT_NEEDS_OPERATOR
+        res.need("ship", NEEDS_OPERATOR, "pass --yes to tag or --push to publish")
+    return res
+

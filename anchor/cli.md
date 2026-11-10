@@ -1,6 +1,6 @@
 # The plan-workflow CLI: what `anchor` does itself, and what it hands back
 
-`anchor plans | work | review | draft | fleet-watch | models` runs the `.plans/` workflow from a
+`anchor plans | work | review | draft | fleet-watch | models | release` runs the `.plans/` workflow from a
 terminal, with no chat harness. It is a small, deterministic program: every
 decision it makes comes from a fixed set of outcomes with a rule you can name,
 and it runs no model on list/heartbeat/finish/return. **`anchor work`** picks
@@ -24,6 +24,7 @@ anchor review --promote              # empty queue: integration → mainline (ex
 anchor draft "fix leftover worktrees"
 anchor models list
 anchor fleet-watch --status
+anchor release --dry-run
 ```
 
 Each `work` / `review` / `draft` run prints one next command: `Run \`anchor …\` to …` (same sentence in JSON `pending[].detail`). Claim-only work names `anchor work --finish <slug>`; a finish or `--run` that parks names `anchor review <slug>`; a failed `--run` names `anchor work <slug>` to resume; draft create names `anchor draft --promote <slug>`; promote names `anchor work <slug>`.

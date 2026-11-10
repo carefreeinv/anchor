@@ -8,6 +8,8 @@ Newest first.
 
 ### Added
 
+- **`anchor release`.** Unmerged-work table vs the release base, suggested next tag, optional plan-diff critic. `--dry-run` never writes git. TTY `--yes` folds CHANGELOG, bumps `pyproject.toml` when present, and creates an annotated tag. TTY `--push` publishes the base and tag without `--force`. Headless `--yes`/`--push` exit 3. Never merges.
+
 - **CLI verbs discover the project from cwd.** `anchor work` / `review` / `draft` / `plans` walk parents of `--root` (default cwd) until they find a `.plans/` tree, so a PATH-installed `anchor` works from a nested directory in another repo. Bare `anchor` with no verb inside such a tree exits 2 and names `anchor work` instead of scaffolding. Explicit `--root` that already contains `.plans/` is unchanged.
 
 - **CLI next-command hints.** `anchor work` / `review` / `draft` print `Run \`anchor …\` to …` on success and failure (same sentence in JSON `pending[].detail`): finish → `anchor review <slug>`; claim-only → `anchor work --finish <slug>`; failed `--run` → `anchor work <slug>`; draft create → `anchor draft --promote <slug>`; promote → `anchor work <slug>`.

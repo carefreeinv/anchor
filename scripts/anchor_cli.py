@@ -36,6 +36,7 @@ from anchor_ops import (
     ModelsListParams,
     ModelsNickParams,
     NeedsOperator,
+    ReleaseParams,
     NotDelegated,
     Passthrough,
     PlansBoardParams,
@@ -283,7 +284,7 @@ def build_parser() -> argparse.ArgumentParser:
                "3 an operator answer (or harness step) is required",
     )
     sub = ap.add_subparsers(
-        dest="verb", required=True, metavar="{plans,work,review,draft,fleet-watch,models}",
+        dest="verb", required=True, metavar="{plans,work,review,draft,fleet-watch,models,release}",
     )
 
     p = sub.add_parser("plans", help="list plans in every lane")
@@ -378,6 +379,33 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--overlay", help="write nicknames here (default: ~/.config/anchor/endpoints.local.yaml)")
     p.add_argument("--registry", help="shared endpoints.yaml to resolve --endpoint")
     p.add_argument("--list", action="store_true", help="same as `models list`")
+
+    p = sub.add_parser(
+        "release",
+        help="unmerged-work report, plan-diff, tag; never merges",
+    )
+    _common(p)
+    p.add_argument("--dry-run", action="store_true",
+                   help="print the report and suggested tag; do not write git")
+    p.add_argument("--yes", action="store_true",
+                   help="TTY: fold CHANGELOG, bump pyproject, annotated tag (no push)")
+    p.add_argument("--push", action="store_true",
+                   help="TTY: git push the release base and tag (never --force)")
+    p.add_argument("--base", help="release base branch (default: dev, else main)")
+    p.add_argument("--since", type=float, default=30.0, metavar="DAYS",
+                   help="recency window in days (default 30)")
+    p.add_argument("--all-pending", action="store_true",
+                   help="list every branch ahead of its merge target")
+    p.add_argument("--skip-review", action="store_true",
+                   help="skip the plan-diff critic (warns)")
+    p.add_argument("--force-omit-finished", action="store_true",
+                   help="tag even if completed/review-needed work is still off-base")
+    p.add_argument("--force-tag", action="store_true",
+                   help="tag even if plan-diff is HOLD")
+    p.add_argument("--bump", choices=("patch", "minor", "major"),
+                   help="semver bump when --tag is omitted")
+    p.add_argument("--tag", help="exact tag name (must match the repo scheme)")
+    _delegation(p, "critic", opt_out=True)
     return ap
 
 
@@ -408,6 +436,10 @@ def _cli_action(args: argparse.Namespace) -> str:
         if getattr(args, "list", False) or args.action == "list":
             return "list"
         return args.action or "list"
+    if verb == "release":
+        if getattr(args, "yes", False) or getattr(args, "push", False):
+            return "ship"
+        return "report"
     return verb
 
 
@@ -530,6 +562,29 @@ def _dispatch(args: argparse.Namespace, answers: Prompter, ctx: Ctx) -> Result:
         if args.list:
             return run("fleet-watch.list", fw, answers, ctx)
         return run("fleet-watch.status", fw, answers, ctx)
+    if verb == "release":
+        no_delegate = bool(getattr(args, "no_delegate", False))
+        delegate = None if no_delegate else getattr(args, "delegate", None)
+        rp = ReleaseParams(
+            root=args.root,
+            dry_run=bool(args.dry_run),
+            yes=bool(args.yes),
+            push=bool(args.push),
+            base=args.base,
+            since=None if args.all_pending else args.since,
+            all_pending=bool(args.all_pending),
+            skip_review=bool(args.skip_review),
+            force_omit_finished=bool(args.force_omit_finished),
+            force_tag=bool(args.force_tag),
+            bump=args.bump,
+            tag=args.tag,
+            delegate=delegate,
+            registry=getattr(args, "registry", None),
+            no_delegate=no_delegate,
+        )
+        if args.yes or args.push:
+            return run("release.ship", rp, answers, ctx)
+        return run("release.report", rp, answers, ctx)
     if args.promote:
         return run("draft.promote", DraftPromoteParams(root=args.root, slug=args.promote, to=args.to), answers, ctx)
     words = tuple(getattr(args, "words", ()) or ())

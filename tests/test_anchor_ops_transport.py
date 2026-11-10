@@ -59,6 +59,8 @@ def _params(name: str, root: Path):
             root=r, alias="lightning", endpoint="missing",
             overlay=str(root / "overlay.yaml"),
         ),
+        "release.report": ops.ReleaseParams(root=r, dry_run=True, skip_review=True),
+        "release.ship": ops.ReleaseParams(root=r, yes=True, skip_review=True),
     }[name]
 
 

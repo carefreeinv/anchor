@@ -30,6 +30,14 @@ version goes out.
 
 `$ARGUMENTS` is everything after `/release`.
 
+## CLI this session
+
+Probe **once**: `command -v anchor` **and** `anchor release --help`.
+Success → the unmerged report, dry-run, and ship are **owned by the CLI**
+(`anchor release --dry-run`, TTY `anchor release --yes`, TTY `anchor release --push`).
+Do not also merge. Headless never tags. First failure → this skill's in-session
+report + `/tag`; mention `/install-anchor`.
+
 ## Usage
 
 | Invocation | Behavior |
