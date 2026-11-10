@@ -289,6 +289,10 @@ class ReviewParams:
     delegate: str | None = None
     registry: str | None = None
     no_delegate: bool = False
+    decision: str | None = None
+    force_approve: bool = False
+    notes: str | None = None
+    to: str | None = None
 
 
 @dataclass(frozen=True)
@@ -1063,15 +1067,19 @@ def op_review(params: ReviewParams, answers: Answers, ctx: Ctx) -> Result:
         _critic(params, ctx, ref, pkg, root, res)
 
     try:
-        return _decide(res, answers, root, plans, ref, pkg)
+        return _decide(res, answers, root, plans, ref, pkg, params)
     except NeedsOperator as exc:
         res.exit_code = EXIT_NEEDS_OPERATOR
         res.need(exc.step, NEEDS_OPERATOR, exc.detail)
         return res
 
 
-def _decide(res: Result, answers: Answers, root: Path, plans: Path, ref, pkg) -> Result:
-    choice = answers.choose("review-decision", f"Decision for {ref.rel}", REVIEW_CHOICES)
+def _decide(res: Result, answers: Answers, root: Path, plans: Path, ref, pkg, params: ReviewParams | None = None) -> Result:
+    params = params or ReviewParams(root=str(root))
+    if params.decision:
+        choice = params.decision
+    else:
+        choice = answers.choose("review-decision", f"Decision for {ref.rel}", REVIEW_CHOICES)
     res.data["decision"] = choice
     res.pending = [p for p in res.pending if p["step"] != "critic"]
     if choice == "skip":
@@ -1079,25 +1087,33 @@ def _decide(res: Result, answers: Answers, root: Path, plans: Path, ref, pkg) ->
     if choice == "approve":
         verdict = (res.data.get("critic") or {}).get("verdict")
         if verdict in ("REVISE", "ESCALATE", "UNKNOWN"):
-            sure = answers.choose(
-                "approve-despite-critic",
-                f"The critic's verdict is {verdict}. Approve despite critic concerns?",
-                ("yes", "no"),
-            )
+            if params.force_approve:
+                sure = "yes"
+            elif params.decision:
+                raise NeedsOperator(
+                    "approve-despite-critic",
+                    f"The critic's verdict is {verdict}. Pass --force-approve to merge anyway.",
+                )
+            else:
+                sure = answers.choose(
+                    "approve-despite-critic",
+                    f"The critic's verdict is {verdict}. Approve despite critic concerns?",
+                    ("yes", "no"),
+                )
             if sure != "yes":
                 res.data["decision"] = "skip"
                 res.notes.append("not approved: critic concerns stand; plan left in review-needed/")
                 return res
         return _approve(res, root, plans, ref, pkg)
     if choice == "needs-work":
-        lane = answers.choose("needs-work-lane", "Return it as", READY_LANES)
-        notes = answers.text("needs-work-notes", "Actionable notes (required)")
+        lane = params.to or answers.choose("needs-work-lane", "Return it as", READY_LANES)
+        notes = (params.notes or "").strip() or answers.text("needs-work-notes", "Actionable notes (required)")
         _append_section(ref, "Review notes", notes)
         new = plan_store.move(plans, ref.rel, lane)
         res.data["moved_to"] = new.rel
         _record_lane_commit(res, str(root), ref.slug, lane, "anchor review needs-work")
         return res
-    blocker = answers.text("defer-blocker", "What blocks it (required)")
+    blocker = (params.notes or "").strip() or answers.text("defer-blocker", "What blocks it (required)")
     _append_section(ref, "Blocked", blocker)
     new = plan_store.move(plans, ref.rel, "blocked")
     res.data["moved_to"] = new.rel

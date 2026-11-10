@@ -3,7 +3,7 @@ sidebar_position: 1.5
 sidebar_label: Plan workflow verbs
 ---
 
-<!-- synced-from: anchor/cli.md @ 624a564092fcb03241258f3dc43c3592557a359b -->
+<!-- synced-from: anchor/cli.md @ 296a81d876081ae0b7d611adb4eff61dd6eb0af7 -->
 
 # The plan-workflow CLI: what `anchor` does itself, and what it hands back
 
@@ -13,9 +13,11 @@ decision it makes comes from a fixed set of outcomes with a rule you can name,
 and it runs no model on list/heartbeat/finish/return. **`anchor work`** picks
 the highest-priority ready plan and executes it (`--no-run` claims only).
 **`anchor review`** picks the highest-priority `review-needed/` plan and runs
-the critic (`--list` still lists). **`anchor draft "a short brief"`** asks the
+the critic (`--list` still lists). `--approve` / `--needs-work` / `--skip` /
+`--defer` consume the survey from the CLI (`--force-approve` when the critic is
+REVISE). **`anchor draft "a short brief"`** asks the
 planner for a full plan under `drafts/` (default `*.local.md`; `--no-delegate`
-keeps the skeleton). Survey/merge stays with a human on a TTY.
+keeps the skeleton). No decision flag still needs a TTY (or those flags).
 
 **Operator loop** (any directory inside a tree that has `.plans/`; `anchor` on PATH is the install wrapper; `--root` is optional — parents are walked; `anchor --help` is still the scaffolder):
 
@@ -496,6 +498,48 @@ options:
   --bump {patch,minor,major}
                         semver bump when --tag is omitted
   --tag TAG             exact tag name (must match the repo scheme)
+  --delegate [ENDPOINT]
+                        send the judgment step to ENDPOINT from the registry
+                        (bare flag: first endpoint for the 'critic' role;
+                        critic/planner also run headless); alias of the
+                        default critic
+  --no-delegate         skip the critic chat (package + operator decision
+                        only)
+  --registry REGISTRY   endpoints.yaml (default: scripts/endpoints.yaml)
+```
+
+### `anchor review --help`
+
+```text
+usage: anchor review [-h] [--root ROOT] [--json] [--non-interactive] [--list]
+                     [--promote] [--approve | --needs-work | --skip | --defer]
+                     [--force-approve] [--notes NOTES] [--to {bugs,features}]
+                     [--delegate [ENDPOINT]] [--no-delegate]
+                     [--registry REGISTRY]
+                     [slug]
+
+positional arguments:
+  slug                  review this plan (default: highest-priority in review-
+                        needed/)
+
+options:
+  -h, --help            show this help message and exit
+  --root ROOT           project root containing .plans/ (default: cwd)
+  --json                machine-readable output (schema_version 1)
+  --non-interactive     never prompt; JSON output; stop with exit 3 where an
+                        answer is needed
+  --list                list review-needed plans
+  --promote             promote integration → mainline when the review queue
+                        is empty
+  --approve             survey Approve: FF-merge feature → integration and
+                        archive
+  --needs-work          return the plan to bugs/ or features/
+  --skip                leave the plan in review-needed/
+  --defer               move the plan to blocked/
+  --force-approve       with --approve: merge even if the critic is
+                        REVISE/UNKNOWN/ESCALATE
+  --notes NOTES         with --needs-work or --defer: required notes
+  --to {bugs,features}  with --needs-work: ready lane (default: bugs)
   --delegate [ENDPOINT]
                         send the judgment step to ENDPOINT from the registry
                         (bare flag: first endpoint for the 'critic' role;

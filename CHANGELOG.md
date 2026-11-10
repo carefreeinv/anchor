@@ -6,6 +6,10 @@ Newest first.
 
 ## [Unreleased]
 
+### Added
+
+- **`anchor review --approve`.** `--needs-work`, `--skip`, `--defer` consume the survey from the CLI. `--force-approve` is required when the critic is REVISE/UNKNOWN/ESCALATE. No decision flag still exits 3 and does not merge.
+
 ### Fixed
 
 - **`anchor work --finish` sees commits in the plan's git worktree.** Finish-gate `since..HEAD` uses the linked `feature/<slug>` worktree when the primary checkout is still on `dev`/`main`.

@@ -6,9 +6,11 @@ decision it makes comes from a fixed set of outcomes with a rule you can name,
 and it runs no model on list/heartbeat/finish/return. **`anchor work`** picks
 the highest-priority ready plan and executes it (`--no-run` claims only).
 **`anchor review`** picks the highest-priority `review-needed/` plan and runs
-the critic (`--list` still lists). **`anchor draft "a short brief"`** asks the
+the critic (`--list` still lists). `--approve` / `--needs-work` / `--skip` /
+`--defer` consume the survey from the CLI (`--force-approve` when the critic is
+REVISE). **`anchor draft "a short brief"`** asks the
 planner for a full plan under `drafts/` (default `*.local.md`; `--no-delegate`
-keeps the skeleton). Survey/merge stays with a human on a TTY.
+keeps the skeleton). No decision flag still needs a TTY (or those flags).
 
 **Operator loop** (any directory inside a tree that has `.plans/`; `anchor` on PATH is the install wrapper; `--root` is optional — parents are walked; `anchor --help` is still the scaffolder):
 

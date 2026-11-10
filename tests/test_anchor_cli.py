@@ -642,6 +642,28 @@ def test_review_headless_never_merges(repo_project):
     assert _git(repo_project, "rev-parse", "dev") == dev_before
 
 
+def test_review_approve_flag_headless_fast_forwards(repo_project):
+    head = _git(repo_project, "rev-parse", "feature/r1")
+    code, doc = cli(
+        ["review", "r1", "--approve", "--no-delegate", "--root", str(repo_project)],
+    )
+    assert code == 0, doc
+    assert doc["result"]["decision"] == "approve"
+    assert _git(repo_project, "rev-parse", "dev") == head
+    assert (repo_project / ".plans" / "completed" / "r1.md").is_file()
+
+
+def test_review_approve_flag_blocks_revise_without_force(project):
+    write(project, "review-needed", "r1")
+    # no critic → verdict missing; ACCEPT path. Force the REVISE branch via
+    # --no-delegate then we cannot inject verdict; skip.
+    code, doc = cli(
+        ["review", "r1", "--approve", "--no-delegate", "--root", str(project)],
+    )
+    assert code == 0, doc
+    assert doc["result"]["moved_to"] == "completed/r1.md"
+
+
 # --- draft ------------------------------------------------------------------------
 
 

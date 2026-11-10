@@ -52,8 +52,7 @@ Last-known-good this session wins over re-implementing the critic prompt in chat
 | Pick + critic | `anchor review` |
 | Named critic | `anchor review <slug>` (`--no-delegate` skips) |
 | Empty queue + ahead | `anchor review --promote` (operator required; never auto) |
-
-Human survey (Approve / Needs Work / Skip) and merge stay in this skill.
+| Approve / Needs Work / Skip / Defer | `anchor review <slug> --approve` (or `--needs-work --notes … --to bugs\|features`, `--skip`, `--defer --notes …`). `--force-approve` when the critic is REVISE/UNKNOWN/ESCALATE. No flag still exits 3. |
 
 `$ARGUMENTS` is everything after `/review`.
 

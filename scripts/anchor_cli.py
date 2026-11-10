@@ -325,6 +325,20 @@ def build_parser() -> argparse.ArgumentParser:
         "--promote", action="store_true",
         help="promote integration → mainline when the review queue is empty",
     )
+    g = p.add_mutually_exclusive_group()
+    g.add_argument("--approve", action="store_true",
+                   help="survey Approve: FF-merge feature → integration and archive")
+    g.add_argument("--needs-work", action="store_true",
+                   help="return the plan to bugs/ or features/")
+    g.add_argument("--skip", action="store_true", dest="review_skip",
+                   help="leave the plan in review-needed/")
+    g.add_argument("--defer", action="store_true",
+                   help="move the plan to blocked/")
+    p.add_argument("--force-approve", action="store_true",
+                   help="with --approve: merge even if the critic is REVISE/UNKNOWN/ESCALATE")
+    p.add_argument("--notes", help="with --needs-work or --defer: required notes")
+    p.add_argument("--to", choices=("bugs", "features"),
+                   help="with --needs-work: ready lane (default: bugs)")
     _delegation(p, "critic", opt_out=True)
 
     p = sub.add_parser("draft", help="list drafts; scaffold or promote one")
@@ -527,9 +541,22 @@ def _dispatch(args: argparse.Namespace, answers: Prompter, ctx: Ctx) -> Result:
                     ReviewListParams(root=args.root, suggest_promote=True),
                     answers, ctx,
                 )
+        decision = None
+        if args.approve:
+            decision = "approve"
+        elif args.needs_work:
+            decision = "needs-work"
+        elif getattr(args, "review_skip", False):
+            decision = "skip"
+        elif args.defer:
+            decision = "defer"
         return run("review.review", ReviewParams(
             root=args.root, slug=slug, delegate=delegate,
             registry=args.registry, no_delegate=no_delegate,
+            decision=decision,
+            force_approve=bool(args.force_approve),
+            notes=args.notes,
+            to=args.to or ("bugs" if args.needs_work else None),
         ), answers, ctx)
     if verb == "fleet-watch":
         root = args.project or args.root
