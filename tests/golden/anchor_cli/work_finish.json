@@ -10,7 +10,7 @@
     "ok": true,
     "pending": [
       {
-        "detail": "sign-off: anchor review f1",
+        "detail": "Run `anchor review f1` to review Plan: f1.",
         "needs": "operator",
         "step": "review"
       }

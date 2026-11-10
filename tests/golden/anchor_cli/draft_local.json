@@ -4,15 +4,18 @@
     "error": null,
     "exit_code": 0,
     "mode": "non-interactive",
-    "notes": [
-      "promote when ready: anchor draft --promote mine --to features|bugs"
-    ],
+    "notes": [],
     "ok": true,
     "pending": [
       {
         "detail": "write the plan's Goal, Steps and Done when (template: anchor/templates/plan.md)",
         "needs": "model",
         "step": "plan-prose"
+      },
+      {
+        "detail": "Run `anchor draft --promote mine` to promote mine.",
+        "needs": "operator",
+        "step": "promote"
       }
     ],
     "result": {

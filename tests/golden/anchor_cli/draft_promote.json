@@ -8,7 +8,13 @@
       "lane move (untracked)"
     ],
     "ok": true,
-    "pending": [],
+    "pending": [
+      {
+        "detail": "Run `anchor work d1` to work Plan: d1.",
+        "needs": "model",
+        "step": "execute"
+      }
+    ],
     "result": {
       "lane_commit": {
         "message": "Plans: d1 \u2192 features (anchor draft --promote)",

@@ -62,6 +62,16 @@ def cli(argv, *, interactive=False, answers=()):
     return code, text
 
 
+def test_work_no_run_tty_prints_next_command(project):
+    write(project, "features", "f1")
+    code, text = cli(
+        ["work", "--no-run", "--root", str(project), "--agent-id", "a1"],
+        interactive=True,
+    )
+    assert code == 0
+    assert "Run `anchor work --finish f1` to park Plan: f1 in review-needed." in text
+
+
 def write(project: Path, lane: str, slug: str, priority: str = "P2") -> Path:
     path = project / ".plans" / lane / f"{slug}.md"
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -258,6 +268,9 @@ def test_work_claims_and_hands_execution_back(project):
     assert plan_store.owner(project / ".plans", "in-progress/b1.md") == "a1"
     assert [p["step"] for p in doc["pending"]] == ["execute"]
     assert doc["pending"][0]["needs"] == "model"
+    assert doc["pending"][0]["detail"] == (
+        "Run `anchor work --finish b1` to park Plan: b1 in review-needed."
+    )
 
 
 def test_bare_work_starts_orchestrate(project, monkeypatch):
@@ -391,6 +404,7 @@ def test_work_run_interactive_exit_2_stays_in_progress(project, monkeypatch):
     assert code == 2
     assert (project / ".plans" / "in-progress" / "f1.md").is_file()
     assert not (project / ".plans" / "review-needed" / "f1.md").is_file()
+    assert "Run `anchor work f1` to resume Plan: f1." in doc
 
 
 def test_work_run_interactive_no_finish_keeps_lease(project, monkeypatch):
@@ -449,6 +463,7 @@ def test_work_heartbeat_finish_return(project):
     code, doc = cli(["work", "--finish", "f1", "--root", str(project), "--agent-id", "a1"])
     assert code == 0 and doc["result"]["plan"] == "review-needed/f1.md"
     assert plan_lease.read_lease(plans, "in-progress/f1.md") is None
+    assert doc["pending"][0]["detail"] == "Run `anchor review f1` to review Plan: f1."
 
     code, doc = cli(["work", "--return", "f2", "--root", str(project), "--agent-id", "a1"])
     assert code == 0 and doc["result"]["plan"] == "features/f2.md"
@@ -622,6 +637,10 @@ def test_draft_scaffolds_and_hands_prose_back(project):
     text = (project / ".plans" / "drafts" / "new-thing.md").read_text(encoding="utf-8")
     assert "## Goal\nShip it." in text
     assert doc["pending"][0]["step"] == "plan-prose"
+    assert any(
+        p["detail"] == "Run `anchor draft --promote new-thing` to promote new-thing."
+        for p in doc["pending"]
+    )
 
 
 def test_draft_local_and_duplicate(project):
@@ -638,6 +657,7 @@ def test_draft_promote(project):
     assert code == 3 and doc["pending"][0]["step"] == "promote-lane"
     code, doc = cli(["draft", "--promote", "d1", "--to", "features", "--root", str(project)])
     assert code == 0 and doc["result"]["plan"] == "features/d1.md"
+    assert doc["pending"][0]["detail"] == "Run `anchor work d1` to work Plan: d1."
 
 
 # --- delegation -------------------------------------------------------------------
@@ -694,7 +714,10 @@ def test_delegation_round_trips_one_step_interactively(project, stub_fleet):
     code, doc = cli(["draft", "d2", "--shared", "--root", str(project), "--delegate", "--registry", str(reg),
                      "--json"], interactive=True)
     assert code == 0 and ep.calls == 1
-    assert doc["result"]["delegated_to"] == "stub" and doc["pending"] == []
+    assert doc["result"]["delegated_to"] == "stub"
+    assert doc["pending"][0]["detail"] == (
+        "Run `anchor draft --promote d2` to promote d2."
+    )
     text = (project / ".plans" / "drafts" / "d2.md").read_text(encoding="utf-8")
     assert text.startswith("# Plan: delegated")
 

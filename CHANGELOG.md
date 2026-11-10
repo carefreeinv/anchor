@@ -8,6 +8,8 @@ Newest first.
 
 ### Added
 
+- **CLI next-command hints.** `anchor work` / `review` / `draft` print `Run \`anchor …\` to …` on success and failure (same sentence in JSON `pending[].detail`): finish → `anchor review <slug>`; claim-only → `anchor work --finish <slug>`; failed `--run` → `anchor work <slug>`; draft create → `anchor draft --promote <slug>`; promote → `anchor work <slug>`.
+
 - **Per-call model reasoning logs.** `Endpoint.chat` (CLI `--delegate` / `--run`,
   orchestrate, MCP) appends `message.reasoning` / thinking and extracted
   `<think>` blocks to `var/log/reasoning-YYYY-MM-DD.log` before think-strip.

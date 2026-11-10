@@ -26,6 +26,8 @@ anchor models list
 anchor fleet-watch --status
 ```
 
+Each `work` / `review` / `draft` run prints one next command: `Run \`anchor …\` to …` (same sentence in JSON `pending[].detail`). Claim-only work names `anchor work --finish <slug>`; a finish or `--run` that parks names `anchor review <slug>`; a failed `--run` names `anchor work <slug>` to resume; draft create names `anchor draft --promote <slug>`; promote names `anchor work <slug>`.
+
 `--run` is the default for `anchor work` (interactive **and** headless). Exit 0 **commit-preps** (tests + optional CHANGELOG nudge) and, on green, makes one product commit on `feature/<slug>` before parking in `review-needed/` unless `--no-finish`. Prep red leaves the plan in `in-progress/` (no commit, non-zero exit). `--no-commit` keeps apply-only. Empty `review-needed/` with integration ahead of mainline: `anchor review` exits 2 and names `anchor review --promote`. `--root` if cwd has no `.plans/`. Skills (`/work`, `/review`, `/draft`) prefer
 these verbs when `anchor` answered once this session.
 

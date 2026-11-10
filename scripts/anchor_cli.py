@@ -167,7 +167,11 @@ def _render_text(res: Result, out: TextIO) -> None:
     for note in res.notes:
         print(note, file=out)
     for p in res.pending:
-        print(f"→ needs {p['needs']}: {p['step']} — {p['detail']}", file=out)
+        detail = p.get("detail") or ""
+        if detail.startswith("Run `"):
+            print(detail, file=out)
+        else:
+            print(f"→ needs {p['needs']}: {p['step']} — {detail}", file=out)
     if res.error:
         print(f"error: {res.error}", file=sys.stderr)
 

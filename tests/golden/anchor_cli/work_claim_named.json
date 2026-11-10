@@ -10,7 +10,7 @@
     "ok": true,
     "pending": [
       {
-        "detail": "implement the plan's Steps: /work in-progress/f1.md in your coding harness; then anchor work --finish f1",
+        "detail": "Run `anchor work --finish f1` to park Plan: f1 in review-needed.",
         "needs": "model",
         "step": "execute"
       }

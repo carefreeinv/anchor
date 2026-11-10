@@ -138,6 +138,11 @@ class Result:
         }
 
 
+def next_command(argv: str, purpose: str) -> str:
+    """One copy-pasteable TTY/JSON hint: ``Run `argv` to purpose.``"""
+    return f"Run `{argv.strip()}` to {purpose.rstrip('.')}."
+
+
 class Answers(Protocol):
     """The only way an operation may ask anything. Headless implementations raise."""
 
@@ -614,7 +619,13 @@ def op_work_finish(params: WorkSlugParams, _answers: Answers, ctx: Ctx) -> Resul
     ref = plan_store.ref_for_path(plans, dest)
     res = Result("work", "finish")
     res.data.update(plan=ref.rel if ref else str(dest), agent_id=ctx.agent_id)
-    res.need("review", NEEDS_OPERATOR, f"sign-off: anchor review {ref.slug if ref else ''}".strip())
+    finish_slug = ref.slug if ref else params.slug
+    finish_title = _title(ref) if ref else finish_slug
+    res.need(
+        "review",
+        NEEDS_OPERATOR,
+        next_command(f"anchor review {finish_slug}", f"review {finish_title}"),
+    )
     _record_lane_commit(
         res, params.root, ref.slug if ref else rel, "review-needed", "anchor work --finish",
     )
@@ -636,7 +647,11 @@ def op_work_complete(params: WorkSlugParams, _answers: Answers, ctx: Ctx) -> Res
         path=str(dest_path),
         agent_id=ctx.agent_id,
     )
-    res.need("review", NEEDS_OPERATOR, f"sign-off: anchor review {params.slug}")
+    res.need(
+        "review",
+        NEEDS_OPERATOR,
+        next_command(f"anchor review {params.slug}", f"review {params.slug}"),
+    )
     return res
 
 
@@ -689,9 +704,11 @@ def op_work_claim(params: WorkClaimParams, _answers: Answers, ctx: Ctx) -> Resul
     res.data.update(plan=rel, path=str(dest), agent_id=ctx.agent_id)
     if ref:
         _record_lane_commit(res, params.root, ref.slug, "in-progress", "anchor work claim")
-    detail = (
-        f"implement the plan's Steps: /work {rel} in your coding harness; "
-        f"then anchor work --finish {ref.slug if ref else rel}"
+    slug = ref.slug if ref else params.slug or rel
+    title = _title(ref) if ref else slug
+    detail = next_command(
+        f"anchor work --finish {slug}",
+        f"park {title} in review-needed",
     )
     if params.run:
         if ctx.run_orchestrate is None:
@@ -708,6 +725,11 @@ def op_work_claim(params: WorkClaimParams, _answers: Answers, ctx: Ctx) -> Resul
         if code != 0:
             res.exit_code = EXIT_ERROR
             res.error = f"orchestrate.py exited {code}; plan stays in in-progress/"
+            res.need(
+                "execute",
+                NEEDS_MODEL,
+                next_command(f"anchor work {slug}", f"resume {title}"),
+            )
             return res
         from commit_prep import after_run_success
 
@@ -725,20 +747,38 @@ def op_work_claim(params: WorkClaimParams, _answers: Answers, ctx: Ctx) -> Resul
         if not prep.ok:
             res.exit_code = EXIT_ERROR
             res.error = f"commit-prep red: {prep.error}; plan stays in in-progress/"
+            res.need(
+                "execute",
+                NEEDS_MODEL,
+                next_command(f"anchor work {slug}", f"resume {title}"),
+            )
             return res
         if prep.sha:
             res.data["commit"] = prep.sha
         if params.no_finish:
             res.notes.append("--no-finish: plan stays in in-progress/")
+            res.need(
+                "review",
+                NEEDS_OPERATOR,
+                next_command(
+                    f"anchor work --finish {slug}",
+                    f"park {title} in review-needed",
+                ),
+            )
             return res
         try:
             parked = plan_lease.finish_to_review(plans, rel, ctx.agent_id)
             parked_ref = plan_store.ref_for_path(plans, parked)
             res.data["plan"] = parked_ref.rel if parked_ref else str(parked)
+            parked_slug = parked_ref.slug if parked_ref else slug
+            parked_title = _title(parked_ref) if parked_ref else title
             res.need(
                 "review",
                 NEEDS_OPERATOR,
-                f"sign-off: anchor review {parked_ref.slug if parked_ref else ''}".strip(),
+                next_command(
+                    f"anchor review {parked_slug}",
+                    f"review {parked_title}",
+                ),
             )
             _record_lane_commit(
                 res, params.root,
@@ -1437,7 +1477,14 @@ def op_draft_create(params: DraftCreateParams, _answers: Answers, ctx: Ctx) -> R
 
     ref = plan_store.create(plans, "drafts", params.slug, text, local=params.local)
     res.data.update(plan=ref.rel, path=str(ref.path))
-    res.notes.append(f"promote when ready: anchor draft --promote {params.slug} --to features|bugs")
+    res.need(
+        "promote",
+        NEEDS_OPERATOR,
+        next_command(
+            f"anchor draft --promote {params.slug}",
+            f"promote {params.title or params.slug}",
+        ),
+    )
     return res
 
 
@@ -1450,6 +1497,11 @@ def op_draft_promote(params: DraftPromoteParams, answers: Answers, _ctx: Ctx) ->
     res = Result("draft", "promote")
     res.data.update(plan=new.rel)
     _record_lane_commit(res, params.root, ref.slug, lane, "anchor draft --promote")
+    res.need(
+        "execute",
+        NEEDS_MODEL,
+        next_command(f"anchor work {new.slug}", f"work {_title(new)}"),
+    )
     return res
 
 
