@@ -615,6 +615,11 @@ def main(argv: list[str] | None = None) -> int:
         help="with --run, leave the plan in in-progress/ even when orchestrate exits 0",
     )
     ap.add_argument(
+        "--no-commit",
+        action="store_true",
+        help="with --run, skip commit-prep + feature-branch commit (apply-only)",
+    )
+    ap.add_argument(
         "--release",
         metavar="PLAN_REL",
         help="release lease for plan rel (e.g. in-progress/foo.md) and exit",
@@ -831,12 +836,14 @@ def _one_claim(root: Path, plans_root: Path, worker, args) -> tuple[int, int]:
         return 1, 0
     print(plan_path)
     extra = list(args.orchestrate_args)
+    worktree_path = None
+    slug = plan_slug(plan_path)
     if args.ensure_worktree:
         try:
             from worktree_for_agent import WorktreeError, ensure_worktree
 
-            slug = plan_slug(plan_path)
             rec = ensure_worktree(root, args.agent_id, slug=slug)
+            worktree_path = rec.path
             print(f"WORKTREE={rec.path}")
             print(f"BRANCH={rec.branch}")
             print(f"INTEGRATION={rec.integration}")
@@ -885,6 +892,12 @@ def _one_claim(root: Path, plans_root: Path, worker, args) -> tuple[int, int]:
                 )
                 return 2, 1
         extra = orchestrate_identity_args(args) + extra
+        if "--worktree" not in extra:
+            extra = extra + orchestrate_worktree_args(root, args.agent_id, slug)
+            if "--worktree" in extra:
+                i = extra.index("--worktree")
+                if i + 1 < len(extra):
+                    worktree_path = Path(extra[i + 1])
         code = run_orchestrate(plan_path, extra)
         if code != 0:
             print(
@@ -893,6 +906,27 @@ def _one_claim(root: Path, plans_root: Path, worker, args) -> tuple[int, int]:
                 file=sys.stderr,
             )
             return code, 1
+        from commit_prep import after_run_success
+
+        wt = worktree_path
+        if wt is None and "--worktree" in extra:
+            i = extra.index("--worktree")
+            if i + 1 < len(extra):
+                wt = Path(extra[i + 1])
+        prep = after_run_success(
+            wt,
+            slug,
+            plan_path,
+            no_commit=bool(getattr(args, "no_commit", False)),
+        )
+        if not prep.ok:
+            print(
+                f"[work_once] commit-prep red: {prep.error}; plan stays in-progress/",
+                file=sys.stderr,
+            )
+            return 2, 1
+        if prep.sha:
+            print(f"[work_once] committed {prep.sha} on feature/{slug}", file=sys.stderr)
         if not args.no_finish:
             try:
                 rel = str(plan_path.resolve().relative_to(plans_root.resolve()))

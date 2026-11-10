@@ -305,6 +305,8 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--no-finish", action="store_true",
                    help="with --run, leave the plan in in-progress/ even when "
                         "orchestrate exits 0")
+    p.add_argument("--no-commit", action="store_true",
+                   help="with --run, skip commit-prep + feature-branch commit")
     p.add_argument("--heartbeat", metavar="SLUG", help="extend your lease on SLUG")
     p.add_argument("--finish", metavar="SLUG", help="your in-progress SLUG → review-needed/")
     p.add_argument("--return", dest="return_ready", metavar="SLUG",
@@ -427,7 +429,8 @@ def _dispatch(args: argparse.Namespace, answers: Prompter, ctx: Ctx) -> Result:
             return run("work.return", WorkSlugParams(root=args.root, slug=args.return_ready), answers, ctx)
         return run("work.claim", WorkClaimParams(
             root=args.root, slug=args.slug, no_fit_check=args.no_fit_check,
-            run=not args.no_run, no_finish=args.no_finish, **worker,
+            run=not args.no_run, no_finish=args.no_finish,
+            no_commit=getattr(args, "no_commit", False), **worker,
         ), answers, ctx)
     if verb == "models":
         if args.list or args.action == "list" or not args.alias:

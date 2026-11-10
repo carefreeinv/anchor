@@ -26,7 +26,7 @@ anchor models list
 anchor fleet-watch --status
 ```
 
-`--run` is the default for `anchor work` (interactive **and** headless). Exit 0 parks in `review-needed/` unless `--no-finish`. Empty `review-needed/` with integration ahead of mainline: `anchor review` exits 2 and names `anchor review --promote`. `--root` if cwd has no `.plans/`. Skills (`/work`, `/review`, `/draft`) prefer
+`--run` is the default for `anchor work` (interactive **and** headless). Exit 0 **commit-preps** (tests + optional CHANGELOG nudge) and, on green, makes one product commit on `feature/<slug>` before parking in `review-needed/` unless `--no-finish`. Prep red leaves the plan in `in-progress/` (no commit, non-zero exit). `--no-commit` keeps apply-only. Empty `review-needed/` with integration ahead of mainline: `anchor review` exits 2 and names `anchor review --promote`. `--root` if cwd has no `.plans/`. Skills (`/work`, `/review`, `/draft`) prefer
 these verbs when `anchor` answered once this session.
 
 Implementation: verb logic lives in `scripts/anchor_ops.py` (a typed operations

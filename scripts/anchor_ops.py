@@ -235,6 +235,7 @@ class WorkClaimParams:
     recover: bool = False
     run: bool = False
     no_finish: bool = False
+    no_commit: bool = False
     tier: str | None = None
     model: str | None = None
     effort: str | None = None
@@ -699,6 +700,25 @@ def op_work_claim(params: WorkClaimParams, _answers: Answers, ctx: Ctx) -> Resul
             res.exit_code = EXIT_ERROR
             res.error = f"orchestrate.py exited {code}; plan stays in in-progress/"
             return res
+        from commit_prep import after_run_success
+
+        wt = None
+        if "--worktree" in extra:
+            i = extra.index("--worktree")
+            if i + 1 < len(extra):
+                wt = Path(extra[i + 1])
+        prep = after_run_success(
+            wt,
+            slug,
+            dest,
+            no_commit=params.no_commit,
+        )
+        if not prep.ok:
+            res.exit_code = EXIT_ERROR
+            res.error = f"commit-prep red: {prep.error}; plan stays in in-progress/"
+            return res
+        if prep.sha:
+            res.data["commit"] = prep.sha
         if params.no_finish:
             res.notes.append("--no-finish: plan stays in in-progress/")
             return res

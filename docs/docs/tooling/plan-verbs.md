@@ -3,7 +3,7 @@ sidebar_position: 1.5
 sidebar_label: Plan workflow verbs
 ---
 
-<!-- synced-from: anchor/cli.md @ a366e74ea0ad590e2f5b0d8112e2fdb767ceded5 -->
+<!-- synced-from: anchor/cli.md @ cfa49743fcfb223f2d5921dec0054de75bebd6a3 -->
 
 # The plan-workflow CLI: what `anchor` does itself, and what it hands back
 
@@ -33,7 +33,7 @@ anchor models list
 anchor fleet-watch --status
 ```
 
-`--run` is the default for `anchor work` (interactive **and** headless). Exit 0 parks in `review-needed/` unless `--no-finish`. Empty `review-needed/` with integration ahead of mainline: `anchor review` exits 2 and names `anchor review --promote`. `--root` if cwd has no `.plans/`. Skills (`/work`, `/review`, `/draft`) prefer
+`--run` is the default for `anchor work` (interactive **and** headless). Exit 0 **commit-preps** (tests + optional CHANGELOG nudge) and, on green, makes one product commit on `feature/<slug>` before parking in `review-needed/` unless `--no-finish`. Prep red leaves the plan in `in-progress/` (no commit, non-zero exit). `--no-commit` keeps apply-only. Empty `review-needed/` with integration ahead of mainline: `anchor review` exits 2 and names `anchor review --promote`. `--root` if cwd has no `.plans/`. Skills (`/work`, `/review`, `/draft`) prefer
 these verbs when `anchor` answered once this session.
 
 Implementation: verb logic lives in `scripts/anchor_ops.py` (a typed operations
@@ -281,8 +281,8 @@ usage: anchor work [-h] [--root ROOT] [--json] [--non-interactive] [--list]
                    [--agent-id AGENT_ID] [--tier TIER] [--model MODEL]
                    [--effort EFFORT] [--endpoint ENDPOINT]
                    [--registry REGISTRY] [--no-fit-check] [--run] [--no-run]
-                   [--no-finish] [--heartbeat SLUG] [--finish SLUG]
-                   [--return SLUG]
+                   [--no-finish] [--no-commit] [--heartbeat SLUG]
+                   [--finish SLUG] [--return SLUG]
                    [slug]
 
 positional arguments:
@@ -308,6 +308,7 @@ options:
   --no-run             claim only; do not start orchestrate.py
   --no-finish          with --run, leave the plan in in-progress/ even when
                        orchestrate exits 0
+  --no-commit          with --run, skip commit-prep + feature-branch commit
   --heartbeat SLUG     extend your lease on SLUG
   --finish SLUG        your in-progress SLUG → review-needed/
   --return SLUG        release your in-progress SLUG back to its ready lane
