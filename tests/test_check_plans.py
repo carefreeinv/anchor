@@ -52,6 +52,23 @@ def test_check_plans_flags_todo_lane(tmp_path):
     assert any("todo" in p for p in problems)
 
 
+def test_check_plans_flags_nested_misfiled_plan(tmp_path):
+    _write_ready(tmp_path / ".plans" / "features" / "ok.md")
+    nested = tmp_path / ".plans" / "features" / "sub" / "x.md"
+    nested.parent.mkdir(parents=True)
+    nested.write_text("# Plan: nested\n\n## Goal\nhidden\n")
+    problems = check_plans.check_plans(tmp_path)
+    assert any("features/sub/x.md: not a plan entry for this layout" in p for p in problems)
+
+
+def test_check_plans_status_in_fence_is_ok(tmp_path):
+    _write_ready(
+        tmp_path / ".plans" / "completed" / "done.md",
+        extra_header="```markdown\n- **Status:** open\n```\n\n",
+    )
+    assert check_plans.check_plans(tmp_path) == []
+
+
 def test_check_plans_drafts_need_no_sections(tmp_path):
     p = tmp_path / ".plans" / "drafts" / "sketch.md"
     p.parent.mkdir(parents=True)

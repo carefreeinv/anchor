@@ -277,6 +277,43 @@ def lane_names(plans_root: Path) -> list[str]:
     )
 
 
+_PLAN_SHAPED_RE = re.compile(
+    r"(?m)^#\s+Plan:|^\s*-\s*\*\*Slug:\*\*|^\s*##\s+Goal\b"
+)
+
+
+def _plan_shaped(text: str) -> bool:
+    return bool(_PLAN_SHAPED_RE.search(text))
+
+
+def misfiled(plans_root: Path) -> list[str]:
+    """Plan-shaped markdown inside a lane that the layout does not treat as an entry.
+
+    Nested files the layout does not recognise (e.g. ``features/sub/x.md``
+    under :class:`FlatLayout`) used to pass ``check_plans`` silently after
+    listing went through :func:`list_all`.
+    """
+    if not plans_root.is_dir():
+        return []
+    hits: list[str] = []
+    for lane in lane_names(plans_root):
+        lane_dir = plans_root / lane
+        for path in sorted(lane_dir.rglob("*.md")):
+            if not path.is_file() or path.name == "README.md":
+                continue
+            if _layout.name_from_path(lane_dir, path) is not None:
+                continue
+            try:
+                text = path.read_text(encoding="utf-8")
+            except OSError:
+                continue
+            if not _plan_shaped(text):
+                continue
+            rel = f"{lane}/{path.relative_to(lane_dir).as_posix()}"
+            hits.append(rel)
+    return hits
+
+
 def stray_entries(plans_root: Path) -> list[str]:
     """Plan-shaped names sitting directly in ``.plans/``, outside every lane."""
     if not plans_root.is_dir():

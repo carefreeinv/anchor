@@ -49,6 +49,9 @@ def check_plans(root: Path) -> list[str]:
     if not plans.is_dir():
         return [f"no .plans/ directory under {root}"]
 
+    for rel in plan_store.misfiled(plans):
+        problems.append(f"{rel}: not a plan entry for this layout")
+
     for name in plan_store.stray_entries(plans):
         problems.append(
             f"{name}: not under a known lane "
@@ -63,12 +66,13 @@ def check_plans(root: Path) -> list[str]:
             continue
 
         text = ref.path.read_text(encoding="utf-8")
+        body = re.sub(r"```.*?```", " ", text, flags=re.S)
 
-        if LANE_HEADER_RE.search(text) or LANE_BARE_RE.search(text):
+        if LANE_HEADER_RE.search(body) or LANE_BARE_RE.search(body):
             problems.append(
                 f"{rel}: obsolete Lane: header — path is authoritative; remove the field"
             )
-        if STATUS_HEADER_RE.search(text) or STATUS_BARE_RE.search(text):
+        if STATUS_HEADER_RE.search(body) or STATUS_BARE_RE.search(body):
             problems.append(
                 f"{rel}: obsolete Status: header — path is authoritative; remove the field"
             )

@@ -199,6 +199,16 @@ def test_discover_project_root_walks_to_plans(tmp_path: Path):
     assert plan_store.discover_project_root(tmp_path) is None
 
 
+def test_misfiled_nested_plan(plans: Path, layout):
+    _write(plans, "features", "ok")
+    nested = plans / "features" / "sub" / "x.md"
+    nested.parent.mkdir(parents=True)
+    nested.write_text("# Plan: nested\n\n## Goal\nhidden\n", encoding="utf-8")
+    hits = plan_store.misfiled(plans)
+    assert any(h.endswith("sub/x.md") for h in hits)
+    assert not any(h.endswith("ok.md") or h.endswith("ok/plan.md") for h in hits)
+
+
 def test_stray_entries(plans: Path):
     (plans / "README.md").write_text("# plans\n", encoding="utf-8")
     (plans / "loose.md").write_text("# loose\n", encoding="utf-8")

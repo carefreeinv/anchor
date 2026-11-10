@@ -6,6 +6,10 @@ Newest first.
 
 ## [Unreleased]
 
+### Added
+
+- **`check_plans` reports nested misfiled plans.** `plan_store.misfiled()` finds plan-shaped markdown inside a lane that the active layout does not treat as an entry (e.g. `features/sub/x.md` under the flat layout). Obsolete `Status:` / `Lane:` lines inside fenced examples no longer fail the check.
+
 ### Fixed
 
 - **CLI critic pytest/docs-sync use the feature worktree.** `critic_verification_block` runs those commands in `infer_finish_git_dir` (`feature/<slug>`) so VERIFICATION is not the unfixed `dev`/`main` checkout. The block records `verification cwd:`.
