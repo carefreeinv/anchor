@@ -653,15 +653,30 @@ def test_review_approve_flag_headless_fast_forwards(repo_project):
     assert (repo_project / ".plans" / "completed" / "r1.md").is_file()
 
 
-def test_review_approve_flag_blocks_revise_without_force(project):
+def test_review_approve_flag_blocks_revise_without_force(project, critic_fleet):
     write(project, "review-needed", "r1")
-    # no critic → verdict missing; ACCEPT path. Force the REVISE branch via
-    # --no-delegate then we cannot inject verdict; skip.
     code, doc = cli(
-        ["review", "r1", "--approve", "--no-delegate", "--root", str(project)],
+        ["review", "r1", "--approve", "--delegate", "--root", str(project),
+         "--registry", str(critic_fleet)],
+    )
+    assert code == 3, doc
+    assert (project / ".plans" / "review-needed" / "r1.md").is_file()
+    assert not (project / ".plans" / "completed" / "r1.md").exists()
+    pending = " ".join(p.get("detail", "") for p in doc.get("pending") or [])
+    assert "--force-approve" in pending or "force-approve" in pending.lower() or (
+        "REVISE" in (doc.get("error") or "") or "REVISE" in pending
+    )
+
+
+def test_review_force_approve_merges_revise(project, critic_fleet):
+    write(project, "review-needed", "r1")
+    code, doc = cli(
+        ["review", "r1", "--approve", "--force-approve", "--delegate",
+         "--root", str(project), "--registry", str(critic_fleet)],
     )
     assert code == 0, doc
-    assert doc["result"]["moved_to"] == "completed/r1.md"
+    assert doc["result"]["decision"] == "approve"
+    assert (project / ".plans" / "completed" / "r1.md").is_file()
 
 
 # --- draft ------------------------------------------------------------------------

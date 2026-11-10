@@ -12,6 +12,8 @@ Newest first.
 
 ### Fixed
 
+- **CI covers `--approve` blocked on critic REVISE.** The test injects a REVISE critic and asserts exit 3 without `--force-approve`; `--force-approve` still archives.
+
 - **`anchor work --finish` sees commits in the plan's git worktree.** Finish-gate `since..HEAD` uses the linked `feature/<slug>` worktree when the primary checkout is still on `dev`/`main`.
 
 ## [0.4.0] - 2026-11-10
