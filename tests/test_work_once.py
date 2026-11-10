@@ -666,6 +666,16 @@ def test_orchestrate_worktree_args_uses_ensure(tmp_path, monkeypatch):
     assert extra == ["--worktree", str(Rec.path)]
 
 
+def test_orchestrate_worktree_args_ensure_fail_omits_worktree(tmp_path, monkeypatch):
+    def boom(*_a, **_k):
+        raise RuntimeError("not a git repository")
+
+    monkeypatch.setattr("worktree_for_agent.ensure_worktree", boom)
+    monkeypatch.setattr(work_once, "_git_branch", lambda _p: "feature/x")
+    extra = work_once.orchestrate_worktree_args(tmp_path, "w", "a")
+    assert extra == []
+
+
 def test_orchestrate_worktree_args_skips_mainline(tmp_path, monkeypatch):
     class Rec:
         path = tmp_path / "wt"

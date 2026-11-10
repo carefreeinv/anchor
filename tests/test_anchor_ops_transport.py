@@ -199,7 +199,10 @@ def test_headless_refuses_injected_run(project):
     assert res.data.get("orchestrate_exit") == 0
 
 
-def test_interactive_run_forwards_endpoint(project, tmp_path):
+def test_interactive_run_forwards_endpoint(project, tmp_path, monkeypatch):
+    import work_once
+
+    monkeypatch.setattr(work_once, "_git_branch", lambda _p: "main")
     seen: list[list[str]] = []
 
     def orch(_dest, extra):
@@ -229,4 +232,4 @@ def test_interactive_run_forwards_endpoint(project, tmp_path):
     assert seen
     extra = seen[0]
     assert extra[:4] == ["--registry", str(reg), "--endpoint", "nemoclaw"]
-    assert extra[4:6][0] == "--worktree"
+    assert "--worktree" not in extra

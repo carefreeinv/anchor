@@ -268,9 +268,9 @@ def orchestrate_worktree_args(
                 f"[work_once] worktree ensure skipped: {exc}",
                 file=sys.stderr,
             )
-            path = None
+            return []
     if path is None:
-        path = Path.cwd()
+        return []
     branch = _git_branch(path)
     if branch in MAINLINE_BRANCHES:
         print(

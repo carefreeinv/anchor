@@ -10,6 +10,8 @@ Newest first.
 
 - **CLI critic pytest/docs-sync use the feature worktree.** `critic_verification_block` runs those commands in `infer_finish_git_dir` (`feature/<slug>`) so VERIFICATION is not the unfixed `dev`/`main` checkout. The block records `verification cwd:`.
 
+- **`work.claim` omits `--worktree` when ensure fails.** `orchestrate_worktree_args` no longer falls back to `Path.cwd()`, so pytest on `main` does not IndexError in `test_interactive_run_forwards_endpoint`, and orchestrate never gets the operator checkout as `--worktree`.
+
 ## [0.4.1] - 2026-11-10
 
 ### Added
