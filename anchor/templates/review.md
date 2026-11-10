@@ -18,7 +18,9 @@
 - [ ] No step ran on a tier more expensive than the task needed
 
 ## Verdict
-ACCEPT | REVISE (with the single most important fix) | ESCALATE (with what the bigger model must decide)
+ACCEPT
+
+<!-- Next line after ## Verdict is exactly one of ACCEPT | REVISE | ESCALATE. No other text in this section. Fixes and what a bigger model must decide go under Notes. -->
 
 ## Notes for next task
 <anything the planner should know>

@@ -1136,14 +1136,17 @@ def test_critic_instruct_last_slice_forbids_chunk_false_revise():
     assert "Pick-order" in mid
     last = critic_instruct(3, 3, last=True)
     assert "WHOLE plan" in last
-    assert "Do not REVISE because" in last
+    assert "exactly one word" in last
+    assert "No other text in that section" in last
+    assert "## Notes" in last
     assert "pytest exit non-zero" in last
     assert "or pytest TIMEOUT" not in last
-    assert "do not REVISE solely for TIMEOUT" in last
-    assert "Do not ACCEPT solely because docs-sync" in last
+    assert "TIMEOUT is evidence" in last
+    assert "docs-sync OK" in last
     assert "docs-sync OK (or skipped) and earlier slices" not in last
     assert "PICK-ORDER" in last
     assert "Pick-order" in last
+    assert last.count("REVISE") <= 2
 
 
 PREPEND_BUILD_HUNK = '''

@@ -232,8 +232,9 @@ def delegate(
     if role == "critic":
         system = (
             "You are a code critic. Do not implement. Follow the review "
-            "template in the user message. End with ## Verdict and exactly "
-            "one of ACCEPT, REVISE, or ESCALATE."
+            "template in the user message. End with ## Verdict, then a line "
+            "that is exactly ACCEPT, REVISE, or ESCALATE and nothing else. "
+            "Put all other commentary under ## Notes."
         )
     else:
         try:

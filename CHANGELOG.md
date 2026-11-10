@@ -14,6 +14,8 @@ Newest first.
 
 ### Fixed
 
+- **CLI critic `## Verdict` is a single word.** Last-slice instruct, critic system prompt, and `templates/review.md` require the next line after `## Verdict` to be exactly ACCEPT, REVISE, or ESCALATE; rationale goes under `## Notes` so “do not REVISE …” prose cannot flip an ACCEPT.
+
 - **CI covers `--approve` blocked on critic REVISE.** The test injects a REVISE critic and asserts exit 3 without `--force-approve`; `--force-approve` still archives.
 
 - **`anchor work --finish` sees commits in the plan's git worktree.** Finish-gate `since..HEAD` uses the linked `feature/<slug>` worktree when the primary checkout is still on `dev`/`main`.
