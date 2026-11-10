@@ -935,6 +935,11 @@ def test_review_approve_with_remote_only_branch_does_not_archive(repo_project, t
         ("## Verdict\nACCEPT\nDo not REVISE because verification was not pasted.", "ACCEPT"),
         ("## Verdict ACCEPT\nREVISE if VERIFICATION shows pytest exit non-zero.", "ACCEPT"),
         ("## Verdict\nACCEPT\n\n**Verdict: REVISE**", "REVISE"),
+        # Packaged critic: ### Verdict ACCEPT, then ### Notes with a backticked example
+        ("### Verdict\n**ACCEPT**\n\n### Notes for next task\n"
+         "- later `Verdict: REVISE` labeled lines still win.\n", "ACCEPT"),
+        ("## Verdict\nACCEPT\n\npytest TIMEOUT after 60s; do not REVISE solely for TIMEOUT.\n",
+         "ACCEPT"),
     ],
 )
 def test_critic_verdict(text, verdict):

@@ -894,6 +894,7 @@ def critic_verdict(text: str) -> str:
         return max(words, key=lambda w: rank[w])
 
     def _strip_meta(blob: str) -> str:
+        blob = re.sub(r"`[^`]*`", " ", blob)
         return _VERDICT_META_RE.sub(" ", blob)
 
     def _words(blob: str) -> set[str]:
@@ -923,7 +924,7 @@ def critic_verdict(text: str) -> str:
     for i, m in enumerate(matches):
         had_heading = True
         end = matches[i + 1].start() if i + 1 < len(matches) else len(cleaned)
-        nxt_h = re.search(r"^##\s", cleaned[m.end():end], re.MULTILINE)
+        nxt_h = re.search(r"^#{2,}\s", cleaned[m.end():end], re.MULTILINE)
         stop = m.end() + nxt_h.start() if nxt_h else end
         heading = cleaned[m.start():m.end()]
         body = cleaned[m.end():stop]

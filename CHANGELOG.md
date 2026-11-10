@@ -271,7 +271,7 @@ Newest first.
 
 ### Fixed
 
-- **`critic_verdict` ignores REVISE mentioned in ACCEPT prose.** Negation/meta spans (`do not REVISE`, `against REVISE`) and a `## Verdict ACCEPT` heading no longer lose to a later mention of the word. A later labeled `Verdict: REVISE` still wins. Mixed “I would REVISE; ACCEPT otherwise” without a heading stays REVISE.
+- **`critic_verdict` ignores REVISE mentioned in ACCEPT prose.** Negation/meta spans (`do not REVISE`, `against REVISE`, `do not REVISE solely for TIMEOUT`) and a `## Verdict ACCEPT` heading no longer lose to a later mention of the word. A later ATX heading (`### Notes`) ends the verdict section, so a backticked `Verdict: REVISE` example in notes does not override ACCEPT. A later labeled `Verdict: REVISE` in the same section still wins. Mixed “I would REVISE; ACCEPT otherwise” without a heading stays REVISE.
 
 - **Tiny / swarm workers refuse mid-or-higher plans.** Highest listed
   Preferred tier is the floor: `small, mid` is mid work. `classify_fit`,
