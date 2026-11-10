@@ -827,7 +827,7 @@ def _review_package(root: Path, slug: str) -> dict[str, Any]:
     import merge_feature as mf
 
     branch = f"feature/{slug}"
-    pkg: dict[str, Any] = {"branch": None, "target": None, "head": None,
+    pkg: dict[str, Any] = {"slug": slug, "branch": None, "target": None, "head": None,
                            "fast_forward": None, "already_merged": None, "changed": [],
                            "remote_only": []}
     try:
@@ -1194,6 +1194,16 @@ def critic_changed_stat(root: Path, target: str, head: str) -> str:
     return (p.stdout or p.stderr or "").strip() or "(empty)"
 
 
+def critic_verify_cwd(root: Path, pkg: dict[str, Any]) -> Path:
+    """Tree to pytest/docs-sync: ``feature/<slug>`` worktree when it exists."""
+    slug = str(pkg.get("slug") or "").strip()
+    if not slug:
+        return Path(root)
+    import plan_finish_gate
+
+    return plan_finish_gate.infer_finish_git_dir(Path(root), slug)
+
+
 def critic_docs_sync(root: Path, timeout: float = 30.0) -> str:
     script = Path(root) / "scripts" / "check_docs_sync.py"
     if not script.is_file():
@@ -1339,8 +1349,13 @@ def critic_verification_block(root: Path, pkg: dict[str, Any], diff: str) -> str
             "CHANGED FILES (full range, not this chunk):\n"
             + critic_changed_stat(Path(root), str(target), str(head))
         )
-    parts.append(critic_docs_sync(Path(root)))
-    parts.append(critic_pytest_touched(Path(root), pkg))
+    cwd = critic_verify_cwd(Path(root), pkg)
+    loc = f"verification cwd: {cwd}"
+    if pkg.get("slug") and Path(cwd).resolve() == Path(root).resolve():
+        loc += " (no feature worktree)"
+    parts.append(loc)
+    parts.append(critic_docs_sync(cwd))
+    parts.append(critic_pytest_touched(cwd, pkg))
     pick = critic_pick_order_note(diff)
     if pick:
         parts.append(pick)

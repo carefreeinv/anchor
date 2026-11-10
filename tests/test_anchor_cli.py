@@ -1285,6 +1285,33 @@ def test_critic_pytest_paths_adds_ops_transport_when_ops_changes(tmp_path):
     ]
 
 
+def test_critic_verification_pytest_uses_feature_worktree(tmp_path, monkeypatch):
+    from anchor_ops import critic_verification_block
+
+    root = tmp_path / "primary"
+    wt = tmp_path / "wt"
+    for p in (root, wt):
+        (p / "tests").mkdir(parents=True)
+    (root / "tests" / "test_x.py").write_text(
+        "def test_x():\n    assert False\n", encoding="utf-8",
+    )
+    (wt / "tests" / "test_x.py").write_text(
+        "def test_x():\n    assert True\n", encoding="utf-8",
+    )
+
+    def fake_infer(r, slug, agent_id=None):
+        assert slug == "foo"
+        return wt
+
+    monkeypatch.setattr("plan_finish_gate.infer_finish_git_dir", fake_infer)
+    pkg = {"changed": ["tests/test_x.py"], "slug": "foo"}
+    block = critic_verification_block(root, pkg, "")
+    assert f"verification cwd: {wt}" in block
+    assert "(no feature worktree)" not in block
+    assert "pytest exit 0" in block
+    assert "assert False" not in block
+
+
 def test_critic_pytest_timeout_is_evidence_not_revise(tmp_path, monkeypatch):
     import subprocess
 

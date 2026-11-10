@@ -6,6 +6,10 @@ Newest first.
 
 ## [Unreleased]
 
+### Fixed
+
+- **CLI critic pytest/docs-sync use the feature worktree.** `critic_verification_block` runs those commands in `infer_finish_git_dir` (`feature/<slug>`) so VERIFICATION is not the unfixed `dev`/`main` checkout. The block records `verification cwd:`.
+
 ## [0.4.1] - 2026-11-10
 
 ### Added
