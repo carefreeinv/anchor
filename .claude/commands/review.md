@@ -31,8 +31,15 @@ never auto-promote).
 ## CLI this session
 
 Probe **once**: `command -v anchor` **and** `anchor review --help`. Success →
-list/delegate owned by the CLI for the rest of the session. Critic only on a
-**TTY** (`anchor review <slug>`); never pipe stdin. `--no-delegate` skips.
+list/critic owned by the CLI for the rest of the session.
+
+| Intent | argv |
+|--------|------|
+| List queue | `anchor review --list` |
+| Pick + critic | `anchor review` |
+| Named critic | `anchor review <slug>` (`--no-delegate` skips) |
+| Empty queue + ahead | `anchor review --promote` (operator required; never auto) |
+
 Human survey and merge stay in this command.
 
 `$ARGUMENTS` is everything after `/review`.

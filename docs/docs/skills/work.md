@@ -17,7 +17,7 @@ Execute the next (or named) ready plan from **`.plans/`**. Same contract on ever
 | List ready | `anchor work --list --json` |
 | Pick + execute | `anchor work` (default `--run`; interactive **and** headless) |
 | Named execute | `anchor work <slug>` |
-| Claim only | `anchor work --no-run` |
+| Claim only | `anchor work --no-run` (`anchor work --no-run <slug>` when named) |
 | Finish / return | `anchor work --finish|--return <slug> --agent-id <id>` |
 
 To **create** a plan first, use [**`/draft`**](/skills/draft) (writes under `.plans/drafts/`; optional `--local`).

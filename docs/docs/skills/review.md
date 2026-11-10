@@ -27,6 +27,13 @@ never auto-promote). Probe once this session (`anchor review --help`);
 last-known-good CLI wins over re-implementing the critic in chat. Survey and
 merge stay in the skill.
 
+| Intent | argv |
+|--------|------|
+| List queue | `anchor review --list` |
+| Pick + critic | `anchor review` |
+| Named critic | `anchor review <slug>` (`--no-delegate` skips) |
+| Empty queue + ahead | `anchor review --promote` (operator required; never auto) |
+
 ## Why use it
 
 | Without `/review` | With `/review` |

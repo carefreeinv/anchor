@@ -46,7 +46,7 @@ Named “do it in this chat” still executes here.
 | List ready | `anchor work --list --json` |
 | Pick + execute | `anchor work` (default `--run`; interactive **and** headless) |
 | Named execute | `anchor work <slug>` |
-| Claim only | `anchor work --no-run` (`--slug <slug>` when named) |
+| Claim only | `anchor work --no-run` (`anchor work --no-run <slug>` when named) |
 | Finish / return | `anchor work --finish|--return <slug> --agent-id <id>` |
 | No-TTY fallback | `python scripts/work_once.py --once --ensure-worktree --endpoint <name>` if headless `anchor work` is refused |
 
