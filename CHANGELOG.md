@@ -6,6 +6,8 @@ Newest first.
 
 ## [Unreleased]
 
+## [0.4.1] - 2026-11-10
+
 ### Added
 
 - **CLI critic thinking-on + confirmation pass.** `delegate()` passes `thinking=True` for critic (short system prompt, no mythos-core). Empty body retries thinking-off. Default two independent critic chats; disagreement takes the more cautious word (UNKNOWN never becomes ACCEPT). `--critic-passes 1` skips the confirmation.
