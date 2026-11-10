@@ -628,7 +628,10 @@ def op_work_finish(params: WorkSlugParams, _answers: Answers, ctx: Ctx) -> Resul
             f"{rel} {who}; only its lease holder may finish it"
         )
     plan_path = plans / rel
-    evidence = plan_finish_gate.check_finish(params.root, plan_path)
+    git_dir = plan_finish_gate.infer_finish_git_dir(
+        Path(params.root), params.slug, ctx.agent_id,
+    )
+    evidence = plan_finish_gate.check_finish(git_dir, plan_path)
     if not evidence.ok:
         raise plan_lease.ClaimError(
             f"empty-finish refused: {evidence.reason} "

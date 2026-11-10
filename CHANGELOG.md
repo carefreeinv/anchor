@@ -6,6 +6,10 @@ Newest first.
 
 ## [Unreleased]
 
+### Fixed
+
+- **`anchor work --finish` sees commits in the plan's git worktree.** Finish-gate `since..HEAD` uses the linked `feature/<slug>` worktree when the primary checkout is still on `dev`/`main`.
+
 ## [0.4.0] - 2026-11-10
 
 ### Added

@@ -59,6 +59,20 @@ def test_missing_since_fails_closed(tmp_path):
     assert "fail closed" in g.reason
 
 
+def test_infer_finish_git_dir_uses_linked_worktree(tmp_path):
+    root = _repo(tmp_path)
+    wt = tmp_path / "wt"
+    _git(root, "worktree", "add", "-b", "feature/demo", str(wt), "dev")
+    (wt / "scripts" / "work_once.py").write_text("from-wt\n", encoding="utf-8")
+    _git(wt, "add", "scripts/work_once.py")
+    _git(wt, "commit", "-m", "on worktree")
+    plan = root / ".plans" / "in-progress" / "demo.md"
+    assert not gate.check_finish(root, plan).ok
+    git_dir = gate.infer_finish_git_dir(root, "demo")
+    assert git_dir == wt.resolve()
+    assert gate.check_finish(git_dir, plan).ok
+
+
 def test_no_git_skips_evidence(tmp_path):
     d = tmp_path / "nogit"
     d.mkdir()

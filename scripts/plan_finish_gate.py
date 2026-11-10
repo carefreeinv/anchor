@@ -113,6 +113,40 @@ def git_repo(root: Path) -> bool:
     return _git(root, "rev-parse", "--is-inside-work-tree").returncode == 0
 
 
+def infer_finish_git_dir(
+    root: Path, slug: str, agent_id: str | None = None,
+) -> Path:
+    """Git dir whose HEAD is ``feature/<slug>`` when a linked worktree holds it.
+
+    ``anchor work --finish`` runs from the project root (``.plans/``). Commits
+    often live only on the per-agent worktree. Prefer that path for
+    ``since..HEAD``; fall back to ``root``.
+    """
+    root = Path(root).resolve()
+    want = f"refs/heads/feature/{slug}"
+    listed = _git(root, "worktree", "list", "--porcelain")
+    if listed.returncode == 0:
+        path: str | None = None
+        for line in listed.stdout.splitlines():
+            if line.startswith("worktree "):
+                path = line[9:]
+            elif line.startswith("branch ") and path:
+                if line[7:] == want:
+                    cand = Path(path)
+                    if git_repo(cand):
+                        return cand
+                path = None
+    if agent_id:
+        from worktree_for_agent import DEFAULT_REL_ROOT, safe_agent_id
+
+        cand = root / DEFAULT_REL_ROOT / safe_agent_id(agent_id)
+        if git_repo(cand):
+            br = _git(cand, "rev-parse", "--abbrev-ref", "HEAD")
+            if br.returncode == 0 and br.stdout.strip() == f"feature/{slug}":
+                return cand
+    return root
+
+
 def resolve_since(root: Path, since_ref: str | None) -> str | None:
     if since_ref:
         probe = _git(root, "rev-parse", "--verify", since_ref)
