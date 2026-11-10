@@ -133,7 +133,7 @@ Newest first.
 
 ### Changed
 
-- **Public docs lead with the CLI loop.** README Quick start, intro, quick-start (technical and non-technical), skill overview, and how-work-reaches-dev name `anchor work` / `anchor review` / `anchor draft "<desc>"` as the daily path; slash skills are the in-harness adapter after one probe. CHANGELOG Unreleased is a single Added/Changed/Fixed stack.
+- **Public docs lead with the CLI loop.** README Quick start, intro, quick-start (technical and non-technical), skill overview, and how-work-reaches-dev name `anchor work` / `anchor review` / `anchor draft "<desc>"` as the daily path; slash skills are the in-harness adapter after one probe. CHANGELOG Unreleased is a single Added/Changed/Fixed stack. That three-verb loop, `--run` commit-prep, and CLI-first docs are the shipped CLI cut; operator `/release` tags after `/review --promote` to `main`.
 
 - **Skills and standing rules match the default CLI loop.** GROK.md rule 13,
   CLAUDE.md prefer-anchor, `/work` `/review` `/draft` skill tables (and
