@@ -226,11 +226,9 @@ def delegate(
             ep = fleet.lookup(endpoint)
         except LookupError:
             raise NotDelegated(f"no endpoint named {endpoint!r} in {reg}")
-    # Critic must emit a Verdict in the completion budget. Mythos-core +
-    # thinking-on burns NVIDIA Lightning's max_tokens on hidden reasoning
-    # (HTTP 200, finish_reason=length, empty content). Planner drafts still
-    # load doctrine and think.
-    thinking = role != "critic"
+    # Critic uses a short system prompt (no mythos-core) and thinking-on.
+    # Planner still loads doctrine. Empty Lightning bodies retry thinking-off.
+    thinking = True
     if role == "critic":
         system = (
             "You are a code critic. Do not implement. Follow the review "
@@ -242,12 +240,11 @@ def delegate(
             system = anchor_client.load_prompt(MYTHOS_CORE)
         except OSError as exc:
             raise NotDelegated(f"doctrine {MYTHOS_CORE} not found: {exc}") from exc
+    msgs = [{"role": "system", "content": system}, {"role": "user", "content": user}]
     try:
-        text = ep.chat(
-            [{"role": "system", "content": system}, {"role": "user", "content": user}],
-            thinking=thinking,
-            max_tokens=8192,
-        )
+        text = ep.chat(msgs, thinking=thinking, max_tokens=8192)
+        if role == "critic" and not (text or "").strip():
+            text = ep.chat(msgs, thinking=False, max_tokens=8192)
     except Exception as exc:
         raise NotDelegated(f"{ep.name}: {exc}") from exc
     return ep.name, text
@@ -336,6 +333,8 @@ def build_parser() -> argparse.ArgumentParser:
                    help="move the plan to blocked/")
     p.add_argument("--force-approve", action="store_true",
                    help="with --approve: merge even if the critic is REVISE/UNKNOWN/ESCALATE")
+    p.add_argument("--critic-passes", type=int, default=2, metavar="N",
+                   help="independent critic chats to merge (default 2; 1 skips confirmation)")
     p.add_argument("--notes", help="with --needs-work or --defer: required notes")
     p.add_argument("--to", choices=("bugs", "features"),
                    help="with --needs-work: ready lane (default: bugs)")
@@ -555,6 +554,7 @@ def _dispatch(args: argparse.Namespace, answers: Prompter, ctx: Ctx) -> Result:
             registry=args.registry, no_delegate=no_delegate,
             decision=decision,
             force_approve=bool(args.force_approve),
+            critic_passes=max(1, int(getattr(args, "critic_passes", 2) or 2)),
             notes=args.notes,
             to=args.to or ("bugs" if args.needs_work else None),
         ), answers, ctx)

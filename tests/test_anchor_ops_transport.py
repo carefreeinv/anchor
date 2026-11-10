@@ -173,7 +173,7 @@ def test_headless_refuses_injected_delegate(project):
         ops.NeverAnswers(),
         ctx,
     )
-    assert calls == ["critic"]
+    assert calls == ["critic", "critic"]
     assert ops.NEEDS_OPERATOR in [p["needs"] for p in res.pending]
 
 

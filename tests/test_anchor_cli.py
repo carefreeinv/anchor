@@ -724,8 +724,9 @@ class _StubEndpoint:
     last_user: str | None = None
     users: list[str] = []
 
-    def __init__(self, reply: str) -> None:
-        self.reply = reply
+    def __init__(self, reply: str | list[str]) -> None:
+        self.replies = [reply] if isinstance(reply, str) else list(reply)
+        self.reply = self.replies[0]
         self.calls = 0
         self.users = []
 
@@ -738,7 +739,7 @@ class _StubEndpoint:
         _StubEndpoint.last_system = sys_txt
         _StubEndpoint.last_user = user_txt
         self.users.append(user_txt)
-        return self.reply
+        return self.replies[min(self.calls - 1, len(self.replies) - 1)]
 
 
 @pytest.fixture
@@ -1065,7 +1066,7 @@ def test_review_no_delegate_skips_critic_chat(project, critic_fleet):
     assert "critic" not in (doc.get("result") or {})
 
 
-def test_review_delegate_critic_thinks_off(project, critic_fleet):
+def test_review_delegate_critic_thinks_on(project, critic_fleet):
     write(project, "review-needed", "r1")
     _StubEndpoint.last_kw = None
     code, doc = cli(
@@ -1075,11 +1076,56 @@ def test_review_delegate_critic_thinks_off(project, critic_fleet):
     )
     assert code == 0
     assert _StubEndpoint.last_kw is not None
-    assert _StubEndpoint.last_kw.get("thinking") is False
+    assert _StubEndpoint.last_kw.get("thinking") is True
     assert _StubEndpoint.last_kw.get("max_tokens") == 8192
     assert "code critic" in (_StubEndpoint.last_system or "").lower()
     assert "mythos" not in (_StubEndpoint.last_system or "").lower()
     assert doc["result"]["critic"]["verdict"] == "REVISE"
+    assert len(doc["result"]["critic"].get("passes") or []) == 2
+
+
+def test_merge_critic_verdicts():
+    from anchor_ops import merge_critic_verdicts
+
+    assert merge_critic_verdicts("ACCEPT", "ACCEPT") == "ACCEPT"
+    assert merge_critic_verdicts("ACCEPT", "REVISE") == "REVISE"
+    assert merge_critic_verdicts("UNKNOWN", "ACCEPT") == "UNKNOWN"
+    assert merge_critic_verdicts("ACCEPT", "UNKNOWN") == "UNKNOWN"
+    assert merge_critic_verdicts("UNKNOWN", "REVISE") == "REVISE"
+
+
+def test_review_critic_passes_disagreement_is_revise(project, monkeypatch, tmp_path):
+    pytest.importorskip("anchor_client")
+    import anchor_client
+
+    ep = _StubEndpoint([
+        "Findings: none.\n\n## Verdict\nACCEPT",
+        "H1 is real.\n\n## Verdict\nREVISE",
+    ])
+
+    class StubFleet:
+        def __init__(self, _path, **_kw):
+            self.endpoints = [ep]
+
+        def pick(self, _role):
+            return ep
+
+        def lookup(self, _name):
+            return ep
+
+    reg = tmp_path / "endpoints.yaml"
+    reg.write_text("endpoints: []\n", encoding="utf-8")
+    monkeypatch.setattr(anchor_client, "Fleet", StubFleet)
+    write(project, "review-needed", "r1")
+    code, doc = cli(
+        ["review", "r1", "--root", str(project), "--json", "--delegate",
+         "--registry", str(reg)],
+        interactive=True, answers=["skip"],
+    )
+    assert code == 0
+    assert doc["result"]["critic"]["verdict"] == "REVISE"
+    assert doc["result"]["critic"]["passes"] == ["ACCEPT", "REVISE"]
+    assert any("disagreed" in n for n in doc["notes"])
 
 
 def test_critic_instruct_last_slice_forbids_chunk_false_revise():

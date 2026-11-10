@@ -3,7 +3,7 @@ sidebar_position: 1.5
 sidebar_label: Plan workflow verbs
 ---
 
-<!-- synced-from: anchor/cli.md @ 296a81d876081ae0b7d611adb4eff61dd6eb0af7 -->
+<!-- synced-from: anchor/cli.md @ 50d5c1a40ed2582424dc8d30afe882d1d5a262b9 -->
 
 # The plan-workflow CLI: what `anchor` does itself, and what it hands back
 
@@ -15,7 +15,9 @@ the highest-priority ready plan and executes it (`--no-run` claims only).
 **`anchor review`** picks the highest-priority `review-needed/` plan and runs
 the critic (`--list` still lists). `--approve` / `--needs-work` / `--skip` /
 `--defer` consume the survey from the CLI (`--force-approve` when the critic is
-REVISE). **`anchor draft "a short brief"`** asks the
+REVISE). The critic chat uses thinking-on and a short system prompt (no
+mythos-core). Default two independent passes; disagreement is the more cautious
+verdict. `--critic-passes 1` skips the confirmation. **`anchor draft "a short brief"`** asks the
 planner for a full plan under `drafts/` (default `*.local.md`; `--no-delegate`
 keeps the skeleton). No decision flag still needs a TTY (or those flags).
 
@@ -513,9 +515,9 @@ options:
 ```text
 usage: anchor review [-h] [--root ROOT] [--json] [--non-interactive] [--list]
                      [--promote] [--approve | --needs-work | --skip | --defer]
-                     [--force-approve] [--notes NOTES] [--to {bugs,features}]
-                     [--delegate [ENDPOINT]] [--no-delegate]
-                     [--registry REGISTRY]
+                     [--force-approve] [--critic-passes N] [--notes NOTES]
+                     [--to {bugs,features}] [--delegate [ENDPOINT]]
+                     [--no-delegate] [--registry REGISTRY]
                      [slug]
 
 positional arguments:
@@ -538,6 +540,8 @@ options:
   --defer               move the plan to blocked/
   --force-approve       with --approve: merge even if the critic is
                         REVISE/UNKNOWN/ESCALATE
+  --critic-passes N     independent critic chats to merge (default 2; 1 skips
+                        confirmation)
   --notes NOTES         with --needs-work or --defer: required notes
   --to {bugs,features}  with --needs-work: ready lane (default: bugs)
   --delegate [ENDPOINT]

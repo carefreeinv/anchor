@@ -293,6 +293,7 @@ class ReviewParams:
     force_approve: bool = False
     notes: str | None = None
     to: str | None = None
+    critic_passes: int = 2
 
 
 @dataclass(frozen=True)
@@ -946,6 +947,22 @@ def critic_verdict(text: str) -> str:
     return _pick(_words(cleaned))
 
 
+def merge_critic_verdicts(first: str, second: str) -> str:
+    """More cautious of two words. UNKNOWN never upgrades to ACCEPT."""
+    rank = {"ESCALATE": 3, "REVISE": 2, "ACCEPT": 1, "UNKNOWN": 0}
+    a, b = (first or "UNKNOWN").upper(), (second or "UNKNOWN").upper()
+    if a not in rank:
+        a = "UNKNOWN"
+    if b not in rank:
+        b = "UNKNOWN"
+    if a == "UNKNOWN" or b == "UNKNOWN":
+        other = b if a == "UNKNOWN" else a
+        if other == "ACCEPT" or other == "UNKNOWN":
+            return "UNKNOWN"
+        return other
+    return a if rank[a] >= rank[b] else b
+
+
 def _promote_hint(root: str) -> tuple[str, str, int] | None:
     import pending_merges
 
@@ -1391,46 +1408,67 @@ def _critic(params: ReviewParams, ctx: Ctx, ref, pkg, root: Path, res: Result) -
     chunks = diff_chunks(diff)
     pieces: list[str] = []
     name = params.delegate or "auto"
+    passes = max(1, int(getattr(params, "critic_passes", 2) or 2))
+    pass_verdicts: list[str] = []
+    pass_texts: list[str] = []
     try:
-        for i, chunk in enumerate(chunks, 1):
-            last = i == len(chunks)
-            prior = ""
-            if pieces:
-                joined = "\n---\n".join(pieces[-3:])
-                if len(joined) > CRITIC_PRIOR_CAP:
-                    joined = joined[:CRITIC_PRIOR_CAP] + "\n…"
-                prior = (
-                    "\n\nEARLIER SLICE NOTES (not a verdict; defects in those "
-                    "slices only):\n" + joined
+        for _pass in range(passes):
+            pieces = []
+            for i, chunk in enumerate(chunks, 1):
+                last = i == len(chunks)
+                prior = ""
+                if pieces:
+                    joined = "\n---\n".join(pieces[-3:])
+                    if len(joined) > CRITIC_PRIOR_CAP:
+                        joined = joined[:CRITIC_PRIOR_CAP] + "\n…"
+                    prior = (
+                        "\n\nEARLIER SLICE NOTES (not a verdict; defects in those "
+                        "slices only):\n" + joined
+                    )
+                user = build_critic_user(
+                    instruct=critic_instruct(i, len(chunks), last=last),
+                    template=template,
+                    plan_body=plan_body,
+                    verification=verification,
+                    prior=prior,
+                    chunk=chunk,
                 )
-            user = build_critic_user(
-                instruct=critic_instruct(i, len(chunks), last=last),
-                template=template,
-                plan_body=plan_body,
-                verification=verification,
-                prior=prior,
-                chunk=chunk,
-            )
-            name, out = _try_delegate(
-                ctx, endpoint=params.delegate or "auto", role="critic",
-                registry=params.registry, user=user,
-            )
-            pieces.append(out)
+                name, out = _try_delegate(
+                    ctx, endpoint=params.delegate or "auto", role="critic",
+                    registry=params.registry, user=user,
+                )
+                pieces.append(out)
+            last_text = pieces[-1] if pieces else ""
+            pass_verdicts.append(critic_verdict(last_text))
+            if len(pieces) > 1:
+                last_text = "\n\n".join(
+                    [f"## Chunk {i}\n{p}" for i, p in enumerate(pieces, 1)]
+                )
+            pass_texts.append(last_text)
     except NotDelegated as exc:
         res.notes.append(f"critic not delegated: {exc}")
         res.need("critic", NEEDS_MODEL,
                  "AI critic pass over the plan's Done when and the branch diff")
         return
-    out = pieces[-1] if pieces else ""
-    if len(pieces) > 1:
+    verdict = pass_verdicts[0] if pass_verdicts else "UNKNOWN"
+    for extra in pass_verdicts[1:]:
+        verdict = merge_critic_verdicts(verdict, extra)
+    if len(pass_verdicts) > 1 and len(set(pass_verdicts)) > 1:
+        res.notes.append(
+            "critic passes disagreed: " + ", ".join(pass_verdicts)
+            + f" → {verdict}"
+        )
+    out = pass_texts[-1] if pass_texts else ""
+    if len(pass_texts) > 1:
         out = "\n\n".join(
-            [f"## Chunk {i}\n{p}" for i, p in enumerate(pieces, 1)]
+            f"## Pass {i}\n{t}" for i, t in enumerate(pass_texts, 1)
         )
     res.data["critic"] = {
         "endpoint": name,
-        "verdict": critic_verdict(pieces[-1] if pieces else ""),
+        "verdict": verdict,
         "text": out,
-        "chunks": len(pieces),
+        "chunks": len(chunks),
+        "passes": pass_verdicts,
     }
     if ctx.display is not None:
         ctx.display(f"--- critic ({name}) ---\n{out}\n---")

@@ -8,6 +8,8 @@ Newest first.
 
 ### Added
 
+- **CLI critic thinking-on + confirmation pass.** `delegate()` passes `thinking=True` for critic (short system prompt, no mythos-core). Empty body retries thinking-off. Default two independent critic chats; disagreement takes the more cautious word (UNKNOWN never becomes ACCEPT). `--critic-passes 1` skips the confirmation.
+
 - **`anchor review --approve`.** `--needs-work`, `--skip`, `--defer` consume the survey from the CLI. `--force-approve` is required when the critic is REVISE/UNKNOWN/ESCALATE. No decision flag still exits 3 and does not merge.
 
 ### Fixed

@@ -8,7 +8,9 @@ the highest-priority ready plan and executes it (`--no-run` claims only).
 **`anchor review`** picks the highest-priority `review-needed/` plan and runs
 the critic (`--list` still lists). `--approve` / `--needs-work` / `--skip` /
 `--defer` consume the survey from the CLI (`--force-approve` when the critic is
-REVISE). **`anchor draft "a short brief"`** asks the
+REVISE). The critic chat uses thinking-on and a short system prompt (no
+mythos-core). Default two independent passes; disagreement is the more cautious
+verdict. `--critic-passes 1` skips the confirmation. **`anchor draft "a short brief"`** asks the
 planner for a full plan under `drafts/` (default `*.local.md`; `--no-delegate`
 keeps the skeleton). No decision flag still needs a TTY (or those flags).
 
