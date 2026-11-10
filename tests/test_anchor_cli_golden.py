@@ -8,17 +8,15 @@ Regenerate with: ANCHOR_UPDATE_GOLDENS=1 python3 -m pytest tests/test_anchor_cli
 """
 from __future__ import annotations
 
-import io
 import json
 import os
 import re
 import subprocess
-import sys
 from pathlib import Path
 
 import anchor_cli
 import pytest
-from test_anchor_cli import TTY, cli, write
+from test_anchor_cli import cli, write
 
 GOLDEN = Path(__file__).resolve().parent / "golden" / "anchor_cli"
 SHA = re.compile(r"\b[0-9a-f]{40}\b")

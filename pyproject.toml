@@ -31,6 +31,7 @@ py-modules = [
     "anchor_cli",
     "anchor_ops",
     "anchor_client",
+    "commit_prep",
     "fit_device",
     "fleet_watch",
     "inference_load",
