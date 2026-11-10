@@ -252,7 +252,7 @@ def test_work_list_empty_is_nothing_to_do(project):
 def test_work_claims_and_hands_execution_back(project):
     write(project, "features", "f1", priority="P3")
     write(project, "bugs", "b1")
-    code, doc = cli(["work", "--root", str(project), "--agent-id", "a1"])
+    code, doc = cli(["work", "--no-run", "--root", str(project), "--agent-id", "a1"])
     assert code == 0
     assert doc["result"]["plan"] == "in-progress/b1.md"
     assert plan_store.owner(project / ".plans", "in-progress/b1.md") == "a1"
@@ -260,15 +260,22 @@ def test_work_claims_and_hands_execution_back(project):
     assert doc["pending"][0]["needs"] == "model"
 
 
-def test_work_run_is_refused_headless(project, monkeypatch):
+def test_work_run_headless_starts_orchestrate(project, monkeypatch):
     import work_once
 
-    monkeypatch.setattr(work_once, "run_orchestrate", lambda *a: pytest.fail("model started"))
+    seen: list = []
+
+    def fake_orch(dest, extra):
+        seen.append(dest)
+        return 0
+
+    monkeypatch.setattr(work_once, "run_orchestrate", fake_orch)
+    monkeypatch.setattr(work_once, "orchestrate_worktree_args", lambda *a, **k: [])
     write(project, "features", "f1")
     code, doc = cli(["work", "--root", str(project), "--agent-id", "a1", "--run"])
     assert code == 0
-    assert any("--run ignored" in n for n in doc["notes"])
-    assert doc["pending"][0]["step"] == "execute"
+    assert seen
+    assert doc["result"]["plan"] == "review-needed/f1.md"
 
 
 def test_work_run_forwards_endpoint_interactive(project, monkeypatch, tmp_path):
@@ -382,25 +389,32 @@ def test_work_run_interactive_no_finish_keeps_lease(project, monkeypatch):
     assert any("no-finish" in n for n in doc["notes"])
 
 
-def test_work_run_headless_notes_dropped_endpoint(project, monkeypatch):
+def test_work_run_headless_forwards_endpoint(project, monkeypatch):
     import work_once
 
-    monkeypatch.setattr(work_once, "run_orchestrate", lambda *a: pytest.fail("model started"))
+    seen: list[list[str]] = []
+
+    def fake_orch(_dest, extra):
+        seen.append(list(extra))
+        return 0
+
+    monkeypatch.setattr(work_once, "run_orchestrate", fake_orch)
+    monkeypatch.setattr(work_once, "orchestrate_worktree_args", lambda *a, **k: [])
     write(project, "features", "f1")
     code, doc = cli(
         ["work", "--root", str(project), "--agent-id", "a1", "--run",
-         "--endpoint", "h100-executor"],
+         "--endpoint", "h100-executor", "--no-fit-check"],
     )
     assert code == 0
-    assert any("h100-executor" in n and "--endpoint" in n for n in doc["notes"])
+    assert seen and "--endpoint" in seen[0] and "h100-executor" in seen[0]
 
 
 def test_work_heartbeat_finish_return(project):
     plans = project / ".plans"
     write(project, "features", "f1")
     write(project, "features", "f2")
-    cli(["work", "f1", "--root", str(project), "--agent-id", "a1"])
-    cli(["work", "f2", "--root", str(project), "--agent-id", "a1"])
+    cli(["work", "f1", "--no-run", "--root", str(project), "--agent-id", "a1"])
+    cli(["work", "f2", "--no-run", "--root", str(project), "--agent-id", "a1"])
 
     code, doc = cli(["work", "--heartbeat", "f1", "--root", str(project), "--agent-id", "a1"])
     assert code == 0 and doc["result"]["plan"] == "in-progress/f1.md"
@@ -426,7 +440,7 @@ def test_work_heartbeat_finish_return(project):
 
 def test_review_list(project):
     write(project, "review-needed", "r1")
-    code, doc = cli(["review", "--root", str(project)])
+    code, doc = cli(["review", "--list", "--root", str(project)])
     assert code == 0 and [p["slug"] for p in doc["result"]["plans"]] == ["r1"]
 
 
@@ -572,7 +586,10 @@ def test_review_headless_never_merges(repo_project):
 
 
 def test_draft_scaffolds_and_hands_prose_back(project):
-    code, doc = cli(["draft", "new-thing", "--root", str(project), "--goal", "Ship it."])
+    code, doc = cli([
+        "draft", "new-thing", "--no-delegate", "--shared",
+        "--root", str(project), "--goal", "Ship it.",
+    ])
     assert code == 0 and doc["result"]["plan"] == "drafts/new-thing.md"
     text = (project / ".plans" / "drafts" / "new-thing.md").read_text(encoding="utf-8")
     assert "## Goal\nShip it." in text
@@ -580,10 +597,10 @@ def test_draft_scaffolds_and_hands_prose_back(project):
 
 
 def test_draft_local_and_duplicate(project):
-    code, doc = cli(["draft", "mine", "--local", "--root", str(project)])
+    code, doc = cli(["draft", "mine", "--no-delegate", "--root", str(project)])
     assert doc["result"]["plan"] == "drafts/mine.local.md"
     write(project, "features", "taken")
-    code, doc = cli(["draft", "taken", "--root", str(project)])
+    code, doc = cli(["draft", "taken", "--no-delegate", "--root", str(project)])
     assert code == 2 and "already used" in doc["error"]
 
 
@@ -646,7 +663,7 @@ def stub_fleet(monkeypatch, tmp_path):
 
 def test_delegation_round_trips_one_step_interactively(project, stub_fleet):
     ep, reg = stub_fleet
-    code, doc = cli(["draft", "d2", "--root", str(project), "--delegate", "--registry", str(reg),
+    code, doc = cli(["draft", "d2", "--shared", "--root", str(project), "--delegate", "--registry", str(reg),
                      "--json"], interactive=True)
     assert code == 0 and ep.calls == 1
     assert doc["result"]["delegated_to"] == "stub" and doc["pending"] == []
@@ -654,12 +671,11 @@ def test_delegation_round_trips_one_step_interactively(project, stub_fleet):
     assert text.startswith("# Plan: delegated")
 
 
-def test_headless_never_delegates(project, stub_fleet):
+def test_headless_planner_delegates(project, stub_fleet):
     ep, reg = stub_fleet
     code, doc = cli(["draft", "d3", "--root", str(project), "--delegate", "--registry", str(reg)])
-    assert code == 0 and ep.calls == 0
-    assert any("non-interactive" in n for n in doc["notes"])
-    assert doc["pending"][0]["step"] == "plan-prose"
+    assert code == 0 and ep.calls == 1
+    assert doc["result"].get("delegated_to") == "stub"
 
 
 def test_delegation_without_an_endpoint_names_the_step(project, tmp_path):
@@ -678,13 +694,12 @@ HEADLESS_ARGVS = [
     ["plans"],
     ["plans", "--board"],
     ["work", "--list"],
-    ["work"],
-    ["work", "--run"],
-    ["review"],
-    ["review", "r1"],
-    ["review", "r1", "--delegate"],
+    ["work", "--no-run"],
+    ["review", "--list"],
+    ["review", "r1", "--no-delegate"],
+    ["review", "r1", "--no-delegate"],
     ["draft"],
-    ["draft", "fresh"],
+    ["draft", "fresh", "--no-delegate"],
     ["draft", "--promote", "d1"],
     ["work", "--heartbeat", "f1"],
     ["work", "--finish", "f1"],

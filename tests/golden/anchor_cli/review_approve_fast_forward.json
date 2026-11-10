@@ -5,6 +5,7 @@
     "exit_code": 0,
     "mode": "interactive",
     "notes": [
+      "critic not delegated: MCP prepare-only",
       "lane move (untracked)"
     ],
     "ok": true,

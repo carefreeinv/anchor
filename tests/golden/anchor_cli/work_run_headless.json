@@ -6,24 +6,25 @@
     "mode": "non-interactive",
     "notes": [
       "lane move (untracked)",
-      "--run ignored: non-interactive runs never start a model"
+      "lane move (untracked)"
     ],
     "ok": true,
     "pending": [
       {
-        "detail": "implement the plan's Steps: /work in-progress/f1.md in your coding harness; then anchor work --finish f1",
-        "needs": "model",
-        "step": "execute"
+        "detail": "sign-off: anchor review f1",
+        "needs": "operator",
+        "step": "review"
       }
     ],
     "result": {
       "agent_id": "a1",
       "lane_commit": {
-        "message": "Plans: f1 \u2192 in-progress (anchor work claim)",
+        "message": "Plans: f1 \u2192 review-needed (anchor work --run)",
         "outcome": "untracked"
       },
+      "orchestrate_exit": 0,
       "path": "<ROOT>/.plans/in-progress/f1.md",
-      "plan": "in-progress/f1.md"
+      "plan": "review-needed/f1.md"
     },
     "schema_version": 1,
     "verb": "work"

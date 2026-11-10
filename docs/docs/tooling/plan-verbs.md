@@ -3,33 +3,37 @@ sidebar_position: 1.5
 sidebar_label: Plan workflow verbs
 ---
 
-<!-- synced-from: anchor/cli.md @ 931ed08949dffea610f3f55a23daa015a59007df -->
+<!-- synced-from: anchor/cli.md @ a366e74ea0ad590e2f5b0d8112e2fdb767ceded5 -->
 
 # The plan-workflow CLI: what `anchor` does itself, and what it hands back
 
 `anchor plans | work | review | draft | fleet-watch | models` runs the `.plans/` workflow from a
 terminal, with no chat harness. It is a small, deterministic program: every
 decision it makes comes from a fixed set of outcomes with a rule you can name,
-and it runs no model on list/heartbeat/finish/return. Interactive `anchor review`
-runs the critic by default (`--no-delegate` skips it). `work_once.py --once`
-executes unless `--no-run`. Anything else that needs judgment is either
-**delegated** (interactively) or **handed back** as a named pending step.
+and it runs no model on list/heartbeat/finish/return. **`anchor work`** picks
+the highest-priority ready plan and executes it (`--no-run` claims only).
+**`anchor review`** picks the highest-priority `review-needed/` plan and runs
+the critic (`--list` still lists). **`anchor draft "a short brief"`** asks the
+planner for a full plan under `drafts/` (default `*.local.md`; `--no-delegate`
+keeps the skeleton). Survey/merge stays with a human on a TTY.
 
 **Operator loop** (cwd is a project with `.plans/`; `anchor --help` is still the scaffolder):
 
 ```bash
 anchor plans                         # every lane
 anchor work --list --tier mid        # ready + fit; add --endpoint <nick> after `anchor models nick`
-anchor work <slug> --endpoint <nick> # TTY: claim + orchestrate.py (`--run` is an alias)
+anchor work                          # claim top ready plan + orchestrate.py
+anchor work --no-run                 # claim only
 anchor work --finish <slug>          # in-progress → review-needed/ (or let execute exit 0 park it)
 anchor review --list
-anchor review <slug>                 # TTY critic + Approve / Needs Work (`--no-delegate` skips critic)
+anchor review                        # critic on the top review-needed/ plan
 anchor review --promote              # empty queue: integration → mainline (explicit)
+anchor draft "fix leftover worktrees"
 anchor models list
 anchor fleet-watch --status
 ```
 
-Named-slug `anchor work` execute is **interactive only**. Exit 0 parks in `review-needed/` unless `--no-finish`. Headless unattended execute is `python scripts/work_once.py --once --ensure-worktree --endpoint …` (`--run` is a no-op alias; `--no-run` claims only). `--root` if cwd has no `.plans/`. Skills (`/work`, `/review`, `/draft`) prefer
+`--run` is the default for `anchor work` (interactive **and** headless). Exit 0 parks in `review-needed/` unless `--no-finish`. Empty `review-needed/` with integration ahead of mainline: `anchor review` exits 2 and names `anchor review --promote`. `--root` if cwd has no `.plans/`. Skills (`/work`, `/review`, `/draft`) prefer
 these verbs when `anchor` answered once this session.
 
 Implementation: verb logic lives in `scripts/anchor_ops.py` (a typed operations
@@ -107,13 +111,13 @@ that answer, so the CLI has none that tries.
 | `--list`: ready plans with your fit and deps | deterministic | `plan_select.inventory` |
 | claim (bare pick or named slug) | deterministic | `work_once.pick_claim_one`: the same pick, skip and lease rules as `work_once.py` |
 | `--heartbeat`, `--finish` (→ `review-needed/`), `--return` | deterministic | `plan_lease`; only the lease holder may move its plan |
-| carry out the plan's Steps | **model** | named slug (or `--run` alias) hands the plan to `orchestrate.py` interactively; headless named-slug still pending `execute` |
+| carry out the plan's Steps | **model** | default after claim (interactive **and** headless); `--no-run` claims only |
 
 `anchor work` has no merge. Interactive execute that exits 0 (and
 `work_once --once` exit 0) moves the plan to `review-needed/` the same way
 `--finish` does. `--no-finish` leaves the lease. Exit 2
-never finishes. Landing work is `anchor review`'s job
-(or `/work`'s culmination question inside a harness).
+never finishes. Landing work is `anchor review`'s job (or `/work`'s
+culmination question inside a harness).
 
 ### `anchor review`
 
@@ -121,7 +125,7 @@ never finishes. Landing work is `anchor review`'s job
 |------|------|-----|
 | list `review-needed/` with hold notes | deterministic | directory read + `pending_merges.is_held` |
 | the review package: branch, target, head, changed files, fast-forward? | deterministic | git, via `merge_feature` helpers |
-| AI critic pass | **model** | interactive `anchor review <slug>` runs it (`--delegate` alias; `--no-delegate` skips; headless still pending). The package includes `git diff --stat` and `check_docs_sync.py` so the critic does not REVISE for missing logs |
+| AI critic pass | **model** | bare `anchor review` picks the top `review-needed/` plan and runs the critic (headless too; `--list` lists; `--no-delegate` skips). The package includes `git diff --stat` and `check_docs_sync.py` so the critic does not REVISE for missing logs |
 | **Approve / Needs Work / Skip / Defer** | **operator** | the `/review` sign-off; never inferred |
 | Approve after a critic verdict of REVISE, ESCALATE or unreadable | **operator** | a second, explicit "approve despite critic concerns?" yes; anything else leaves the plan in `review-needed/` |
 | Needs Work: which ready lane, and the notes | **operator** | notes must be real; an empty answer counts as no answer |
@@ -276,7 +280,7 @@ options:
 usage: anchor work [-h] [--root ROOT] [--json] [--non-interactive] [--list]
                    [--agent-id AGENT_ID] [--tier TIER] [--model MODEL]
                    [--effort EFFORT] [--endpoint ENDPOINT]
-                   [--registry REGISTRY] [--no-fit-check] [--run]
+                   [--registry REGISTRY] [--no-fit-check] [--run] [--no-run]
                    [--no-finish] [--heartbeat SLUG] [--finish SLUG]
                    [--return SLUG]
                    [slug]
@@ -299,8 +303,9 @@ options:
   --endpoint ENDPOINT  take model+tier from this registry endpoint
   --registry REGISTRY  endpoints.yaml for --endpoint
   --no-fit-check       ignore Preferred models
-  --run                alias: named slug already executes; interactive only
-                       hands the claimed plan to orchestrate.py
+  --run                execute after claim (default); kept as an explicit
+                       alias
+  --no-run             claim only; do not start orchestrate.py
   --no-finish          with --run, leave the plan in in-progress/ even when
                        orchestrate exits 0
   --heartbeat SLUG     extend your lease on SLUG
@@ -317,7 +322,8 @@ usage: anchor review [-h] [--root ROOT] [--json] [--non-interactive] [--list]
                      [slug]
 
 positional arguments:
-  slug                  review this plan (asks for the decision)
+  slug                  review this plan (default: highest-priority in review-
+                        needed/)
 
 options:
   -h, --help            show this help message and exit
@@ -329,9 +335,10 @@ options:
   --promote             promote integration → mainline when the review queue
                         is empty
   --delegate [ENDPOINT]
-                        interactive only: send the judgment step to ENDPOINT
-                        from the registry (bare flag: first endpoint for the
-                        'critic' role); alias of the default critic
+                        send the judgment step to ENDPOINT from the registry
+                        (bare flag: first endpoint for the 'critic' role;
+                        critic/planner also run headless); alias of the
+                        default critic
   --no-delegate         skip the critic chat (package + operator decision
                         only)
   --registry REGISTRY   endpoints.yaml (default: scripts/endpoints.yaml)
@@ -341,13 +348,15 @@ options:
 
 ```text
 usage: anchor draft [-h] [--root ROOT] [--json] [--non-interactive] [--list]
-                    [--title TITLE] [--goal GOAL] [--local] [--promote SLUG]
-                    [--to {bugs,features}] [--delegate [ENDPOINT]]
+                    [--title TITLE] [--goal GOAL] [--local] [--shared]
+                    [--promote SLUG] [--to {bugs,features}]
+                    [--delegate [ENDPOINT]] [--no-delegate]
                     [--registry REGISTRY]
-                    [slug]
+                    [words ...]
 
 positional arguments:
-  slug                  scaffold drafts/<slug>
+  words                 brief (spaces ok) or existing slug; kebab slug is
+                        derived
 
 options:
   -h, --help            show this help message and exit
@@ -358,13 +367,17 @@ options:
   --list                list drafts
   --title TITLE         plan title (default: the slug)
   --goal GOAL           one-paragraph Goal to seed the draft
-  --local               private (untracked) plan
+  --local               private *.local.md (default)
+  --shared              tracked drafts/<slug>.md instead of .local.md
   --promote SLUG        move drafts/SLUG to a ready lane
   --to {bugs,features}  with --promote: the ready lane
   --delegate [ENDPOINT]
-                        interactive only: send the judgment step to ENDPOINT
-                        from the registry (bare flag: first endpoint for the
-                        'planner' role)
+                        send the judgment step to ENDPOINT from the registry
+                        (bare flag: first endpoint for the 'planner' role;
+                        critic/planner also run headless); alias of the
+                        default critic
+  --no-delegate         skip the critic chat (package + operator decision
+                        only)
   --registry REGISTRY   endpoints.yaml (default: scripts/endpoints.yaml)
 ```
 

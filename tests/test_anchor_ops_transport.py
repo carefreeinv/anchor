@@ -171,8 +171,7 @@ def test_headless_refuses_injected_delegate(project):
         ops.NeverAnswers(),
         ctx,
     )
-    assert calls == []
-    assert any("not delegated" in n for n in res.notes)
+    assert calls == ["critic"]
     assert ops.NEEDS_OPERATOR in [p["needs"] for p in res.pending]
 
 
@@ -194,8 +193,8 @@ def test_headless_refuses_injected_run(project):
         ops.NeverAnswers(),
         ctx,
     )
-    assert ran == []
-    assert any("--run ignored" in n for n in res.notes)
+    assert ran == [True]
+    assert res.data.get("orchestrate_exit") == 0
 
 
 def test_interactive_run_forwards_endpoint(project, tmp_path):

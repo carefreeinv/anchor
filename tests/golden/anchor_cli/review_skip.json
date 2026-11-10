@@ -4,7 +4,9 @@
     "error": null,
     "exit_code": 0,
     "mode": "interactive",
-    "notes": [],
+    "notes": [
+      "critic not delegated: MCP prepare-only"
+    ],
     "ok": true,
     "pending": [],
     "result": {

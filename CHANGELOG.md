@@ -8,6 +8,8 @@ Newest first.
 
 ### Added
 
+- **Default CLI loop.** `anchor work` claims the top ready plan and runs orchestrate (`--no-run` claims only). `anchor review` critics the top `review-needed/` plan (`--list` lists). `anchor draft "brief"` derives a kebab slug and asks the planner (default `*.local.md`). Empty review queue + integration ahead still exits 2 and names `anchor review --promote`.
+
 - **project-orchestrator MCP tools from `anchor_ops`.** List/claim/heartbeat/return/finish/complete/draft/review-prepare share the CLI envelope. Approve/promote/`--delegate` stay unexposed. Legacy `plans_*` names remain.
 
 - **Harness budget ratchet.** `anchor/harness-budget.toml` freezes install

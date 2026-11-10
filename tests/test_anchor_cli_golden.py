@@ -161,13 +161,13 @@ def test_golden_work_list_empty(project):
 def test_golden_work_claim(project):
     write(project, "features", "f1", priority="P3")
     write(project, "bugs", "b1")
-    code, doc = cli(["work", "--root", str(project), "--agent-id", "a1"])
+    code, doc = cli(["work", "--no-run", "--root", str(project), "--agent-id", "a1"])
     assert_golden("work_claim", code, doc, project)
 
 
 def test_golden_work_claim_named(project):
     write(project, "features", "f1")
-    code, doc = cli(["work", "f1", "--root", str(project), "--agent-id", "a1", "--no-fit-check"])
+    code, doc = cli(["work", "f1", "--no-run", "--root", str(project), "--agent-id", "a1", "--no-fit-check"])
     assert_golden("work_claim_named", code, doc, project)
 
 
@@ -176,7 +176,11 @@ def test_golden_work_claim_empty(project):
     assert_golden("work_claim_empty", code, doc, project)
 
 
-def test_golden_work_run_headless(project):
+def test_golden_work_run_headless(project, monkeypatch):
+    import work_once
+
+    monkeypatch.setattr(work_once, "run_orchestrate", lambda *a, **k: 0)
+    monkeypatch.setattr(work_once, "orchestrate_worktree_args", lambda *a, **k: [])
     write(project, "features", "f1")
     code, doc = cli(["work", "--root", str(project), "--agent-id", "a1", "--run"])
     assert_golden("work_run_headless", code, doc, project)
@@ -185,8 +189,8 @@ def test_golden_work_run_headless(project):
 def test_golden_work_heartbeat_finish_return(project):
     write(project, "features", "f1")
     write(project, "features", "f2")
-    cli(["work", "f1", "--root", str(project), "--agent-id", "a1"])
-    cli(["work", "f2", "--root", str(project), "--agent-id", "a1"])
+    cli(["work", "f1", "--no-run", "--root", str(project), "--agent-id", "a1"])
+    cli(["work", "f2", "--no-run", "--root", str(project), "--agent-id", "a1"])
 
     code, doc = cli(["work", "--heartbeat", "f1", "--root", str(project), "--agent-id", "a1"])
     assert_golden("work_heartbeat", code, doc, project)
@@ -209,7 +213,7 @@ def test_golden_work_heartbeat_finish_return(project):
 
 def test_golden_review_list(project):
     write(project, "review-needed", "r1")
-    code, doc = cli(["review", "--root", str(project)])
+    code, doc = cli(["review", "--list", "--root", str(project)])
     assert_golden("review_list", code, doc, project)
 
 
@@ -294,18 +298,18 @@ def test_golden_draft_list(project):
 
 
 def test_golden_draft_create(project):
-    code, doc = cli(["draft", "new-thing", "--root", str(project), "--goal", "Ship it."])
+    code, doc = cli(["draft", "new-thing", "--no-delegate", "--shared", "--root", str(project), "--goal", "Ship it."])
     assert_golden("draft_create", code, doc, project)
 
 
 def test_golden_draft_local(project):
-    code, doc = cli(["draft", "mine", "--local", "--root", str(project)])
+    code, doc = cli(["draft", "mine", "--no-delegate", "--root", str(project)])
     assert_golden("draft_local", code, doc, project)
 
 
 def test_golden_draft_duplicate(project):
     write(project, "features", "taken")
-    code, doc = cli(["draft", "taken", "--root", str(project)])
+    code, doc = cli(["draft", "taken", "--no-delegate", "--root", str(project)])
     assert_golden("draft_duplicate", code, doc, project)
 
 

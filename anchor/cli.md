@@ -3,26 +3,30 @@
 `anchor plans | work | review | draft | fleet-watch | models` runs the `.plans/` workflow from a
 terminal, with no chat harness. It is a small, deterministic program: every
 decision it makes comes from a fixed set of outcomes with a rule you can name,
-and it runs no model on list/heartbeat/finish/return. Interactive `anchor review`
-runs the critic by default (`--no-delegate` skips it). `work_once.py --once`
-executes unless `--no-run`. Anything else that needs judgment is either
-**delegated** (interactively) or **handed back** as a named pending step.
+and it runs no model on list/heartbeat/finish/return. **`anchor work`** picks
+the highest-priority ready plan and executes it (`--no-run` claims only).
+**`anchor review`** picks the highest-priority `review-needed/` plan and runs
+the critic (`--list` still lists). **`anchor draft "a short brief"`** asks the
+planner for a full plan under `drafts/` (default `*.local.md`; `--no-delegate`
+keeps the skeleton). Survey/merge stays with a human on a TTY.
 
 **Operator loop** (cwd is a project with `.plans/`; `anchor --help` is still the scaffolder):
 
 ```bash
 anchor plans                         # every lane
 anchor work --list --tier mid        # ready + fit; add --endpoint <nick> after `anchor models nick`
-anchor work <slug> --endpoint <nick> # TTY: claim + orchestrate.py (`--run` is an alias)
+anchor work                          # claim top ready plan + orchestrate.py
+anchor work --no-run                 # claim only
 anchor work --finish <slug>          # in-progress → review-needed/ (or let execute exit 0 park it)
 anchor review --list
-anchor review <slug>                 # TTY critic + Approve / Needs Work (`--no-delegate` skips critic)
+anchor review                        # critic on the top review-needed/ plan
 anchor review --promote              # empty queue: integration → mainline (explicit)
+anchor draft "fix leftover worktrees"
 anchor models list
 anchor fleet-watch --status
 ```
 
-Named-slug `anchor work` execute is **interactive only**. Exit 0 parks in `review-needed/` unless `--no-finish`. Headless unattended execute is `python scripts/work_once.py --once --ensure-worktree --endpoint …` (`--run` is a no-op alias; `--no-run` claims only). `--root` if cwd has no `.plans/`. Skills (`/work`, `/review`, `/draft`) prefer
+`--run` is the default for `anchor work` (interactive **and** headless). Exit 0 parks in `review-needed/` unless `--no-finish`. Empty `review-needed/` with integration ahead of mainline: `anchor review` exits 2 and names `anchor review --promote`. `--root` if cwd has no `.plans/`. Skills (`/work`, `/review`, `/draft`) prefer
 these verbs when `anchor` answered once this session.
 
 Implementation: verb logic lives in `scripts/anchor_ops.py` (a typed operations

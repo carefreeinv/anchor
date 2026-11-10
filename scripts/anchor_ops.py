@@ -279,7 +279,7 @@ class ReviewPromoteParams:
 @dataclass(frozen=True)
 class ReviewParams:
     root: str
-    slug: str
+    slug: str | None = None
     delegate: str | None = None
     registry: str | None = None
     no_delegate: bool = False
@@ -296,7 +296,7 @@ class DraftCreateParams:
     slug: str
     title: str | None = None
     goal: str | None = None
-    local: bool = False
+    local: bool = True
     delegate: str | None = None
     registry: str | None = None
 
@@ -434,7 +434,9 @@ def _worker(params: WorkListParams | WorkClaimParams):
 
 
 def _try_delegate(ctx: Ctx, *, endpoint: str, role: str, registry: str | None, user: str) -> tuple[str, str]:
-    if not ctx.mode.interactive or ctx.delegate is None:
+    if ctx.delegate is None:
+        raise NotDelegated("no delegate hook on this transport")
+    if not ctx.mode.interactive and role not in ("critic", "planner"):
         raise NotDelegated("non-interactive run: the calling agent does this step itself")
     return ctx.delegate(endpoint, role, registry, user)
 
@@ -682,13 +684,8 @@ def op_work_claim(params: WorkClaimParams, _answers: Answers, ctx: Ctx) -> Resul
         f"then anchor work --finish {ref.slug if ref else rel}"
     )
     if params.run:
-        if not ctx.mode.interactive or ctx.run_orchestrate is None:
-            res.notes.append("--run ignored: non-interactive runs never start a model")
-            if params.endpoint:
-                res.notes.append(
-                    f"--endpoint {params.endpoint!r} was set; pass it again on an "
-                    "interactive --run, or execute in the calling harness"
-                )
+        if ctx.run_orchestrate is None:
+            res.notes.append("execute skipped: no orchestrate hook on this transport")
             res.need("execute", NEEDS_MODEL, detail)
             return res
         from work_once import orchestrate_identity_args, orchestrate_worktree_args, plan_slug
@@ -900,11 +897,41 @@ def op_review_promote(params: ReviewPromoteParams, answers: Answers, _ctx: Ctx) 
     return res
 
 
+def pick_review_slug(plans: Path) -> str | None:
+    """Highest-priority review-needed slug (Priority → Value → oldest mtime)."""
+    from plan_select import parse_priority, parse_value
+
+    refs = plan_store.list_lane(plans, "review-needed")
+    if not refs:
+        return None
+    pri = {"P1": 0, "P2": 1, "P3": 2}
+    val = {"high": 0, "medium": 1, "low": 2}
+
+    def key(ref):
+        text = ref.path.read_text(encoding="utf-8")
+        return (
+            pri.get(parse_priority(text), 1),
+            val.get(parse_value(text), 1),
+            ref.path.stat().st_mtime,
+            ref.path.name,
+        )
+
+    return min(refs, key=key).slug
+
+
+def kebab_slug(text: str) -> str:
+    s = re.sub(r"[^a-z0-9]+", "-", text.lower()).strip("-")
+    return (s[:72] or "draft")
+
+
 @_op("review.review", mutates=True, requires=NEEDS_OPERATOR)
 def op_review(params: ReviewParams, answers: Answers, ctx: Ctx) -> Result:
     plans = plans_root(params.root)
     root = plans.parent
-    ref = _one(plans, "review-needed", params.slug)
+    slug = params.slug or pick_review_slug(plans)
+    if not slug:
+        raise CliError("nothing in review-needed/")
+    ref = _one(plans, "review-needed", slug)
     res = Result("review", "review")
     pkg = _review_package(root, ref.slug)
     res.data.update(plan=ref.rel, title=_title(ref), **pkg)

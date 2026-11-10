@@ -49,6 +49,9 @@ from anchor_ops import (
     WorkSlugParams,
     critic_verdict,
     detect_mode,
+    kebab_slug,
+    pick_review_slug,
+    plans_root,
     run,
 )
 
@@ -191,7 +194,7 @@ def delegate(
     user: str,
 ) -> tuple[str, str]:
     """Send one judgment step to a configured endpoint. Returns ``(endpoint, text)``."""
-    if not mode.interactive:
+    if not mode.interactive and role not in ("critic", "planner"):
         raise NotDelegated("non-interactive run: the calling agent does this step itself")
     try:
         import anchor_client
@@ -258,8 +261,9 @@ def _common(p: argparse.ArgumentParser) -> None:
 def _delegation(p: argparse.ArgumentParser, role: str, *, opt_out: bool = False) -> None:
     extra = "; alias of the default critic" if opt_out else ""
     p.add_argument("--delegate", nargs="?", const="auto", metavar="ENDPOINT",
-                   help=f"interactive only: send the judgment step to ENDPOINT from the "
-                        f"registry (bare flag: first endpoint for the '{role}' role)"
+                   help=f"send the judgment step to ENDPOINT from the registry "
+                        f"(bare flag: first endpoint for the '{role}' role; "
+                        f"critic/planner also run headless)"
                         f"{extra}")
     if opt_out:
         p.add_argument("--no-delegate", action="store_true",
@@ -295,8 +299,9 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--registry", help="endpoints.yaml for --endpoint")
     p.add_argument("--no-fit-check", action="store_true", help="ignore Preferred models")
     p.add_argument("--run", action="store_true",
-                   help="alias: named slug already executes; interactive only "
-                        "hands the claimed plan to orchestrate.py")
+                   help="execute after claim (default); kept as an explicit alias")
+    p.add_argument("--no-run", action="store_true",
+                   help="claim only; do not start orchestrate.py")
     p.add_argument("--no-finish", action="store_true",
                    help="with --run, leave the plan in in-progress/ even when "
                         "orchestrate exits 0")
@@ -307,7 +312,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     p = sub.add_parser("review", help="list review-needed plans; decide one")
     _common(p)
-    p.add_argument("slug", nargs="?", help="review this plan (asks for the decision)")
+    p.add_argument("slug", nargs="?", help="review this plan (default: highest-priority in review-needed/)")
     p.add_argument("--list", action="store_true", help="list review-needed plans")
     p.add_argument(
         "--promote", action="store_true",
@@ -317,14 +322,15 @@ def build_parser() -> argparse.ArgumentParser:
 
     p = sub.add_parser("draft", help="list drafts; scaffold or promote one")
     _common(p)
-    p.add_argument("slug", nargs="?", help="scaffold drafts/<slug>")
+    p.add_argument("words", nargs="*", help="brief (spaces ok) or existing slug; kebab slug is derived")
     p.add_argument("--list", action="store_true", help="list drafts")
     p.add_argument("--title", help="plan title (default: the slug)")
     p.add_argument("--goal", help="one-paragraph Goal to seed the draft")
-    p.add_argument("--local", action="store_true", help="private (untracked) plan")
+    p.add_argument("--local", action="store_true", default=True, help="private *.local.md (default)")
+    p.add_argument("--shared", action="store_true", help="tracked drafts/<slug>.md instead of .local.md")
     p.add_argument("--promote", metavar="SLUG", help="move drafts/SLUG to a ready lane")
     p.add_argument("--to", choices=READY_LANES, help="with --promote: the ready lane")
-    _delegation(p, "planner")
+    _delegation(p, "planner", opt_out=True)
 
     p = sub.add_parser("fleet-watch", help="inspect or emit per-project plan daemons")
     _common(p)
@@ -387,8 +393,6 @@ def _cli_action(args: argparse.Namespace) -> str:
             return "promote"
         if getattr(args, "list", False):
             return "list"
-        if not getattr(args, "slug", None):
-            return "list"
         return "review"
     if getattr(args, "list", False):
         return "list"
@@ -423,7 +427,7 @@ def _dispatch(args: argparse.Namespace, answers: Prompter, ctx: Ctx) -> Result:
             return run("work.return", WorkSlugParams(root=args.root, slug=args.return_ready), answers, ctx)
         return run("work.claim", WorkClaimParams(
             root=args.root, slug=args.slug, no_fit_check=args.no_fit_check,
-            run=args.run, no_finish=args.no_finish, **worker,
+            run=not args.no_run, no_finish=args.no_finish, **worker,
         ), answers, ctx)
     if verb == "models":
         if args.list or args.action == "list" or not args.alias:
@@ -456,16 +460,19 @@ def _dispatch(args: argparse.Namespace, answers: Prompter, ctx: Ctx) -> Result:
             )
         if args.list:
             return run("review.list", ReviewListParams(root=args.root), answers, ctx)
-        if not args.slug:
-            return run(
-                "review.list",
-                ReviewListParams(root=args.root, suggest_promote=True),
-                answers, ctx,
-            )
         no_delegate = bool(getattr(args, "no_delegate", False))
         delegate = None if no_delegate else (args.delegate or "auto")
+        slug = args.slug
+        if not slug:
+            slug = pick_review_slug(plans_root(args.root))
+            if not slug:
+                return run(
+                    "review.list",
+                    ReviewListParams(root=args.root, suggest_promote=True),
+                    answers, ctx,
+                )
         return run("review.review", ReviewParams(
-            root=args.root, slug=args.slug, delegate=delegate,
+            root=args.root, slug=slug, delegate=delegate,
             registry=args.registry, no_delegate=no_delegate,
         ), answers, ctx)
     if verb == "fleet-watch":
@@ -501,11 +508,18 @@ def _dispatch(args: argparse.Namespace, answers: Prompter, ctx: Ctx) -> Result:
         return run("fleet-watch.status", fw, answers, ctx)
     if args.promote:
         return run("draft.promote", DraftPromoteParams(root=args.root, slug=args.promote, to=args.to), answers, ctx)
-    if args.list or not args.slug:
+    words = tuple(getattr(args, "words", ()) or ())
+    if args.list or (not words and not getattr(args, "slug", None)):
         return run("draft.list", DraftListParams(root=args.root), answers, ctx)
+    brief = " ".join(words)
+    slug = kebab_slug(brief)
+    goal = args.goal or (brief if " " in brief or len(words) > 1 else args.goal)
+    no_delegate = bool(getattr(args, "no_delegate", False))
+    delegate = None if no_delegate else (args.delegate or "auto")
+    local = not bool(getattr(args, "shared", False))
     return run("draft.create", DraftCreateParams(
-        root=args.root, slug=args.slug, title=args.title, goal=args.goal,
-        local=args.local, delegate=args.delegate, registry=args.registry,
+        root=args.root, slug=slug, title=args.title, goal=goal,
+        local=local, delegate=delegate, registry=args.registry,
     ), answers, ctx)
 
 
@@ -531,15 +545,14 @@ def main(
     action = _cli_action(args)
     agent_id = getattr(args, "agent_id", None) or _default_agent_id()
     ctx = Ctx(mode=mode, agent_id=agent_id)
-    if mode.interactive:
-        ctx.delegate = lambda endpoint, role, registry, user: delegate(
-            mode, endpoint=endpoint, role=role, registry=registry, user=user,
-        )
-        from work_once import run_orchestrate
+    ctx.delegate = lambda endpoint, role, registry, user: delegate(
+        mode, endpoint=endpoint, role=role, registry=registry, user=user,
+    )
+    from work_once import run_orchestrate
 
-        ctx.run_orchestrate = run_orchestrate
-        if not as_json:
-            ctx.display = lambda msg: print(msg, file=sys.stderr)
+    ctx.run_orchestrate = run_orchestrate
+    if mode.interactive and not as_json:
+        ctx.display = lambda msg: print(msg, file=sys.stderr)
     try:
         res = _dispatch(args, Prompter(mode, read), ctx)
     except Passthrough as p:

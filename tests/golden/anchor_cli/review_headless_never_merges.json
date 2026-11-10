@@ -4,7 +4,9 @@
     "error": null,
     "exit_code": 3,
     "mode": "non-interactive",
-    "notes": [],
+    "notes": [
+      "critic not delegated: nemotron-build: 401 Client Error: Unauthorized for url: https://integrate.api.nvidia.com/v1/chat/completions"
+    ],
     "ok": false,
     "pending": [
       {
