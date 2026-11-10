@@ -978,6 +978,9 @@ def test_review_approve_with_remote_only_branch_does_not_archive(repo_project, t
          "- later `Verdict: REVISE` labeled lines still win.\n", "ACCEPT"),
         ("## Verdict\nACCEPT\n\npytest TIMEOUT after 60s; do not REVISE solely for TIMEOUT.\n",
          "ACCEPT"),
+        ("## Verdict\n## ACCEPT", "ACCEPT"),
+        ("## Verdict\n## REVISE", "REVISE"),
+        ("## Verdict\n## ESCALATE", "ESCALATE"),
     ],
 )
 def test_critic_verdict(text, verdict):

@@ -937,6 +937,15 @@ def critic_verdict(text: str) -> str:
         heading = cleaned[m.start():m.end()]
         body = cleaned[m.end():stop]
         words = _section_verdict(heading, body)
+        if not words and nxt_h:
+            next_line = cleaned[stop:].split("\n", 1)[0]
+            lone = re.match(
+                r"^#{2,}\s*(ACCEPT|REVISE|ESCALATE)\s*$",
+                next_line.strip(),
+                re.IGNORECASE,
+            )
+            if lone:
+                words = {lone.group(1).upper()}
         if words:
             last_nonempty = words
     if had_heading:
